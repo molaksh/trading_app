@@ -26,6 +26,7 @@ from scoring.rule_scorer import score_symbol
 # ============================================================================
 RUN_BACKTEST = False        # Set to True to run diagnostic backtest
 BUILD_DATASET = False       # Set to True to build ML-ready dataset
+RUN_ML_EXPERIMENT = False   # Set to True to train & compare ML model vs rules
 
 
 # ============================================================================
@@ -233,3 +234,41 @@ if __name__ == '__main__':
             # Run capital simulation
             metrics, equity_curve = simulate_capital_growth(trades)
             print_capital_metrics(metrics)
+        
+        # Optional: Run ML validation experiment
+        if RUN_ML_EXPERIMENT:
+            logger.info("\n")
+            from pathlib import Path
+            from ml.train_model import train_and_evaluate
+            from ml.evaluate import evaluate_ml_vs_rules
+            
+            # Find latest dataset file
+            data_dir = Path("./data")
+            csv_files = sorted(data_dir.glob("ml_dataset_*.csv"))
+            
+            if not csv_files:
+                logger.error("No ML dataset found. Set BUILD_DATASET=True first.")
+            else:
+                dataset_path = str(csv_files[-1])
+                logger.info(f"Using dataset: {dataset_path}")
+                
+                # Train model (70% train, 30% test, no shuffling)
+                result = train_and_evaluate(
+                    dataset_path,
+                    include_confidence=False,  # Don't use rule confidence as feature
+                    train_ratio=0.7,
+                )
+                
+                model = result["model"]
+                scaler = result["scaler"]
+                features = result["features"]
+                
+                # Compare rule-based vs ML-based backtests
+                rule_metrics, ml_metrics = evaluate_ml_vs_rules(
+                    SYMBOLS,
+                    model,
+                    scaler,
+                    features,
+                    include_confidence=False,
+                )
+
