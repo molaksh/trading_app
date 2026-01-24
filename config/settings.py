@@ -50,7 +50,32 @@ HOLD_DAYS = 5                    # Days to hold each position
 BACKTEST_MIN_CONFIDENCE = 3      # Minimum confidence to enter trade
 
 # ============================================================================
-# LOGGING CONFIGURATION
+# CAPITAL SIMULATION SETTINGS
+# ============================================================================
+STARTING_CAPITAL = 100000        # Initial account equity
+BASE_RISK_PCT = 0.01             # Risk 1% of account per trade
+CONFIDENCE_RISK_MAP = {
+    1: 0.25,                      # Confidence 1: 25% of base risk
+    2: 0.375,                     # Confidence 2: 37.5% of base risk
+    3: 0.5,                       # Confidence 3: 50% of base risk
+    4: 1.0,                       # Confidence 4: 100% of base risk
+    5: 1.5,                       # Confidence 5: 150% of base risk
+}
+
+# ============================================================================
+# ML DATASET LABEL CONFIGURATION
+# ============================================================================
+# Label definition: 1 if price reaches TARGET_RETURN within HORIZON
+# WITHOUT falling below MAX_DRAWDOWN first, else 0
+LABEL_HORIZON_DAYS = 5           # Days to look ahead for labeling
+LABEL_TARGET_RETURN = 0.02       # +2% target return (2% profit)
+LABEL_MAX_DRAWDOWN = -0.01       # -1% max drawdown tolerance
+
+# Dataset output
+DATASET_OUTPUT_DIR = "./data"    # Directory to save feature snapshots
+DATASET_FILE_FORMAT = "parquet"  # Use 'parquet' or 'csv'
+
+# ============================================================================
 # ============================================================================
 LOG_LEVEL = logging.INFO
 LOG_FORMAT = "%(asctime)s | %(levelname)-8s | %(name)-20s | %(message)s"

@@ -16,7 +16,8 @@ from config.settings import (
 )
 from universe.symbols import SYMBOLS
 from backtest.simple_backtest import Trade
-from backtest.metrics import print_metrics
+from backtest.metrics import print_metrics, print_capital_metrics
+from backtest.capital_simulator import simulate_capital_growth
 
 
 # Setup logging
@@ -100,6 +101,10 @@ def main_demo():
     logger.info(f"Generated {len(trades)} trades for {len(SYMBOLS)} symbols")
     
     print_metrics(trades)
+    
+    # Run capital simulation
+    metrics, equity_curve = simulate_capital_growth(trades)
+    print_capital_metrics(metrics)
 
 
 if __name__ == '__main__':

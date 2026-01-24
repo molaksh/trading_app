@@ -22,9 +22,10 @@ from features.feature_engine import compute_features
 from scoring.rule_scorer import score_symbol
 
 # ============================================================================
-# BACKTEST CONFIGURATION
+# EXECUTION MODE FLAGS
 # ============================================================================
-RUN_BACKTEST = False  # Set to True to run diagnostic backtest
+RUN_BACKTEST = False        # Set to True to run diagnostic backtest
+BUILD_DATASET = False       # Set to True to build ML-ready dataset
 
 
 # ============================================================================
@@ -204,13 +205,31 @@ def main():
 
 
 if __name__ == '__main__':
-    results = main()
-    
-    # Optional: Run diagnostic backtest
-    if RUN_BACKTEST:
+    # Execute dataset building if enabled
+    if BUILD_DATASET:
         logger.info("\n")
-        from backtest.simple_backtest import run_backtest
-        from backtest.metrics import print_metrics
+        from dataset.dataset_builder import build_dataset_pipeline
         
-        trades = run_backtest(SYMBOLS)
-        print_metrics(trades)
+        filepath = build_dataset_pipeline(SYMBOLS, LOOKBACK_DAYS)
+        if filepath:
+            logger.info(f"\n✓ Dataset successfully built and saved to: {filepath}")
+        else:
+            logger.error("Dataset building failed")
+    
+    else:
+        # Run regular screener
+        results = main()
+        
+        # Optional: Run diagnostic backtest with capital simulation
+        if RUN_BACKTEST:
+            logger.info("\n")
+            from backtest.simple_backtest import run_backtest
+            from backtest.metrics import print_metrics, print_capital_metrics
+            from backtest.capital_simulator import simulate_capital_growth
+            
+            trades = run_backtest(SYMBOLS)
+            print_metrics(trades)
+            
+            # Run capital simulation
+            metrics, equity_curve = simulate_capital_growth(trades)
+            print_capital_metrics(metrics)
