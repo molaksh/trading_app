@@ -43,6 +43,13 @@ TOP_N_CANDIDATES = 20
 PRINT_WIDTH = 120
 
 # ============================================================================
+# BACKTEST SETTINGS
+# ============================================================================
+BACKTEST_LOOKBACK_YEARS = 5      # Years of historical data for backtest
+HOLD_DAYS = 5                    # Days to hold each position
+BACKTEST_MIN_CONFIDENCE = 3      # Minimum confidence to enter trade
+
+# ============================================================================
 # LOGGING CONFIGURATION
 # ============================================================================
 LOG_LEVEL = logging.INFO

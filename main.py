@@ -21,6 +21,11 @@ from data.price_loader import load_price_data
 from features.feature_engine import compute_features
 from scoring.rule_scorer import score_symbol
 
+# ============================================================================
+# BACKTEST CONFIGURATION
+# ============================================================================
+RUN_BACKTEST = False  # Set to True to run diagnostic backtest
+
 
 # ============================================================================
 # LOGGING CONFIGURATION
@@ -200,3 +205,12 @@ def main():
 
 if __name__ == '__main__':
     results = main()
+    
+    # Optional: Run diagnostic backtest
+    if RUN_BACKTEST:
+        logger.info("\n")
+        from backtest.simple_backtest import run_backtest
+        from backtest.metrics import print_metrics
+        
+        trades = run_backtest(SYMBOLS)
+        print_metrics(trades)
