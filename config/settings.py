@@ -94,6 +94,20 @@ CONFIDENCE_RISK_MULTIPLIER = {
 ENABLE_ML_SIZING = True          # Set to False to disable confidence-based scaling
 
 # ============================================================================
+# EXECUTION REALISM PARAMETERS (Phase G)
+# ============================================================================
+# Slippage: basis points (bps) charged on fills
+ENTRY_SLIPPAGE_BPS = 5           # 5 bps = 0.05% on entry
+EXIT_SLIPPAGE_BPS = 5            # 5 bps = 0.05% on exit
+
+# Liquidity check: reject positions that exceed % of daily volume
+MAX_POSITION_ADV_PCT = 0.05      # Position size max 5% of average daily volume
+
+# Entry timing for backtests
+USE_NEXT_OPEN_ENTRY = True       # True: use next day's open (realistic)
+                                 # False: use same day's close (optimistic)
+
+# ============================================================================
 # ML DATASET LABEL CONFIGURATION
 # ============================================================================
 # Label definition: 1 if price reaches TARGET_RETURN within HORIZON

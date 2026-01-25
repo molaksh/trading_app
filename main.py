@@ -28,6 +28,7 @@ RUN_BACKTEST = False        # Set to True to run diagnostic backtest
 BUILD_DATASET = False       # Set to True to build ML-ready dataset
 RUN_ML_EXPERIMENT = False   # Set to True to train & compare ML model vs rules
 RUN_RISK_GOVERNANCE = False # Set to True to run backtest with risk limits
+RUN_EXECUTION_REALISM = False  # Set to True to show execution realism impact (Phase G)
 
 
 # ============================================================================
