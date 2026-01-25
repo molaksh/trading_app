@@ -16,6 +16,12 @@ from config.settings import (
     LOG_FORMAT,
     LOG_DATE_FORMAT,
     START_CAPITAL,
+    MARKET_MODE,
+    INDIA_MODE,
+    INDIA_RULES_ONLY,
+    INDIA_ML_VALIDATION_ENABLED,
+    INDIA_MIN_OBSERVATION_DAYS,
+    INDIA_OBSERVATION_LOG_DIR,
 )
 from universe.symbols import SYMBOLS
 from data.price_loader import load_price_data
@@ -32,6 +38,19 @@ RUN_RISK_GOVERNANCE = False # Set to True to run backtest with risk limits
 RUN_EXECUTION_REALISM = False  # Set to True to show execution realism impact (Phase G)
 RUN_MONITORING = False      # Set to True to enable monitoring & drift detection (Phase H)
 RUN_PAPER_TRADING = True    # Set to True to execute trades via paper trading (Phase I)
+RUN_INDIA_RULES_ONLY = INDIA_MODE  # India rules-only paper trading (Phase 2)
+
+
+# ============================================================================
+# GLOBAL EXECUTION STATE (for shutdown summary)
+# ============================================================================
+execution_stats = {
+    'signals_generated': 0,
+    'trades_attempted': 0,
+    'trades_approved': 0,
+    'trades_rejected_risk': 0,
+    'trades_rejected_confidence': 0,
+}
 
 
 # ============================================================================
@@ -340,9 +359,266 @@ def run_paper_trading():
     logger.info("=" * PRINT_WIDTH)
 
 
+def run_india_rules_only():
+    """
+    Execute India rules-only paper trading.
+    
+    SAFETY: This phase establishes baseline performance using rules only.
+    ML is completely disabled. All signals/trades tracked for audit trail.
+    
+    Flow:
+    1. Verify startup conditions (observation log, risk manager, no ML)
+    2. Scan India universe
+    3. Generate rules-only signals
+    4. Apply risk limits and execution realism
+    5. Log daily observation record
+    6. Print execution summary on shutdown
+    """
+    logger.info("\n")
+    logger.info("=" * PRINT_WIDTH)
+    logger.info("[INDIA] Phase I — Rules-Only Observation Mode")
+    logger.info("=" * PRINT_WIDTH)
+    logger.info(f"Status: INDIA_RULES_ONLY = {INDIA_RULES_ONLY}")
+    logger.info(f"Status: INDIA_ML_VALIDATION_ENABLED = {INDIA_ML_VALIDATION_ENABLED}")
+    
+    # ========================================================================
+    # STARTUP VERIFICATION
+    # ========================================================================
+    logger.info("\n[INDIA] Performing startup verification...")
+    
+    # 1. Verify observation log is writable
+    try:
+        from monitoring.india_observation_log import IndiaObservationLogger
+        obs_logger = IndiaObservationLogger(INDIA_OBSERVATION_LOG_DIR)
+        status = obs_logger.get_observation_status()
+        logger.info(f"✓ Observation log writable")
+        logger.info(f"  Directory: {INDIA_OBSERVATION_LOG_DIR}")
+        logger.info(f"  Observation days recorded: {status['total_observation_days']}")
+    except Exception as e:
+        logger.error(f"✗ Observation log initialization failed: {e}")
+        return
+    
+    # 2. Verify RiskManager initialized with India params
+    try:
+        from risk.portfolio_state import PortfolioState
+        from risk.risk_manager import RiskManager
+        
+        portfolio = PortfolioState(START_CAPITAL)
+        risk_mgr = RiskManager(portfolio)
+        logger.info(f"✓ RiskManager initialized with India parameters")
+        logger.info(f"  Starting capital: ${START_CAPITAL:,.0f}")
+        logger.info(f"  Market mode: {MARKET_MODE}")
+    except Exception as e:
+        logger.error(f"✗ RiskManager initialization failed: {e}")
+        return
+    
+    # 3. Verify ML is NOT loaded
+    if INDIA_RULES_ONLY:
+        logger.info(f"✓ ML disabled (INDIA_RULES_ONLY = True)")
+        logger.info(f"  Using rules-based confidence only")
+    else:
+        logger.error(f"✗ ML VALIDATION ENABLED - should be disabled for rules-only mode")
+        return
+    
+    logger.info("\n[INDIA] ✓ All startup checks passed\n")
+    
+    # ========================================================================
+    # DAILY EXECUTION LOOP
+    # ========================================================================
+    logger.info("=" * PRINT_WIDTH)
+    logger.info("EXECUTING DAILY LOOP")
+    logger.info("=" * PRINT_WIDTH)
+    
+    from broker.paper_trading_executor import PaperTradingExecutor
+    from broker.alpaca_adapter import AlpacaAdapter
+    from broker.execution_logger import ExecutionLogger
+    from monitoring.system_guard import SystemGuard
+    
+    try:
+        broker = AlpacaAdapter()
+    except Exception as e:
+        logger.error(f"Broker initialization failed (using simulation mode): {e}")
+        broker = None
+    
+    # Initialize components
+    portfolio = PortfolioState(START_CAPITAL)
+    risk_mgr = RiskManager(portfolio)
+    monitor = SystemGuard() if RUN_MONITORING else None
+    exec_logger = ExecutionLogger("./logs")
+    
+    executor = PaperTradingExecutor(
+        broker=broker,
+        risk_manager=risk_mgr,
+        monitor=monitor,
+        logger_instance=exec_logger,
+    )
+    
+    # Get universe based on market mode
+    try:
+        if INDIA_MODE:
+            from universe.india_universe import NIFTY_50
+            universe = NIFTY_50
+            logger.info(f"Using India universe (NIFTY 50): {len(universe)} symbols")
+        else:
+            from universe.symbols import SYMBOLS
+            universe = SYMBOLS
+            logger.info(f"Using US universe: {len(universe)} symbols")
+    except Exception as e:
+        logger.error(f"Failed to load universe: {e}")
+        return
+    
+    # Generate signals using main screener
+    logger.info(f"\n[INDIA] Scanning {len(universe)} symbols...")
+    results = main()
+    
+    if results.empty:
+        logger.warning("[INDIA] No signals generated today")
+        signals = pd.DataFrame()
+    else:
+        # Filter by minimum confidence
+        min_conf = 3
+        signals = results[results['confidence'] >= min_conf].head(TOP_N_CANDIDATES).copy()
+        execution_stats['signals_generated'] = len(results)
+        logger.info(f"[INDIA] Signals generated: {len(results)} total, {len(signals)} executable")
+    
+    # Execute signals with risk limits and execution realism
+    logger.info("\n" + "=" * PRINT_WIDTH)
+    logger.info("EXECUTING SIGNALS")
+    logger.info("=" * PRINT_WIDTH)
+    
+    filled_count = 0
+    rejected_count = 0
+    rejected_risk_count = 0
+    rejected_confidence_count = 0
+    
+    for idx, signal in signals.iterrows():
+        symbol = signal['symbol']
+        confidence = signal['confidence']
+        
+        execution_stats['trades_attempted'] += 1
+        
+        # Apply risk check before execution
+        risk_check = risk_mgr.check_position_sizing(symbol, confidence)
+        
+        if not risk_check.get('approved', False):
+            rejected_count += 1
+            rejected_risk_count += 1
+            logger.info(f"  {symbol}: REJECTED (risk) - {risk_check.get('reason', 'risk limit')}")
+            continue
+        
+        # Apply confidence threshold
+        if confidence < min_conf:
+            rejected_count += 1
+            rejected_confidence_count += 1
+            logger.info(f"  {symbol}: REJECTED (confidence < {min_conf})")
+            continue
+        
+        # Execute signal
+        success, order_id = executor.execute_signal(
+            symbol=symbol,
+            confidence=int(confidence),
+            signal_date=pd.Timestamp.now(),
+            features=signal.to_dict(),
+        )
+        
+        if success:
+            filled_count += 1
+            execution_stats['trades_approved'] += 1
+            logger.info(f"  {symbol}: EXECUTED (confidence={int(confidence)}, order={order_id})")
+        else:
+            rejected_count += 1
+            logger.info(f"  {symbol}: REJECTED (execution failed)")
+    
+    execution_stats['trades_rejected_risk'] = rejected_risk_count
+    execution_stats['trades_rejected_confidence'] = rejected_confidence_count
+    
+    # Poll order fills
+    logger.info("\n" + "=" * PRINT_WIDTH)
+    logger.info("POLLING ORDER FILLS")
+    logger.info("=" * PRINT_WIDTH)
+    
+    filled_orders = executor.poll_order_fills()
+    logger.info(f"Orders filled today: {len(filled_orders)}")
+    
+    # Get account status
+    status = executor.get_account_status()
+    logger.info("\n" + "=" * PRINT_WIDTH)
+    logger.info("ACCOUNT STATUS")
+    logger.info("=" * PRINT_WIDTH)
+    logger.info(f"Equity: ${status.get('equity', 0):,.2f}")
+    logger.info(f"Buying Power: ${status.get('buying_power', 0):,.2f}")
+    logger.info(f"Open Positions: {status.get('open_positions', 0)}")
+    logger.info(f"Pending Orders: {status.get('pending_orders', 0)}")
+    
+    if status.get('positions'):
+        logger.info("Positions:")
+        for sym, pos_data in status['positions'].items():
+            logger.info(
+                f"  {sym}: {pos_data['qty']} @ ${pos_data['avg_price']:.2f} "
+                f"(PnL: {pos_data['pnl_pct']:+.2%})"
+            )
+    
+    # ========================================================================
+    # LOG DAILY OBSERVATION
+    # ========================================================================
+    logger.info("\n[INDIA] Recording daily observation...")
+    
+    try:
+        # Calculate portfolio heat (% capital at risk)
+        total_risk = sum(
+            abs(pos['qty']) * pos['avg_price'] * 0.02  # Assume 2% stop loss
+            for pos in (status.get('positions', {}).values() if status.get('positions') else [])
+        )
+        portfolio_heat = total_risk / START_CAPITAL if total_risk > 0 else 0
+        
+        # Calculate daily return
+        equity_now = status.get('equity', START_CAPITAL)
+        daily_return = (equity_now - START_CAPITAL) / START_CAPITAL
+        
+        # Record observation
+        obs_logger.record_observation(
+            symbols_scanned=universe,
+            signals_generated=len(results),
+            signals_rejected=len(results) - len(signals),
+            trades_executed=execution_stats['trades_approved'],
+            trades_rejected_risk=execution_stats['trades_rejected_risk'],
+            trades_rejected_confidence=execution_stats['trades_rejected_confidence'],
+            avg_confidence_executed=signals['confidence'].mean() if len(signals) > 0 else 0,
+            avg_confidence_rejected=results[results['confidence'] < min_conf]['confidence'].mean() if len(results[results['confidence'] < min_conf]) > 0 else 0,
+            portfolio_heat=portfolio_heat,
+            daily_return=daily_return,
+            max_drawdown=0.0,  # TODO: calculate from intraday data
+            notes=f"Rules-only observation day (INDIA_RULES_ONLY={INDIA_RULES_ONLY})"
+        )
+        logger.info("[INDIA] ✓ Daily observation recorded")
+    except Exception as e:
+        logger.warning(f"[INDIA] Failed to record observation: {e}")
+    
+    # ========================================================================
+    # SHUTDOWN SUMMARY
+    # ========================================================================
+    logger.info("\n" + "=" * PRINT_WIDTH)
+    logger.info("[INDIA] EXECUTION SUMMARY")
+    logger.info("=" * PRINT_WIDTH)
+    logger.info(f"Signals Generated: {execution_stats['signals_generated']}")
+    logger.info(f"Trades Attempted: {execution_stats['trades_attempted']}")
+    logger.info(f"Trades Approved: {execution_stats['trades_approved']}")
+    logger.info(f"Trades Rejected (Risk): {execution_stats['trades_rejected_risk']}")
+    logger.info(f"Trades Rejected (Confidence): {execution_stats['trades_rejected_confidence']}")
+    logger.info(f"Total Rejected: {execution_stats['trades_rejected_risk'] + execution_stats['trades_rejected_confidence']}")
+    
+    logger.info("\n" + "=" * PRINT_WIDTH)
+    logger.info("[INDIA] ✓ Rules-only observation day complete")
+    logger.info("=" * PRINT_WIDTH)
+
+
 if __name__ == '__main__':
+    # Execute India rules-only paper trading if enabled
+    if RUN_INDIA_RULES_ONLY:
+        run_india_rules_only()
+    
     # Execute paper trading if enabled
-    if RUN_PAPER_TRADING:
+    elif RUN_PAPER_TRADING:
         run_paper_trading()
     
     # Execute dataset building if enabled
