@@ -112,7 +112,23 @@ class AlpacaAdapter(BrokerAdapter):
         
         # Initialize Alpaca client
         try:
-            self.client = TradingClient()
+            import os
+            api_key = os.getenv("APCA_API_KEY_ID")
+            secret_key = os.getenv("APCA_API_SECRET_KEY")
+            base_url = os.getenv("APCA_API_BASE_URL", "https://paper-api.alpaca.markets")
+            
+            if not api_key or not secret_key:
+                raise ValueError(
+                    "Missing API credentials. "
+                    "Set APCA_API_KEY_ID and APCA_API_SECRET_KEY environment variables."
+                )
+            
+            self.client = TradingClient(
+                api_key=api_key,
+                secret_key=secret_key,
+                paper=True,
+                url_override=base_url
+            )
         except Exception as e:
             raise ValueError(
                 "Failed to initialize Alpaca client. "
@@ -138,13 +154,15 @@ class AlpacaAdapter(BrokerAdapter):
         except Exception as e:
             raise RuntimeError(f"Failed to verify trading mode: {e}") from e
         
-        # Alpaca: account.trading_blocked = False means trading enabled
-        # For paper trading, check that we're not using live API
-        if account.account_type is None:
-            raise RuntimeError("Unable to determine account type")
+        # Check account is active and not blocked
+        if account.trading_blocked:
+            raise RuntimeError("Trading is blocked on this account")
         
-        logger.info(f"Account type: {account.account_type}")
-        logger.info(f"Trading blocked: {account.trading_blocked}")
+        if account.account_blocked:
+            raise RuntimeError("Account is blocked")
+        
+        logger.info(f"Account status: {account.status}")
+        logger.info(f"Trading active: {not account.trading_blocked}")
     
     @property
     def is_paper_trading(self) -> bool:

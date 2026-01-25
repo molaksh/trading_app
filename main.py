@@ -15,6 +15,7 @@ from config.settings import (
     LOG_LEVEL,
     LOG_FORMAT,
     LOG_DATE_FORMAT,
+    START_CAPITAL,
 )
 from universe.symbols import SYMBOLS
 from data.price_loader import load_price_data
@@ -30,7 +31,7 @@ RUN_ML_EXPERIMENT = False   # Set to True to train & compare ML model vs rules
 RUN_RISK_GOVERNANCE = False # Set to True to run backtest with risk limits
 RUN_EXECUTION_REALISM = False  # Set to True to show execution realism impact (Phase G)
 RUN_MONITORING = False      # Set to True to enable monitoring & drift detection (Phase H)
-RUN_PAPER_TRADING = False   # Set to True to execute trades via paper trading (Phase I)
+RUN_PAPER_TRADING = True    # Set to True to execute trades via paper trading (Phase I)
 
 
 # ============================================================================
@@ -228,6 +229,7 @@ def run_paper_trading():
     from broker.paper_trading_executor import PaperTradingExecutor
     from broker.execution_logger import ExecutionLogger
     from risk.portfolio_state import PortfolioState
+    from risk.risk_manager import RiskManager
     from monitoring.system_guard import SystemGuard
     
     # Safety check: paper trading only
