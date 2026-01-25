@@ -14,6 +14,21 @@ INDIA_MODE = MARKET_MODE == "INDIA"
 US_MODE = MARKET_MODE == "US"
 
 # ============================================================================
+# INDIA VALIDATION MODE: RULES-ONLY BEFORE ML
+# ============================================================================
+# When True: ML model disabled, rules-based only
+# When False: Use ML model (after validation complete)
+# REQUIRED: Must be True during initial India paper trading phase
+INDIA_RULES_ONLY = True          # SAFETY: Only disable after 20+ days validation
+
+# ============================================================================
+# INDIA OBSERVATION & BASELINE CONFIG
+# ============================================================================
+INDIA_MIN_OBSERVATION_DAYS = 20  # Minimum trading days before ML validation allowed
+INDIA_OBSERVATION_LOG_DIR = "logs/india_observations"  # JSONL log storage
+INDIA_ML_VALIDATION_ENABLED = False  # CLI override flag, requires explicit --run-india-ml-validation
+
+# ============================================================================
 # PORTFOLIO AND RISK PARAMETERS
 # ============================================================================
 START_CAPITAL = 100000
