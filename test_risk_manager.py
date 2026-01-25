@@ -147,26 +147,28 @@ class TestRiskManager(unittest.TestCase):
         self.assertIn("max trades", decision.reason.lower())
     
     def test_rejection_per_symbol_exposure(self):
-        """Test rejection when per-symbol exposure too high."""
-        # Open large position in AAPL
+        """Test rejection when per-symbol risk exposure too high."""
+        # Safety Improvement: Per-symbol exposure now RISK-based, not notional
+        # Open large risk position in AAPL (1% of equity)
         self.portfolio.open_trade(
             symbol="AAPL",
             entry_date=pd.Timestamp("2024-01-01"),
             entry_price=150.0,
-            position_size=2000,  # Large position
-            risk_amount=1000.0,  # 1% of 100k
+            position_size=100,
+            risk_amount=1000.0,  # 1% of 100k equity
             confidence=3
         )
         
-        # Try to add more to AAPL - should be rejected
+        # Try to add another 1.25% risk to AAPL (confidence=5: 125% of 1% = 1.25%)
+        # Total would be 2.25% > MAX_RISK_PER_SYMBOL (2%), should be rejected
         decision = self.risk_manager.evaluate_trade(
             symbol="AAPL",
             entry_price=150.0,
-            confidence=3,
+            confidence=5,  # 125% multiplier = 1.25% risk
             current_prices={"AAPL": 150.0}
         )
         
-        # Position already open, so this should be rejected or error
+        # Should be rejected due to per-symbol risk limit
         self.assertFalse(decision.approved)
     
     def test_rejection_portfolio_heat(self):

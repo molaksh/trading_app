@@ -22,6 +22,7 @@ from config.settings import (
     MAX_CONSECUTIVE_LOSSES,
     DAILY_LOSS_LIMIT,
     CONFIDENCE_RISK_MULTIPLIER,
+    ENABLE_ML_SIZING,
 )
 from risk.portfolio_state import PortfolioState
 
@@ -122,7 +123,23 @@ class RiskManager:
             self._record_rejection("max_trades_per_day", reason)
             return TradeDecision(False, 0.0, 0.0, reason)
         
-        # Check 4: Calculate position size with confidence multiplier
+        # Safety Check 4: Entry price sanity hardening
+        # Reject trades where entry_price <= 0 or entry_price > current_equity
+        if entry_price <= 0:
+            reason = f"Invalid entry price: {entry_price} (must be > 0)"
+            self._record_rejection("invalid_entry_price", reason)
+            return TradeDecision(False, 0.0, 0.0, reason)
+        
+        if entry_price > self.portfolio.current_equity:
+            reason = (
+                f"Entry price exceeds account equity: "
+                f"${entry_price:.2f} > ${self.portfolio.current_equity:.2f}"
+            )
+            self._record_rejection("entry_price_exceeds_equity", reason)
+            return TradeDecision(False, 0.0, 0.0, reason)
+        
+        # Check 5: Calculate position size with confidence multiplier
+        # Safety: Fail-closed confidence handling with ML sizing toggle
         confidence_multiplier = self._get_confidence_multiplier(confidence)
         base_risk = RISK_PER_TRADE * confidence_multiplier
         risk_amount = self.portfolio.current_equity * base_risk
@@ -131,29 +148,31 @@ class RiskManager:
         position_size = risk_amount / entry_price if entry_price > 0 else 0
         
         if position_size <= 0:
-            reason = f"Invalid position size calculation (price={entry_price})"
+            reason = f"Invalid position size calculation (size={position_size})"
             self._record_rejection("invalid_position", reason)
             return TradeDecision(False, 0.0, 0.0, reason)
         
-        # Check 5: Per-symbol exposure limit
-        current_symbol_value = (
-            sum(
-                pos.get_current_value()
-                for pos in self.portfolio.open_positions.get(symbol, [])
-            ) if symbol in self.portfolio.open_positions else 0.0
-        )
-        proposed_symbol_value = current_symbol_value + (position_size * entry_price)
-        proposed_symbol_exposure = proposed_symbol_value / self.portfolio.current_equity
+        # Check 6: Per-symbol exposure limit (RISK-based, not notional)
+        # Safety: Calculate risk exposure, not position value
+        # Get current risk amount for symbol (sum of all open positions' risk)
+        current_symbol_risk = sum(
+            pos.risk_amount
+            for pos in self.portfolio.open_positions.get(symbol, [])
+        ) if symbol in self.portfolio.open_positions else 0.0
         
-        if proposed_symbol_exposure > MAX_RISK_PER_SYMBOL:
+        proposed_symbol_risk = current_symbol_risk + risk_amount
+        max_symbol_risk = MAX_RISK_PER_SYMBOL * self.portfolio.current_equity
+        
+        if proposed_symbol_risk > max_symbol_risk:
+            proposed_symbol_risk_pct = proposed_symbol_risk / self.portfolio.current_equity
             reason = (
-                f"Per-symbol exposure limit exceeded "
-                f"({proposed_symbol_exposure:.2%} > {MAX_RISK_PER_SYMBOL:.2%})"
+                f"Per-symbol risk exposure limit exceeded "
+                f"({proposed_symbol_risk_pct:.2%} > {MAX_RISK_PER_SYMBOL:.2%})"
             )
             self._record_rejection("per_symbol_exposure", reason)
             return TradeDecision(False, 0.0, 0.0, reason)
         
-        # Check 6: Portfolio heat limit
+        # Check 7: Portfolio heat limit
         new_portfolio_heat = self._calculate_proposed_portfolio_heat(
             risk_amount, current_prices
         )
@@ -181,16 +200,39 @@ class RiskManager:
         """
         Get position sizing multiplier based on confidence.
         
+        Safety Improvements:
+        - Fail-closed: defaults to 0.0 for invalid confidence (zero position size)
+        - ML sizing toggle: respects ENABLE_ML_SIZING config flag
+        - When ML sizing disabled: always uses 1.0 (neutral sizing)
+        - Logs warning for invalid confidence scores
+        
         Args:
             confidence: Confidence score (1-5)
         
         Returns:
-            Multiplier for base risk
+            Multiplier for base risk (0.0 if invalid, ensuring fail-closed behavior)
         """
-        multiplier = CONFIDENCE_RISK_MULTIPLIER.get(confidence, 1.0)
+        # If ML sizing is disabled, use neutral 1.0 multiplier
+        if not ENABLE_ML_SIZING:
+            return 1.0
+        
+        # Validate confidence is in valid range
         if confidence < 1 or confidence > 5:
-            logger.warning(f"Invalid confidence level: {confidence}, using 1.0")
-            multiplier = 1.0
+            logger.warning(
+                f"Invalid confidence level: {confidence} (must be 1-5), "
+                f"using 0.0 (fail-closed, zero position size)"
+            )
+            # Fail-closed: invalid confidence results in zero position size
+            return 0.0
+        
+        # Valid confidence: use configured multiplier
+        multiplier = CONFIDENCE_RISK_MULTIPLIER.get(confidence, 0.0)
+        if multiplier == 0.0:
+            logger.warning(
+                f"Confidence {confidence} not found in multiplier map, "
+                f"using 0.0 (fail-closed)"
+            )
+        
         return multiplier
     
     def _calculate_proposed_portfolio_heat(

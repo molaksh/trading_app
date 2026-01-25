@@ -88,6 +88,11 @@ CONFIDENCE_RISK_MULTIPLIER = {
     5: 1.25,                      # Confidence 5: 125% of base risk (slightly more aggressive)
 }
 
+# ML-based confidence sizing control
+# When disabled: confidence multiplier always uses 1.0 (neutral sizing)
+# When enabled: confidence multiplier respected from CONFIDENCE_RISK_MULTIPLIER
+ENABLE_ML_SIZING = True          # Set to False to disable confidence-based scaling
+
 # ============================================================================
 # ML DATASET LABEL CONFIGURATION
 # ============================================================================
