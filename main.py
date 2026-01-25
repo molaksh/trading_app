@@ -27,6 +27,7 @@ from scoring.rule_scorer import score_symbol
 RUN_BACKTEST = False        # Set to True to run diagnostic backtest
 BUILD_DATASET = False       # Set to True to build ML-ready dataset
 RUN_ML_EXPERIMENT = False   # Set to True to train & compare ML model vs rules
+RUN_RISK_GOVERNANCE = False # Set to True to run backtest with risk limits
 
 
 # ============================================================================
@@ -271,4 +272,41 @@ if __name__ == '__main__':
                     features,
                     include_confidence=False,
                 )
+        
+        # Optional: Run risk-governed backtest
+        if RUN_RISK_GOVERNANCE:
+            logger.info("\n")
+            from backtest.risk_backtest import run_risk_governed_backtest
+            from backtest.metrics import print_metrics
+            
+            # Run backtest with risk limits enabled
+            logger.info("Running risk-governed backtest (with risk limits)...")
+            trades_with_risk = run_risk_governed_backtest(SYMBOLS, enforce_risk=True)
+            print_metrics(trades_with_risk)
+            
+            # Run backtest without risk limits for comparison
+            logger.info("\n")
+            logger.info("Running research backtest (no risk limits)...")
+            trades_no_risk = run_risk_governed_backtest(SYMBOLS, enforce_risk=False)
+            print_metrics(trades_no_risk)
+            
+            # Print comparison
+            logger.info("\n" + "=" * PRINT_WIDTH)
+            logger.info("RISK GOVERNANCE IMPACT")
+            logger.info("=" * PRINT_WIDTH)
+            
+            if trades_with_risk and trades_no_risk:
+                win_rate_with_risk = sum(1 for t in trades_with_risk if t.return_pct >= 0) / len(trades_with_risk)
+                win_rate_no_risk = sum(1 for t in trades_no_risk if t.return_pct >= 0) / len(trades_no_risk)
+                
+                return_with_risk = sum(t.return_pct for t in trades_with_risk) / len(trades_with_risk)
+                return_no_risk = sum(t.return_pct for t in trades_no_risk) / len(trades_no_risk)
+                
+                logger.info(f"\n{'Metric':<30} {'With Risk Limits':<20} {'No Limits':<20}")
+                logger.info("-" * 70)
+                logger.info(f"{'Trade Count':<30} {len(trades_with_risk):<20} {len(trades_no_risk):<20}")
+                logger.info(f"{'Win Rate':<30} {win_rate_with_risk:.1%}{'':13} {win_rate_no_risk:.1%}")
+                logger.info(f"{'Avg Return':<30} {return_with_risk:.2%}{'':14} {return_no_risk:.2%}")
+            
+            logger.info("=" * PRINT_WIDTH)
 

@@ -63,6 +63,32 @@ CONFIDENCE_RISK_MAP = {
 }
 
 # ============================================================================
+# RISK & PORTFOLIO GOVERNANCE PARAMETERS
+# ============================================================================
+# Per-trade risk as % of account equity
+RISK_PER_TRADE = 0.01            # Risk 1% per trade
+
+# Per-symbol maximum exposure as % of account
+MAX_RISK_PER_SYMBOL = 0.02       # Max 2% exposure per symbol
+
+# Portfolio heat: total open risk as % of account
+MAX_PORTFOLIO_HEAT = 0.08        # Max 8% total portfolio risk
+
+# Position sizing constraints
+MAX_TRADES_PER_DAY = 4           # Max 4 new positions per day
+MAX_CONSECUTIVE_LOSSES = 3       # Stop after 3 consecutive losing trades
+DAILY_LOSS_LIMIT = 0.02          # Stop if daily loss exceeds 2%
+
+# Confidence-based position sizing multipliers
+CONFIDENCE_RISK_MULTIPLIER = {
+    1: 0.25,                      # Confidence 1: 25% of base risk
+    2: 0.50,                      # Confidence 2: 50% of base risk
+    3: 0.75,                      # Confidence 3: 75% of base risk
+    4: 1.00,                      # Confidence 4: 100% of base risk
+    5: 1.25,                      # Confidence 5: 125% of base risk (slightly more aggressive)
+}
+
+# ============================================================================
 # ML DATASET LABEL CONFIGURATION
 # ============================================================================
 # Label definition: 1 if price reaches TARGET_RETURN within HORIZON
