@@ -29,6 +29,8 @@ BUILD_DATASET = False       # Set to True to build ML-ready dataset
 RUN_ML_EXPERIMENT = False   # Set to True to train & compare ML model vs rules
 RUN_RISK_GOVERNANCE = False # Set to True to run backtest with risk limits
 RUN_EXECUTION_REALISM = False  # Set to True to show execution realism impact (Phase G)
+RUN_MONITORING = False      # Set to True to enable monitoring & drift detection (Phase H)
+RUN_PAPER_TRADING = False   # Set to True to execute trades via paper trading (Phase I)
 
 
 # ============================================================================
@@ -207,9 +209,142 @@ def main():
     return results_df
 
 
+def run_paper_trading():
+    """
+    Execute paper trading flow.
+    
+    1. Generate signals
+    2. Submit orders to broker
+    3. Track fills
+    4. Monitor degradation
+    5. Log all activity
+    """
+    logger.info("\n")
+    logger.info("=" * PRINT_WIDTH)
+    logger.info("PAPER TRADING EXECUTION (Phase I)")
+    logger.info("=" * PRINT_WIDTH)
+    
+    from broker.alpaca_adapter import AlpacaAdapter
+    from broker.paper_trading_executor import PaperTradingExecutor
+    from broker.execution_logger import ExecutionLogger
+    from risk.portfolio_state import PortfolioState
+    from monitoring.system_guard import SystemGuard
+    
+    # Safety check: paper trading only
+    try:
+        broker = AlpacaAdapter()
+    except Exception as e:
+        logger.error(f"Failed to initialize broker: {e}")
+        logger.error("Paper trading disabled")
+        return
+    
+    # Initialize components
+    portfolio_state = PortfolioState(START_CAPITAL)
+    risk_manager = RiskManager(portfolio_state)
+    
+    # Initialize monitoring (Phase H)
+    monitor = None
+    if RUN_MONITORING:
+        monitor = SystemGuard()
+        logger.info("Monitoring enabled (Phase H)")
+    
+    # Initialize execution logging
+    exec_logger = ExecutionLogger("./logs")
+    
+    # Initialize executor
+    executor = PaperTradingExecutor(
+        broker=broker,
+        risk_manager=risk_manager,
+        monitor=monitor,
+        logger_instance=exec_logger,
+    )
+    
+    # Generate signals
+    logger.info("\nGenerating signals...")
+    results = main()
+    
+    if results.empty:
+        logger.warning("No signals generated. Cannot proceed.")
+        return
+    
+    # Filter by minimum confidence
+    min_conf = 3
+    signals = results[results['confidence'] >= min_conf].head(TOP_N_CANDIDATES).copy()
+    
+    logger.info(f"\nSignals to execute: {len(signals)}")
+    logger.info("=" * PRINT_WIDTH)
+    
+    # Execute each signal
+    filled_count = 0
+    rejected_count = 0
+    
+    for idx, signal in signals.iterrows():
+        symbol = signal['symbol']
+        confidence = signal['confidence']
+        
+        success, order_id = executor.execute_signal(
+            symbol=symbol,
+            confidence=int(confidence),
+            signal_date=pd.Timestamp.now(),
+            features=signal.to_dict(),
+        )
+        
+        if success:
+            filled_count += 1
+        else:
+            rejected_count += 1
+    
+    # Poll order fills
+    logger.info("\n" + "=" * PRINT_WIDTH)
+    logger.info("POLLING ORDER FILLS")
+    logger.info("=" * PRINT_WIDTH)
+    
+    filled_orders = executor.poll_order_fills()
+    logger.info(f"Newly filled: {len(filled_orders)}")
+    
+    # Print account status
+    logger.info("\n" + "=" * PRINT_WIDTH)
+    logger.info("ACCOUNT STATUS")
+    logger.info("=" * PRINT_WIDTH)
+    
+    status = executor.get_account_status()
+    logger.info(f"Equity: ${status.get('equity', 0):.2f}")
+    logger.info(f"Buying Power: ${status.get('buying_power', 0):.2f}")
+    logger.info(f"Open Positions: {status.get('open_positions', 0)}")
+    logger.info(f"Pending Orders: {status.get('pending_orders', 0)}")
+    
+    if status.get('positions'):
+        logger.info("\nPositions:")
+        for sym, pos_data in status['positions'].items():
+            logger.info(
+                f"  {sym}: {pos_data['qty']} @ ${pos_data['avg_price']:.2f} "
+                f"(PnL: {pos_data['pnl_pct']:+.2%})"
+            )
+    
+    # Print summary
+    logger.info("\n" + "=" * PRINT_WIDTH)
+    logger.info("EXECUTION SUMMARY")
+    logger.info("=" * PRINT_WIDTH)
+    
+    summary = executor.get_execution_summary()
+    logger.info(f"Signals Processed: {filled_count + rejected_count}")
+    logger.info(f"Orders Submitted: {filled_count}")
+    logger.info(f"Rejections: {rejected_count}")
+    logger.info(f"Filled Orders: {summary['execution_logger']['filled']}")
+    logger.info(f"Monitoring Alerts: {summary['execution_logger']['alerts']}")
+    
+    logger.info("=" * PRINT_WIDTH)
+    logger.info("✓ Paper trading execution complete")
+    logger.info("=" * PRINT_WIDTH)
+
+
 if __name__ == '__main__':
+    # Execute paper trading if enabled
+    if RUN_PAPER_TRADING:
+        run_paper_trading()
+    
     # Execute dataset building if enabled
-    if BUILD_DATASET:
+    elif BUILD_DATASET:
         logger.info("\n")
         from dataset.dataset_builder import build_dataset_pipeline
         

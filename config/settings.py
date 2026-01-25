@@ -121,6 +121,45 @@ DATASET_OUTPUT_DIR = "./data"    # Directory to save feature snapshots
 DATASET_FILE_FORMAT = "parquet"  # Use 'parquet' or 'csv'
 
 # ============================================================================
+# PAPER TRADING (Phase I)
+# ============================================================================
+# SAFETY: Paper trading only. Set to False to prevent execution.
+RUN_PAPER_TRADING = False        # Set to True to enable paper trading
+PAPER_TRADING_MODE_REQUIRED = True  # Safety: fail if not in paper trading mode
+
+# Paper trading broker
+PAPER_TRADING_BROKER = "alpaca"  # Currently supported: "alpaca"
+
+# ============================================================================
+# MONITORING & DEGRADATION DETECTION (Phase H)
+# ============================================================================
+# Global monitoring settings
+RUN_MONITORING = True            # Enable all monitoring features
+ENABLE_AUTO_PROTECTION = True    # Enable auto-protection when degradation detected
+
+# Confidence distribution monitoring
+ENABLE_CONFIDENCE_MONITORING = True
+CONFIDENCE_INFLATION_THRESHOLD = 0.30  # Flag if >30% are confidence 5
+CONFIDENCE_COLLAPSE_THRESHOLD = 0.10   # Flag if <10% are confidence 4-5
+CONFIDENCE_MIN_WINDOW_SIZE = 20        # Minimum signals before checking
+
+# Performance degradation monitoring
+ENABLE_PERFORMANCE_MONITORING = True
+PERFORMANCE_MIN_TIER_TRADES = 10       # Min trades per tier before checking
+WIN_RATE_ALERT_THRESHOLD = 0.40        # Flag if win rate < 40%
+AVG_RETURN_ALERT_THRESHOLD = -0.01     # Flag if avg return < -1%
+
+# Feature drift monitoring
+ENABLE_FEATURE_DRIFT_MONITORING = True
+FEATURE_DRIFT_ZSCORE_THRESHOLD = 3.0   # Flag if z-score > 3.0
+FEATURE_DRIFT_LOOKBACK_WINDOW = 60     # Recent window (days)
+FEATURE_DRIFT_BASELINE_WINDOW = 250    # Long-term baseline (days)
+
+# Auto-protection settings
+MAX_CONSECUTIVE_ALERTS = 3             # Trigger protection after N alerts
+AUTO_PROTECTION_DISABLES_ML_SIZING = True  # Protection disables ML confidence scaling
+AUTO_PROTECTION_REVERSIBLE = True      # Can re-enable after investigation
+
 # ============================================================================
 LOG_LEVEL = logging.INFO
 LOG_FORMAT = "%(asctime)s | %(levelname)-8s | %(name)-20s | %(message)s"
