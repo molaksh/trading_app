@@ -1,9 +1,17 @@
 """
 Configuration and constants for the trading screener.
 ML-ready format: all parameters centralized and versioned.
+Supports multi-market: US (default) and INDIA via MARKET_MODE flag.
 """
 
 import logging
+
+# ============================================================================
+# MARKET MODE: CONTROL US vs INDIA TRADING
+# ============================================================================
+MARKET_MODE = "US"               # Options: "US" or "INDIA"
+INDIA_MODE = MARKET_MODE == "INDIA"
+US_MODE = MARKET_MODE == "US"
 
 # ============================================================================
 # PORTFOLIO AND RISK PARAMETERS
@@ -164,3 +172,23 @@ AUTO_PROTECTION_REVERSIBLE = True      # Can re-enable after investigation
 LOG_LEVEL = logging.INFO
 LOG_FORMAT = "%(asctime)s | %(levelname)-8s | %(name)-20s | %(message)s"
 LOG_DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
+# ============================================================================
+# INDIA MARKET SPECIFIC PARAMETERS (NSE)
+# ============================================================================
+# When MARKET_MODE == "INDIA", these parameters override US defaults
+if INDIA_MODE:
+    # India risk parameters (more conservative for lower liquidity)
+    BASE_RISK_PCT = 0.0075           # 0.75% base risk (vs 1% US)
+    MAX_RISK_PER_SYMBOL = 0.015      # 1.5% max per symbol (vs 2% US)
+    MAX_PORTFOLIO_HEAT = 0.05        # 5% max portfolio heat (vs 8% US)
+    MAX_TRADES_PER_DAY = 2           # 2 trades/day max (vs 4 US)
+    
+    # India liquidity assumptions
+    MAX_POSITION_ADV_PCT = 0.02      # 2% of ADV (vs 5% US) - tighter
+    ENTRY_SLIPPAGE_BPS = 10          # 10 bps = 0.10% (vs 5 bps US)
+    EXIT_SLIPPAGE_BPS = 10           # 10 bps = 0.10% (vs 5 bps US)
+    
+    # India labeling
+    LABEL_HORIZON_DAYS = 7           # 7-day horizon (vs 5 US)
+    LABEL_TARGET_RETURN = 0.025      # +2.5% target (vs 2% US)
+    LABEL_MAX_DRAWDOWN = -0.015      # -1.5% max drawdown (vs -1% US)
