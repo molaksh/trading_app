@@ -9,6 +9,8 @@ credentials are picked up automatically without exporting shell env.
 
 import logging
 import os
+import sys
+import argparse
 import pandas as pd
 from datetime import datetime
 
@@ -242,19 +244,25 @@ def main():
     return results_df
 
 
-def run_paper_trading():
+def run_paper_trading(mode='trade'):
     """
     Execute paper trading flow.
     
-    1. Generate signals
-    2. Submit orders to broker
-    3. Track fills
-    4. Monitor degradation
-    5. Log all activity
+    Modes:
+    - 'trade': Full trading (generate signals, submit buys, evaluate exits)
+              Run once daily after market close
+    - 'monitor': Exit monitoring only (no new signals/buys, only check exits)
+                 Run periodically during market hours for emergency exits
+    
+    Args:
+        mode: 'trade' or 'monitor'
     """
     logger.info("\n")
     logger.info("=" * PRINT_WIDTH)
-    logger.info("PAPER TRADING EXECUTION (Phase I)")
+    if mode == 'monitor':
+        logger.info("MONITORING MODE - Exit Evaluation Only")
+    else:
+        logger.info("TRADING MODE - Full Signal Generation & Execution")
     logger.info("=" * PRINT_WIDTH)
     
     from broker.alpaca_adapter import AlpacaAdapter
@@ -311,42 +319,49 @@ def run_paper_trading():
         exit_evaluator=exit_evaluator,
     )
     
-    # Generate signals
-    logger.info("\nGenerating signals...")
-    results = main()
-    
-    if results.empty:
-        logger.warning("No signals generated. Cannot proceed.")
-        return
-    
-    # Filter by minimum confidence
-    min_conf = 3
-    signals = results[results['confidence'] >= min_conf].head(TOP_N_CANDIDATES).copy()
-    
-    logger.info(f"\nSignals to execute: {len(signals)}")
-    logger.info("=" * PRINT_WIDTH)
-    
-    # Execute each signal
-    filled_count = 0
-    rejected_count = 0
-    
-    for idx, signal in signals.iterrows():
-        symbol = signal['symbol']
-        confidence = signal['confidence']
+    # TRADE MODE: Generate signals and submit orders
+    if mode == 'trade':
+        logger.info("\n🔵 TRADE MODE: Generating signals and submitting orders...")
+        results = main()
         
-        success, order_id = executor.execute_signal(
-            symbol=symbol,
-            confidence=int(confidence),
-            signal_date=pd.Timestamp.now(),
-            features=signal.to_dict(),
-        )
-        
-        if success:
-            filled_count += 1
+        if results.empty:
+            logger.warning("No signals generated. Proceeding to exit evaluation only.")
+            filled_count = 0
+            rejected_count = 0
         else:
-            rejected_count += 1
+            # Filter by minimum confidence
+            min_conf = 3
+            signals = results[results['confidence'] >= min_conf].head(TOP_N_CANDIDATES).copy()
+            
+            logger.info(f"\nSignals to execute: {len(signals)}")
+            logger.info("=" * PRINT_WIDTH)
+            
+            # Execute each signal
+            filled_count = 0
+            rejected_count = 0
+            
+            for idx, signal in signals.iterrows():
+                symbol = signal['symbol']
+                confidence = signal['confidence']
+                
+                success, order_id = executor.execute_signal(
+                    symbol=symbol,
+                    confidence=int(confidence),
+                    signal_date=pd.Timestamp.now(),
+                    features=signal.to_dict(),
+                )
+                
+                if success:
+                    filled_count += 1
+                else:
+                    rejected_count += 1
+    else:
+        # MONITOR MODE: Skip signal generation
+        logger.info("\n👁️  MONITOR MODE: Skipping signal generation (exits only)")
+        filled_count = 0
+        rejected_count = 0
     
-    # Poll order fills
+    # Poll order fills (both modes)
     logger.info("\n" + "=" * PRINT_WIDTH)
     logger.info("POLLING ORDER FILLS")
     logger.info("=" * PRINT_WIDTH)
@@ -420,9 +435,47 @@ def run_paper_trading():
 
 
 if __name__ == '__main__':
+    # Parse command-line arguments
+    parser = argparse.ArgumentParser(
+        description='Swing Trading System',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Full trading mode (run after market close):
+  python3 main.py --trade
+  
+  # Monitor mode (run during market hours for emergency exits only):
+  python3 main.py --monitor
+  
+  # Default behavior (if no args):
+  python3 main.py
+        """
+    )
+    parser.add_argument(
+        '--trade',
+        action='store_true',
+        help='Trading mode: generate signals and submit orders (run after market close)'
+    )
+    parser.add_argument(
+        '--monitor',
+        action='store_true',
+        help='Monitor mode: check exits only, no new signals (run during market hours)'
+    )
+    
+    args = parser.parse_args()
+    
+    # Determine mode
+    if args.monitor:
+        trading_mode = 'monitor'
+    elif args.trade:
+        trading_mode = 'trade'
+    else:
+        # Default: if RUN_PAPER_TRADING is on and no explicit mode, use trade mode
+        trading_mode = 'trade' if RUN_PAPER_TRADING else None
+    
     # Execute paper trading if enabled
-    if RUN_PAPER_TRADING:
-        run_paper_trading()
+    if RUN_PAPER_TRADING and trading_mode:
+        run_paper_trading(mode=trading_mode)
     
     # Execute dataset building if enabled
     elif BUILD_DATASET:
