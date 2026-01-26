@@ -1,5 +1,5 @@
 """
-Price data loader using yfinance.
+Price data loader using yfinance (US) and india_price_loader (India).
 Handles OHLCV data fetching, validation, and error recovery.
 """
 
@@ -18,12 +18,13 @@ logger = logging.getLogger(__name__)
 
 def load_price_data(symbol: str, lookback_days: int) -> Optional[pd.DataFrame]:
     """
-    Load daily OHLCV data for a symbol using yfinance.
+    Load daily OHLCV data for a symbol using appropriate data source.
+    Automatically detects India (.NS suffix) vs US symbols.
     
     Parameters
     ----------
     symbol : str
-        Ticker symbol (e.g., 'AAPL')
+        Ticker symbol (e.g., 'AAPL' for US, 'RELIANCE.NS' for India)
     lookback_days : int
         Number of trading days to fetch (typically 252 for 1 year)
     
@@ -33,6 +34,18 @@ def load_price_data(symbol: str, lookback_days: int) -> Optional[pd.DataFrame]:
         Clean DataFrame with columns [Open, High, Low, Close, Volume]
         indexed by date. Returns None if fetch fails or data insufficient.
     """
+    # Route to appropriate loader based on symbol
+    if '.NS' in symbol:
+        # India NSE symbol
+        from data.india_price_loader import load_price_data_india
+        return load_price_data_india(symbol, lookback_days)
+    else:
+        # US symbol - use yfinance
+        return _load_us_price_data(symbol, lookback_days)
+
+
+def _load_us_price_data(symbol: str, lookback_days: int) -> Optional[pd.DataFrame]:
+    """Load US stock data using yfinance."""
     try:
         # Calculate end date as today and start date as lookback_days ago
         end_date = datetime.now()

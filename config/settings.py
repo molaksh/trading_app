@@ -9,7 +9,7 @@ import logging
 # ============================================================================
 # MARKET MODE: CONTROL US vs INDIA TRADING
 # ============================================================================
-MARKET_MODE = "INDIA"            # Options: "US" or "INDIA"
+MARKET_MODE = "US"               # Options: "US" or "INDIA"
 INDIA_MODE = MARKET_MODE == "INDIA"
 US_MODE = MARKET_MODE == "US"
 

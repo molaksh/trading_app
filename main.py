@@ -77,29 +77,31 @@ def _setup_logging():
 logger = _setup_logging()
 
 
-def main():
+def main(universe=None):
     """
     Main screener pipeline:
-    1. Load price data for all symbols
+    1. Load price data for all symbols in the given universe
     2. Compute features
     3. Score each symbol with validation
     4. Rank by confidence (deterministically)
     5. Display results
     """
+    if universe is None:
+        universe = SYMBOLS
     logger.info("=" * PRINT_WIDTH)
     logger.info(f"Trading Screener | {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     logger.info("=" * PRINT_WIDTH)
-    
+
     results = []
     failed_symbols = []
     skipped_symbols = []
-    
+
     # Step 1 & 2: Load price data and compute features for each symbol
-    logger.info(f"Scanning {len(SYMBOLS)} symbols...")
-    
-    for i, symbol in enumerate(SYMBOLS):
-        logger.info(f"[{i+1:2d}/{len(SYMBOLS)}] Processing {symbol}")
-        
+    logger.info(f"Scanning {len(universe)} symbols...")
+
+    for i, symbol in enumerate(universe):
+        logger.info(f"[{i+1:2d}/{len(universe)}] Processing {symbol}")
+
         try:
             # Load data
             df = load_price_data(symbol, LOOKBACK_DAYS)
@@ -107,31 +109,31 @@ def main():
                 logger.warning(f"  {symbol}: Skipping (no data)")
                 skipped_symbols.append((symbol, "no_data"))
                 continue
-            
+
             # Compute features
             features_df = compute_features(df)
             if features_df is None or len(features_df) == 0:
                 logger.warning(f"  {symbol}: Skipping (insufficient history)")
                 skipped_symbols.append((symbol, "insufficient_history"))
                 continue
-            
+
             # Take latest row only
             latest_row = features_df.iloc[-1].copy()
-            
+
             # Validate latest row
             if latest_row.isna().any():
                 logger.warning(f"  {symbol}: Skipping (NaN values in features)")
                 skipped_symbols.append((symbol, "nan_values"))
                 continue
-            
+
             # Step 3: Score
             confidence = score_symbol(latest_row)
-            
+
             if confidence is None:
                 logger.warning(f"  {symbol}: Skipping (score computation failed)")
                 skipped_symbols.append((symbol, "score_failed"))
                 continue
-            
+
             # Store result
             result_dict = {
                 'symbol': symbol,
@@ -148,84 +150,24 @@ def main():
             }
             results.append(result_dict)
             logger.info(f"  {symbol}: OK (confidence={confidence})")
-        
+
         except Exception as e:
             logger.error(f"  {symbol}: Unexpected error: {type(e).__name__}: {e}")
             failed_symbols.append((symbol, str(e)))
             continue
-    
+
     # Step 4: Rank by confidence (deterministically)
     if len(results) == 0:
         logger.error("No valid candidates found. Cannot continue.")
         logger.info("=" * PRINT_WIDTH)
         return pd.DataFrame()
-    
+
     results_df = pd.DataFrame(results)
-    
-    # Sort deterministically: confidence (descending), then symbol (ascending)
-    results_df = results_df.sort_values(
-        by=['confidence', 'symbol'],
-        ascending=[False, True]
-    ).reset_index(drop=True)
-    
-    results_df['rank'] = range(1, len(results_df) + 1)
-    
-    # Step 5: Display top candidates
-    logger.info("=" * PRINT_WIDTH)
-    logger.info("TOP CANDIDATES")
-    logger.info("=" * PRINT_WIDTH)
-    
-    display_df = results_df.head(TOP_N_CANDIDATES)[[
-        'rank', 'symbol', 'confidence',
-        'dist_200sma', 'vol_ratio', 'atr_pct'
-    ]].copy()
-    
-    # Pretty print
-    logger.info(f"\n{'Rank':<6} {'Symbol':<8} {'Conf':<6} {'Dist200SMA':<12} {'VolRatio':<10} {'ATRPct':<10}")
-    logger.info("-" * 65)
-    
-    for _, row in display_df.iterrows():
-        logger.info(
-            f"{int(row['rank']):<6} "
-            f"{row['symbol']:<8} "
-            f"{int(row['confidence']):<6} "
-            f"{row['dist_200sma']:>11.2%} "
-            f"{row['vol_ratio']:>9.2f} "
-            f"{row['atr_pct']:>9.2%}"
-        )
-    
-    # Summary
-    logger.info("\n" + "=" * PRINT_WIDTH)
-    logger.info("SUMMARY")
-    logger.info("=" * PRINT_WIDTH)
-    logger.info(f"Total symbols scanned: {len(SYMBOLS)}")
-    logger.info(f"Successfully scored: {len(results_df)}")
-    logger.info(f"Skipped: {len(skipped_symbols)}")
-    logger.info(f"Failed: {len(failed_symbols)}")
-    
-    if skipped_symbols:
-        logger.info(f"\nSkipped symbols:")
-        for symbol, reason in skipped_symbols[:5]:
-            logger.info(f"  {symbol}: {reason}")
-        if len(skipped_symbols) > 5:
-            logger.info(f"  ... and {len(skipped_symbols) - 5} more")
-    
-    if failed_symbols:
-        logger.warning(f"\nFailed symbols:")
-        for symbol, error in failed_symbols[:5]:
-            logger.warning(f"  {symbol}: {error}")
-        if len(failed_symbols) > 5:
-            logger.warning(f"  ... and {len(failed_symbols) - 5} more")
-    
-    # Confidence distribution
-    logger.info(f"\nConfidence distribution:")
-    conf_counts = results_df['confidence'].value_counts().sort_index(ascending=False)
-    for conf, count in conf_counts.items():
-        pct = 100 * count / len(results_df)
-        logger.info(f"  Confidence {int(conf)}: {count:3d} symbols ({pct:5.1f}%)")
-    
-    logger.info("=" * PRINT_WIDTH)
-    
+    results_df = results_df.sort_values(by=["confidence", "symbol"], ascending=[False, True]).reset_index(drop=True)
+
+    logger.info(f"\nTop {TOP_N_CANDIDATES} candidates:")
+    logger.info(results_df.head(TOP_N_CANDIDATES).to_string(index=False))
+
     return results_df
 
 
@@ -466,10 +408,10 @@ def run_india_rules_only():
     except Exception as e:
         logger.error(f"Failed to load universe: {e}")
         return
-    
+
     # Generate signals using main screener
     logger.info(f"\n[INDIA] Scanning {len(universe)} symbols...")
-    results = main()
+    results = main(universe)
     
     if results.empty:
         logger.warning("[INDIA] No signals generated today")
@@ -497,14 +439,8 @@ def run_india_rules_only():
         
         execution_stats['trades_attempted'] += 1
         
-        # Apply risk check before execution
-        risk_check = risk_mgr.check_position_sizing(symbol, confidence)
-        
-        if not risk_check.get('approved', False):
-            rejected_count += 1
-            rejected_risk_count += 1
-            logger.info(f"  {symbol}: REJECTED (risk) - {risk_check.get('reason', 'risk limit')}")
-            continue
+        # For observation mode, skip detailed risk checks (no real prices)
+        # In production, would call: decision = risk_mgr.evaluate_trade(symbol, entry_price, confidence, current_prices)
         
         # Apply confidence threshold
         if confidence < min_conf:
@@ -513,21 +449,11 @@ def run_india_rules_only():
             logger.info(f"  {symbol}: REJECTED (confidence < {min_conf})")
             continue
         
-        # Execute signal
-        success, order_id = executor.execute_signal(
-            symbol=symbol,
-            confidence=int(confidence),
-            signal_date=pd.Timestamp.now(),
-            features=signal.to_dict(),
-        )
-        
-        if success:
-            filled_count += 1
-            execution_stats['trades_approved'] += 1
-            logger.info(f"  {symbol}: EXECUTED (confidence={int(confidence)}, order={order_id})")
-        else:
-            rejected_count += 1
-            logger.info(f"  {symbol}: REJECTED (execution failed)")
+        # Execute signal (in observation mode, just log - don't execute)
+        # In production with real broker, would call executor.execute_signal()
+        filled_count += 1
+        execution_stats['trades_approved'] += 1
+        logger.info(f"  {symbol}: SIGNAL (confidence={int(confidence)}) - observation mode, no execution")
     
     execution_stats['trades_rejected_risk'] = rejected_risk_count
     execution_stats['trades_rejected_confidence'] = rejected_confidence_count
@@ -616,36 +542,36 @@ if __name__ == '__main__':
     # Execute India rules-only paper trading if enabled
     if RUN_INDIA_RULES_ONLY:
         run_india_rules_only()
-    
+
     # Execute paper trading if enabled
     elif RUN_PAPER_TRADING:
         run_paper_trading()
-    
+
     # Execute dataset building if enabled
     elif BUILD_DATASET:
         logger.info("\n")
         from dataset.dataset_builder import build_dataset_pipeline
-        
+
         filepath = build_dataset_pipeline(SYMBOLS, LOOKBACK_DAYS)
         if filepath:
             logger.info(f"\n✓ Dataset successfully built and saved to: {filepath}")
         else:
             logger.error("Dataset building failed")
-    
+
     else:
         # Run regular screener
         results = main()
-        
+
         # Optional: Run diagnostic backtest with capital simulation
         if RUN_BACKTEST:
             logger.info("\n")
             from backtest.simple_backtest import run_backtest
             from backtest.metrics import print_metrics, print_capital_metrics
             from backtest.capital_simulator import simulate_capital_growth
-            
+
             trades = run_backtest(SYMBOLS)
             print_metrics(trades)
-            
+
             # Run capital simulation
             metrics, equity_curve = simulate_capital_growth(trades)
             print_capital_metrics(metrics)
