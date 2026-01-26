@@ -145,6 +145,29 @@ class PaperTradingExecutor:
                 f"Cannot execute signal for {symbol}: auto-protection active"
             )
             return False, None
+
+        # Guardrail 1: Skip if we already have exposure for this symbol (prevents double-buy on reruns)
+        try:
+            existing_position = self.broker.get_position(symbol)
+        except Exception as e:
+            existing_position = None
+            logger.warning(f"Could not check existing position for {symbol}: {e}")
+
+        if existing_position and abs(existing_position.quantity) > 0:
+            logger.info(
+                f"Skipping {symbol} — existing position qty={existing_position.quantity} at avg={existing_position.avg_entry_price}"
+            )
+            return False, None
+
+        # Guardrail 2: Skip if an order for this symbol is already pending in this session
+        if symbol in self.pending_orders.values():
+            logger.info(f"Skipping {symbol} — pending order already submitted in this session")
+            return False, None
+
+        # Guardrail 3: Skip if we have a recorded pending entry awaiting exit
+        if symbol in self.pending_entries:
+            logger.info(f"Skipping {symbol} — entry already filled and awaiting exit")
+            return False, None
         
         # Step 3: Get RiskManager approval
         entry_price = float(features.get("close", 0) or 0)
