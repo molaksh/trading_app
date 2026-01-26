@@ -267,6 +267,42 @@ class ExecutionLogger:
             f"({consecutive_alerts} consecutive alerts)"
         )
     
+    def log_exit_signal(
+        self,
+        symbol: str,
+        exit_type: str,
+        reason: str,
+        entry_date: str,
+        holding_days: int,
+        confidence: int,
+        urgency: str,
+    ) -> None:
+        """
+        Log exit signal generation.
+        
+        Args:
+            symbol: Ticker symbol
+            exit_type: SWING_EXIT or EMERGENCY_EXIT
+            reason: Exit reason
+            entry_date: Position entry date
+            holding_days: Days held
+            confidence: Original entry confidence
+            urgency: 'eod' or 'immediate'
+        """
+        entry = {
+            "event": "exit_signal",
+            "timestamp": datetime.now().isoformat(),
+            "symbol": symbol,
+            "exit_type": exit_type,
+            "reason": reason,
+            "entry_date": entry_date,
+            "holding_days": holding_days,
+            "confidence": confidence,
+            "urgency": urgency,
+        }
+        self._write_trade_log(entry)
+        logger.info(f"Exit signal: {symbol} ({exit_type}) - {reason}")
+    
     def log_position_closed(
         self,
         symbol: str,
@@ -276,6 +312,9 @@ class ExecutionLogger:
         pnl: float,
         pnl_pct: float,
         hold_days: int,
+        entry_date: Optional[str] = None,
+        exit_type: Optional[str] = None,
+        exit_reason: Optional[str] = None,
     ) -> None:
         """
         Log position closure.
@@ -288,6 +327,9 @@ class ExecutionLogger:
             pnl: Profit/loss in dollars
             pnl_pct: Profit/loss in percent
             hold_days: Days held
+            entry_date: Position entry date (optional)
+            exit_type: SWING_EXIT or EMERGENCY_EXIT (optional)
+            exit_reason: Reason for exit (optional)
         """
         entry = {
             "event": "position_closed",
@@ -300,6 +342,15 @@ class ExecutionLogger:
             "pnl_pct": pnl_pct,
             "hold_days": hold_days,
         }
+        
+        # Add optional exit metadata for audit trail
+        if entry_date:
+            entry["entry_date"] = entry_date
+        if exit_type:
+            entry["exit_type"] = exit_type
+        if exit_reason:
+            entry["exit_reason"] = exit_reason
+        
         self._write_trade_log(entry)
         
         status = "✓" if pnl > 0 else "✗"
@@ -329,7 +380,7 @@ class ExecutionLogger:
         """Write entry to trade log."""
         try:
             with open(self.trade_log_path, "a") as f:
-                f.write(json.dumps(entry) + "\n")
+                f.write(json.dumps(entry, default=str) + "\n")
         except Exception as e:
             logger.error(f"Failed to write trade log: {e}")
     
@@ -337,7 +388,7 @@ class ExecutionLogger:
         """Write entry to error log."""
         try:
             with open(self.error_log_path, "a") as f:
-                f.write(json.dumps(entry) + "\n")
+                f.write(json.dumps(entry, default=str) + "\n")
         except Exception as e:
             logger.error(f"Failed to write error log: {e}")
     

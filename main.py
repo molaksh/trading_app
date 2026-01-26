@@ -2,11 +2,43 @@
 Main trading screener orchestration.
 Loads data, computes features, scores symbols, and ranks candidates.
 Production-grade with logging, error handling, and validation.
+
+Loads environment variables from a local .env (if present) so broker
+credentials are picked up automatically without exporting shell env.
 """
 
 import logging
+import os
 import pandas as pd
 from datetime import datetime
+
+# Load .env early so downstream modules see credentials
+def _load_dotenv_if_present():
+    try:
+        from dotenv import load_dotenv  # type: ignore
+        load_dotenv()
+        return
+    except Exception:
+        pass
+    env_path = os.path.join(os.path.dirname(__file__), ".env")
+    if os.path.exists(env_path):
+        try:
+            with open(env_path, "r") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line or line.startswith("#") or "=" not in line:
+                        continue
+                    key, val = line.split("=", 1)
+                    key = key.strip()
+                    val = val.strip()
+                    if key and val and key not in os.environ:
+                        os.environ[key] = val
+        except Exception:
+            # Non-fatal: fallback is existing environment
+            pass
+
+
+_load_dotenv_if_present()
 
 from config.settings import (
     LOOKBACK_DAYS,
@@ -231,8 +263,9 @@ def run_paper_trading():
     from risk.portfolio_state import PortfolioState
     from risk.risk_manager import RiskManager
     from monitoring.system_guard import SystemGuard
+    from strategy.exit_evaluator import ExitEvaluator
     
-    # Safety check: paper trading only
+    # Initialize broker
     try:
         broker = AlpacaAdapter()
     except Exception as e:
@@ -253,12 +286,29 @@ def run_paper_trading():
     # Initialize execution logging
     exec_logger = ExecutionLogger("./logs")
     
+    # Initialize exit evaluator
+    exit_evaluator = ExitEvaluator(
+        swing_config={
+            "max_holding_days": 20,
+            "profit_target_pct": 0.10,  # 10% profit target
+            # Trend invalidation is enabled but only triggers when SMA_200 data is provided
+            # (otherwise it is skipped, so there is no capital risk if SMA is missing).
+            "use_trend_invalidation": True,
+        },
+        emergency_config={
+            "max_position_loss_pct": 0.03,  # 3% of portfolio max loss per position
+            "atr_multiplier": 4.0,           # 4× ATR for extreme moves
+            "enable_volatility_check": True,
+        }
+    )
+    
     # Initialize executor
     executor = PaperTradingExecutor(
         broker=broker,
         risk_manager=risk_manager,
         monitor=monitor,
         logger_instance=exec_logger,
+        exit_evaluator=exit_evaluator,
     )
     
     # Generate signals
@@ -303,6 +353,35 @@ def run_paper_trading():
     
     filled_orders = executor.poll_order_fills()
     logger.info(f"Newly filled: {len(filled_orders)}")
+    
+    # Evaluate exit signals for existing positions
+    logger.info("\n" + "=" * PRINT_WIDTH)
+    logger.info("EVALUATING EXIT SIGNALS")
+    logger.info("=" * PRINT_WIDTH)
+    
+    # Check emergency exits (intraday risk protection)
+    emergency_exits = executor.evaluate_exits_emergency()
+    if emergency_exits:
+        logger.warning(f"🚨 {len(emergency_exits)} EMERGENCY EXIT(S) triggered!")
+        for exit_signal in emergency_exits:
+            logger.warning(f"  {exit_signal.symbol}: {exit_signal.reason}")
+            # Execute emergency exit immediately
+            executor.execute_exit(exit_signal)
+    else:
+        logger.info("✓ No emergency exits (normal market conditions)")
+    
+    # Check swing exits (EOD strategy exits)
+    # Note: In production, run this AFTER market close with EOD data
+    swing_exits = executor.evaluate_exits_eod()
+    if swing_exits:
+        logger.info(f"📊 {len(swing_exits)} swing exit signal(s) generated")
+        for exit_signal in swing_exits:
+            logger.info(f"  {exit_signal.symbol}: {exit_signal.reason}")
+            # In production: execute these at next market open
+            # For now, execute immediately for demo
+            executor.execute_exit(exit_signal)
+    else:
+        logger.info("✓ No swing exits (positions within targets)")
     
     # Print account status
     logger.info("\n" + "=" * PRINT_WIDTH)

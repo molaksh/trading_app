@@ -332,27 +332,36 @@ class AlpacaAdapter(BrokerAdapter):
         """
         try:
             positions = self.client.get_all_positions()
-            
+
             result = {}
             for pos in positions:
                 symbol = pos.symbol
-                # Get current price (best effort)
                 try:
-                    # For demo purposes, use market data if available
                     latest_trade = self.client.get_latest_trade(symbol)
                     current_price = float(latest_trade.price) if latest_trade else float(pos.current_price)
-                except:
+                except Exception:
                     current_price = float(pos.current_price)
-                
+
+                avg_price = None
+                for attr in ("avg_entry_price", "avg_price", "avg_fill_price"):
+                    if hasattr(pos, attr):
+                        try:
+                            avg_price = float(getattr(pos, attr))
+                            break
+                        except Exception:
+                            continue
+                if avg_price is None:
+                    avg_price = current_price
+
                 result[symbol] = Position(
                     symbol=symbol,
                     quantity=float(pos.qty),
-                    avg_entry_price=float(pos.avg_fill_price),
+                    avg_entry_price=avg_price,
                     current_price=current_price,
-                    unrealized_pnl=float(pos.unrealized_pl or 0),
-                    unrealized_pnl_pct=float(pos.unrealized_plpc or 0),
+                    unrealized_pnl=float(getattr(pos, "unrealized_pl", 0) or 0),
+                    unrealized_pnl_pct=float(getattr(pos, "unrealized_plpc", 0) or 0),
                 )
-            
+
             return result
         
         except Exception as e:

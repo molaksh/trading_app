@@ -6,15 +6,16 @@ Orchestrates the paper trading flow:
 2. Submit orders before market open
 3. Track fills and positions
 4. Monitor degradation
-5. Log all activity
+5. Evaluate exit signals (swing + emergency)
+6. Log all activity
 
 This module connects signal generation to broker execution.
 It enforces RiskManager approval before every order.
 """
 
 import logging
-from typing import Optional, Dict, Tuple
-from datetime import datetime
+from typing import Optional, Dict, Tuple, List
+from datetime import datetime, date
 import pandas as pd
 
 from broker.adapter import BrokerAdapter
@@ -22,6 +23,7 @@ from broker.execution_logger import ExecutionLogger
 from risk.risk_manager import RiskManager
 from risk.portfolio_state import PortfolioState
 from monitoring.system_guard import SystemGuard
+from strategy.exit_evaluator import ExitEvaluator, ExitSignal
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +53,7 @@ class PaperTradingExecutor:
         risk_manager: RiskManager,
         monitor: Optional[SystemGuard] = None,
         logger_instance: Optional[ExecutionLogger] = None,
+        exit_evaluator: Optional[ExitEvaluator] = None,
     ):
         """
         Initialize paper trading executor.
@@ -60,11 +63,13 @@ class PaperTradingExecutor:
             risk_manager: RiskManager for trade approval
             monitor: SystemGuard for degradation detection (optional)
             logger_instance: ExecutionLogger for audit trail (optional)
+            exit_evaluator: ExitEvaluator for exit signals (optional)
         """
         self.broker = broker
         self.risk_manager = risk_manager
         self.monitor = monitor
         self.exec_logger = logger_instance or ExecutionLogger()
+        self.exit_evaluator = exit_evaluator or ExitEvaluator()
         
         # Track submitted orders
         self.pending_orders: Dict[str, str] = {}  # order_id -> symbol
@@ -74,6 +79,7 @@ class PaperTradingExecutor:
         logger.info(f"  Broker: {broker.__class__.__name__}")
         logger.info(f"  Risk Manager: {risk_manager.__class__.__name__}")
         logger.info(f"  Monitoring: {'Enabled' if monitor else 'Disabled'}")
+        logger.info(f"  Exit Evaluator: {'Enabled' if exit_evaluator else 'Disabled'}")
     
     def execute_signal(
         self,
@@ -128,10 +134,15 @@ class PaperTradingExecutor:
             return False, None
         
         # Step 3: Get RiskManager approval
+        entry_price = float(features.get("close", 0) or 0)
+        current_prices = {sym: entry_price for sym in self.risk_manager.portfolio.open_positions.keys()}
+        current_prices[symbol] = entry_price
+
         decision = self.risk_manager.evaluate_trade(
             symbol=symbol,
-            entry_price=None,  # Will be filled at next open
+            entry_price=entry_price,
             confidence=confidence,
+            current_prices=current_prices,
         )
         
         self.exec_logger.log_risk_check(
@@ -153,7 +164,7 @@ class PaperTradingExecutor:
                 symbol=symbol,
                 quantity=decision.position_size,
                 side="buy",
-                time_in_force="opg",  # At market open
+                time_in_force="day",  # Submit immediately during regular hours
             )
             
             logger.info(f"Order result: {order_result}")
@@ -190,7 +201,7 @@ class PaperTradingExecutor:
     
     def poll_order_fills(self) -> Dict[str, Tuple[float, datetime]]:
         """
-        Poll all pending orders for fills.
+        Poll all pending orders for fills and update portfolio state.
         
         Returns:
             Dict of symbol -> (fill_price, fill_time) for newly filled orders
@@ -215,6 +226,27 @@ class PaperTradingExecutor:
                         fill_price=fill_price,
                         fill_time=fill_time,
                     )
+                    
+                    # Record fill in portfolio state (if not already there)
+                    # This syncs broker fills with our portfolio tracking
+                    try:
+                        # Try to get existing portfolio position metadata
+                        # If this is a new fill, we need to add it to portfolio state
+                        portfolio_positions = self.risk_manager.portfolio.open_positions
+                        if symbol not in portfolio_positions or not portfolio_positions[symbol]:
+                            # Position not in portfolio yet - this shouldn't happen normally
+                            # but can occur if we restart after fills
+                            logger.debug(f"Syncing fill to portfolio state: {symbol}")
+                            self.risk_manager.portfolio.open_trade(
+                                symbol=symbol,
+                                entry_date=pd.Timestamp(fill_time),
+                                entry_price=fill_price,
+                                position_size=order_result.filled_qty,
+                                risk_amount=0.0,  # Unknown at this point
+                                confidence=3,  # Default confidence
+                            )
+                    except Exception as e:
+                        logger.warning(f"Could not sync {symbol} to portfolio state: {e}")
                     
                     newly_filled[symbol] = (fill_price, fill_time)
                     orders_to_remove.append(order_id)
@@ -244,31 +276,177 @@ class PaperTradingExecutor:
         
         return newly_filled
     
-    def close_position(
+    def evaluate_exits_eod(
         self,
-        symbol: str,
-        entry_price: float,
-        current_price: float,
-        entry_date: datetime,
-    ) -> bool:
+        eod_data: Optional[Dict[str, pd.Series]] = None,
+        evaluation_date: Optional[date] = None,
+    ) -> List[ExitSignal]:
         """
-        Close a position.
+        Evaluate EOD swing exits for all open positions.
+        
+        SWING TRADING: Only call this with end-of-day data.
+        Never triggers same-day exit.
+        Exits execute at next market open.
         
         Args:
-            symbol: Ticker symbol
-            entry_price: Entry price
-            current_price: Current price
-            entry_date: Date position was entered
+            eod_data: Dict of symbol -> EOD OHLCV Series with indicators
+            evaluation_date: Date of evaluation (defaults to today)
         
         Returns:
-            True if close order submitted
+            List of ExitSignal for positions that should exit
         """
+        exit_signals = []
+        
         try:
-            # Calculate position size (need to query current position)
+            # Get all open positions
+            positions = self.broker.get_positions()
+            portfolio_positions = self.risk_manager.portfolio.open_positions
+            
+            for symbol, broker_pos in positions.items():
+                # Get position metadata from portfolio state
+                if symbol not in portfolio_positions or not portfolio_positions[symbol]:
+                    logger.warning(f"Position {symbol} in broker but not in portfolio state")
+                    continue
+                
+                portfolio_pos = portfolio_positions[symbol][0]  # FIFO
+                
+                # Evaluate swing exit
+                exit_signal = self.exit_evaluator.evaluate_eod(
+                    symbol=symbol,
+                    entry_date=portfolio_pos.entry_date.date(),
+                    entry_price=portfolio_pos.entry_price,
+                    current_price=broker_pos.current_price,
+                    confidence=portfolio_pos.confidence,
+                    eod_data=eod_data.get(symbol) if eod_data else None,
+                    evaluation_date=evaluation_date,
+                )
+                
+                if exit_signal:
+                    exit_signals.append(exit_signal)
+                    
+                    # Log exit signal
+                    self.exec_logger.log_exit_signal(
+                        symbol=exit_signal.symbol,
+                        exit_type=exit_signal.exit_type.value,
+                        reason=exit_signal.reason,
+                        entry_date=exit_signal.entry_date.isoformat(),
+                        holding_days=exit_signal.holding_days,
+                        confidence=exit_signal.confidence,
+                        urgency=exit_signal.urgency,
+                    )
+                    
+                    logger.info(
+                        f"EOD Exit Signal: {symbol} - {exit_signal.reason} "
+                        f"(held {exit_signal.holding_days} days)"
+                    )
+            
+            return exit_signals
+        
+        except Exception as e:
+            logger.error(f"Failed to evaluate EOD exits: {e}")
+            return []
+    
+    def evaluate_exits_emergency(
+        self,
+        atr_data: Optional[Dict[str, float]] = None,
+        evaluation_date: Optional[date] = None,
+    ) -> List[ExitSignal]:
+        """
+        Evaluate intraday emergency exits for all open positions.
+        
+        CAPITAL PROTECTION: Continuous during market hours.
+        Will NOT trigger same-day exit unless catastrophic.
+        Should be RARE in normal market conditions.
+        
+        Args:
+            atr_data: Dict of symbol -> ATR for volatility checks
+            evaluation_date: Date of evaluation (defaults to today)
+        
+        Returns:
+            List of ExitSignal for positions with emergency exits
+        """
+        exit_signals = []
+        
+        try:
+            # Get all open positions
+            positions = self.broker.get_positions()
+            portfolio_positions = self.risk_manager.portfolio.open_positions
+            portfolio_equity = self.risk_manager.portfolio.current_equity
+            
+            for symbol, broker_pos in positions.items():
+                # Get position metadata
+                if symbol not in portfolio_positions or not portfolio_positions[symbol]:
+                    continue
+                
+                portfolio_pos = portfolio_positions[symbol][0]  # FIFO
+                
+                # Evaluate emergency exit
+                exit_signal = self.exit_evaluator.evaluate_emergency(
+                    symbol=symbol,
+                    entry_date=portfolio_pos.entry_date.date(),
+                    entry_price=portfolio_pos.entry_price,
+                    current_price=broker_pos.current_price,
+                    position_size=broker_pos.quantity,
+                    portfolio_equity=portfolio_equity,
+                    confidence=portfolio_pos.confidence,
+                    atr=atr_data.get(symbol) if atr_data else None,
+                    evaluation_date=evaluation_date,
+                )
+                
+                if exit_signal:
+                    exit_signals.append(exit_signal)
+                    
+                    # Log emergency exit signal
+                    self.exec_logger.log_exit_signal(
+                        symbol=exit_signal.symbol,
+                        exit_type=exit_signal.exit_type.value,
+                        reason=exit_signal.reason,
+                        entry_date=exit_signal.entry_date.isoformat(),
+                        holding_days=exit_signal.holding_days,
+                        confidence=exit_signal.confidence,
+                        urgency=exit_signal.urgency,
+                    )
+                    
+                    logger.warning(
+                        f"EMERGENCY Exit Signal: {symbol} - {exit_signal.reason} "
+                        f"(held {exit_signal.holding_days} days)"
+                    )
+            
+            return exit_signals
+        
+        except Exception as e:
+            logger.error(f"Failed to evaluate emergency exits: {e}")
+            return []
+    
+    def execute_exit(
+        self,
+        exit_signal: ExitSignal,
+    ) -> bool:
+        """
+        Execute an exit signal by closing the position.
+        
+        Args:
+            exit_signal: ExitSignal to execute
+        
+        Returns:
+            True if exit order submitted successfully
+        """
+        symbol = exit_signal.symbol
+        
+        try:
+            # Get current position
             position = self.broker.get_position(symbol)
             if not position:
                 logger.warning(f"No position to close: {symbol}")
                 return False
+            
+            # Get portfolio position for entry metadata
+            portfolio_positions = self.risk_manager.portfolio.open_positions
+            if symbol not in portfolio_positions or not portfolio_positions[symbol]:
+                logger.warning(f"Position {symbol} not in portfolio state")
+                return False
+            
+            portfolio_pos = portfolio_positions[symbol][0]  # FIFO
             
             # Submit close order
             close_result = self.broker.submit_market_order(
@@ -279,19 +457,106 @@ class PaperTradingExecutor:
             )
             
             # Calculate PnL
-            hold_days = (datetime.now() - entry_date).days
-            pnl = (current_price - entry_price) * position.quantity
-            pnl_pct = (current_price - entry_price) / entry_price
+            current_price = position.current_price
+            pnl = (current_price - portfolio_pos.entry_price) * position.quantity
+            pnl_pct = (current_price - portfolio_pos.entry_price) / portfolio_pos.entry_price
             
-            # Log
+            # Log position closure with exit metadata
             self.exec_logger.log_position_closed(
                 symbol=symbol,
                 quantity=abs(position.quantity),
-                entry_price=entry_price,
+                entry_price=portfolio_pos.entry_price,
+                exit_price=current_price,
+                pnl=pnl,
+                pnl_pct=pnl_pct,
+                hold_days=exit_signal.holding_days,
+                entry_date=exit_signal.entry_date.isoformat(),
+                exit_type=exit_signal.exit_type.value,
+                exit_reason=exit_signal.reason,
+            )
+            
+            # Update portfolio state
+            self.risk_manager.portfolio.close_trade(
+                symbol=symbol,
+                exit_date=pd.Timestamp.now(),
+                exit_price=current_price,
+            )
+            
+            logger.info(
+                f"✓ Exit executed: {symbol} ({exit_signal.exit_type.value}) "
+                f"PnL: {pnl_pct:+.2%} - {exit_signal.reason}"
+            )
+            return True
+        
+        except Exception as e:
+            logger.error(f"Failed to execute exit for {symbol}: {e}")
+            return False
+    
+    def close_position(
+        self,
+        symbol: str,
+        reason: Optional[str] = None,
+        exit_type: str = "MANUAL",
+    ) -> bool:
+        """
+        Close a position manually.
+        
+        Args:
+            symbol: Ticker symbol
+            reason: Reason for closing (optional)
+            exit_type: Exit classification (default: MANUAL)
+        
+        Returns:
+            True if close order submitted
+        """
+        try:
+            # Get current position
+            position = self.broker.get_position(symbol)
+            if not position:
+                logger.warning(f"No position to close: {symbol}")
+                return False
+            
+            # Get portfolio position for entry metadata
+            portfolio_positions = self.risk_manager.portfolio.open_positions
+            if symbol not in portfolio_positions or not portfolio_positions[symbol]:
+                logger.warning(f"Position {symbol} not in portfolio state")
+                return False
+            
+            portfolio_pos = portfolio_positions[symbol][0]  # FIFO
+            
+            # Submit close order
+            close_result = self.broker.submit_market_order(
+                symbol=symbol,
+                quantity=abs(position.quantity),
+                side="sell" if position.is_long() else "buy",
+                time_in_force="day",
+            )
+            
+            # Calculate PnL
+            current_price = position.current_price
+            hold_days = (datetime.now() - portfolio_pos.entry_date).days
+            pnl = (current_price - portfolio_pos.entry_price) * position.quantity
+            pnl_pct = (current_price - portfolio_pos.entry_price) / portfolio_pos.entry_price
+            
+            # Log with exit metadata
+            self.exec_logger.log_position_closed(
+                symbol=symbol,
+                quantity=abs(position.quantity),
+                entry_price=portfolio_pos.entry_price,
                 exit_price=current_price,
                 pnl=pnl,
                 pnl_pct=pnl_pct,
                 hold_days=max(1, hold_days),
+                entry_date=portfolio_pos.entry_date.date().isoformat(),
+                exit_type=exit_type,
+                exit_reason=reason,
+            )
+            
+            # Update portfolio state
+            self.risk_manager.portfolio.close_trade(
+                symbol=symbol,
+                exit_date=pd.Timestamp.now(),
+                exit_price=current_price,
             )
             
             logger.info(f"✓ Position closed: {symbol} ({pnl_pct:+.2%})")
