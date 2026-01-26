@@ -1,0 +1,5 @@
+trade_id,symbol,entry_order_id,entry_timestamp,entry_price,entry_quantity,exit_order_id,exit_timestamp,exit_price,exit_quantity,exit_type,exit_reason,holding_days,gross_pnl,gross_pnl_pct,fees,net_pnl,net_pnl_pct,confidence,risk_amount,position_size
+4a49512e-73b3-46f3-a2eb-151a09709367,AAPL,entry_001,2026-01-10T09:30:00,180.0,50,exit_001,2026-01-15T16:00:00,189.0,50,SWING_EXIT,Profit target reached (10%),5,450.0,5.0,0.0,450.0,5.0,4.5,90.0,9000.0
+0ad26823-e691-4a7a-8903-7189de4d95a2,GOOGL,entry_002,2026-01-12T10:00:00,150.0,30,exit_002,2026-01-20T15:30:00,147.0,30,SWING_EXIT,Max holding period (20 days),8,-90.0,-2.0,0.0,-90.0,-2.0,3.0,45.0,4500.0
+cf9b5253-4081-43a0-bbed-3a593ecca478,NVDA,entry_003,2026-01-18T14:00:00,800.0,10,exit_003,2026-01-19T11:30:00,776.0,10,EMERGENCY_EXIT,Position loss exceeds 3% of portfolio,0,-240.0,-3.0,0.0,-240.0,-3.0,4.0,80.0,8000.0
+49799036-d2b4-46cf-a8a4-d241d24e6c64,MSFT,entry_004,2026-01-16T09:45:00,420.0,20,exit_004,2026-01-22T16:00:00,431.0,20,SWING_EXIT,Profit target reached (10%),6,220.0,2.619047619047619,0.0,220.0,2.619047619047619,5.0,84.0,8400.0

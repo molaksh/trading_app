@@ -20,6 +20,7 @@ import pandas as pd
 
 from broker.adapter import BrokerAdapter
 from broker.execution_logger import ExecutionLogger
+from broker.trade_ledger import TradeLedger, create_trade_from_fills
 from risk.risk_manager import RiskManager
 from risk.portfolio_state import PortfolioState
 from monitoring.system_guard import SystemGuard
@@ -54,6 +55,7 @@ class PaperTradingExecutor:
         monitor: Optional[SystemGuard] = None,
         logger_instance: Optional[ExecutionLogger] = None,
         exit_evaluator: Optional[ExitEvaluator] = None,
+        trade_ledger: Optional[TradeLedger] = None,
     ):
         """
         Initialize paper trading executor.
@@ -64,22 +66,33 @@ class PaperTradingExecutor:
             monitor: SystemGuard for degradation detection (optional)
             logger_instance: ExecutionLogger for audit trail (optional)
             exit_evaluator: ExitEvaluator for exit signals (optional)
+            trade_ledger: TradeLedger for completed trade accounting (optional)
         """
         self.broker = broker
         self.risk_manager = risk_manager
         self.monitor = monitor
         self.exec_logger = logger_instance or ExecutionLogger()
         self.exit_evaluator = exit_evaluator or ExitEvaluator()
+        self.trade_ledger = trade_ledger or TradeLedger()
         
         # Track submitted orders
         self.pending_orders: Dict[str, str] = {}  # order_id -> symbol
         self.filled_orders: Dict[str, float] = {}  # symbol -> fill_price
+        
+        # Track pending entries (filled buys waiting for exit)
+        # Maps symbol -> (order_id, fill_timestamp, fill_price, quantity, confidence, risk_amount)
+        self.pending_entries: Dict[str, Tuple[str, str, float, float, float, float]] = {}
+        
+        # Track order metadata for trade ledger
+        # Maps order_id -> (confidence, risk_amount)
+        self.order_metadata: Dict[str, Tuple[float, float]] = {}
         
         logger.info("Paper Trading Executor initialized")
         logger.info(f"  Broker: {broker.__class__.__name__}")
         logger.info(f"  Risk Manager: {risk_manager.__class__.__name__}")
         logger.info(f"  Monitoring: {'Enabled' if monitor else 'Disabled'}")
         logger.info(f"  Exit Evaluator: {'Enabled' if exit_evaluator else 'Disabled'}")
+        logger.info(f"  Trade Ledger: Enabled ({len(self.trade_ledger.trades)} existing trades)")
     
     def execute_signal(
         self,
@@ -183,6 +196,9 @@ class PaperTradingExecutor:
             # Track order
             self.pending_orders[order_result.order_id] = symbol
             
+            # Track metadata for trade ledger
+            self.order_metadata[order_result.order_id] = (confidence, decision.risk_amount)
+            
             # Step 5: Log to monitoring if enabled
             if self.monitor:
                 self.monitor.add_signal(
@@ -247,6 +263,28 @@ class PaperTradingExecutor:
                             )
                     except Exception as e:
                         logger.warning(f"Could not sync {symbol} to portfolio state: {e}")
+                    
+                    # Track as pending entry for trade ledger
+                    # Store: (order_id, fill_timestamp, fill_price, quantity, confidence, risk_amount)
+                    # We'll finalize the Trade when exit fill is confirmed
+                    fill_timestamp_iso = fill_time.isoformat()
+                    
+                    # Get confidence and risk_amount from order metadata
+                    confidence, risk_amount = self.order_metadata.get(order_id, (3.0, 0.0))
+                    
+                    self.pending_entries[symbol] = (
+                        order_id,
+                        fill_timestamp_iso,
+                        fill_price,
+                        order_result.filled_qty,
+                        confidence,
+                        risk_amount,
+                    )
+                    logger.debug(f"Tracked pending entry for trade ledger: {symbol}")
+                    
+                    # Clean up order metadata
+                    if order_id in self.order_metadata:
+                        del self.order_metadata[order_id]
                     
                     newly_filled[symbol] = (fill_price, fill_time)
                     orders_to_remove.append(order_id)
@@ -475,6 +513,17 @@ class PaperTradingExecutor:
                 exit_reason=exit_signal.reason,
             )
             
+            # Finalize completed trade in ledger
+            self._finalize_trade(
+                symbol=symbol,
+                exit_order_id=close_result.order_id,
+                exit_timestamp=datetime.now().isoformat(),
+                exit_price=current_price,
+                exit_quantity=abs(position.quantity),
+                exit_type=exit_signal.exit_type.value,
+                exit_reason=exit_signal.reason,
+            )
+            
             # Update portfolio state
             self.risk_manager.portfolio.close_trade(
                 symbol=symbol,
@@ -612,3 +661,67 @@ class PaperTradingExecutor:
             "execution_logger": self.exec_logger.get_summary(),
             "account_status": self.get_account_status(),
         }
+    
+    def _finalize_trade(
+        self,
+        symbol: str,
+        exit_order_id: str,
+        exit_timestamp: str,
+        exit_price: float,
+        exit_quantity: float,
+        exit_type: str,
+        exit_reason: str,
+    ) -> None:
+        """
+        Finalize a completed trade in the ledger.
+        
+        Creates a Trade object from entry and exit fills and adds to ledger.
+        This is called AFTER exit fill is confirmed.
+        
+        Args:
+            symbol: Ticker symbol
+            exit_order_id: Exit order ID
+            exit_timestamp: Exit fill timestamp (ISO format)
+            exit_price: Exit fill price
+            exit_quantity: Exit fill quantity
+            exit_type: "SWING_EXIT" | "EMERGENCY_EXIT"
+            exit_reason: Human-readable exit reason
+        """
+        try:
+            # Get entry fill data
+            if symbol not in self.pending_entries:
+                logger.warning(
+                    f"Cannot finalize trade for {symbol}: no pending entry found. "
+                    f"This can happen if system restarted between entry and exit."
+                )
+                return
+            
+            entry_order_id, entry_timestamp, entry_price, entry_quantity, confidence, risk_amount = self.pending_entries[symbol]
+            
+            # Create completed trade
+            trade = create_trade_from_fills(
+                symbol=symbol,
+                entry_order_id=entry_order_id,
+                entry_fill_timestamp=entry_timestamp,
+                entry_fill_price=entry_price,
+                entry_fill_quantity=entry_quantity,
+                exit_order_id=exit_order_id,
+                exit_fill_timestamp=exit_timestamp,
+                exit_fill_price=exit_price,
+                exit_fill_quantity=exit_quantity,
+                exit_type=exit_type,
+                exit_reason=exit_reason,
+                confidence=confidence,
+                risk_amount=risk_amount,
+                fees=0.0,  # Alpaca paper trading has no fees
+            )
+            
+            # Add to ledger
+            self.trade_ledger.add_trade(trade)
+            
+            # Remove from pending entries
+            del self.pending_entries[symbol]
+            
+        except Exception as e:
+            # Logging failures must not block execution
+            logger.error(f"Failed to finalize trade for {symbol}: {e}")
