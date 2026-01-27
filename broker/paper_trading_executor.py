@@ -56,6 +56,8 @@ class PaperTradingExecutor:
         logger_instance: Optional[ExecutionLogger] = None,
         exit_evaluator: Optional[ExitEvaluator] = None,
         trade_ledger: Optional[TradeLedger] = None,
+        ml_trainer: Optional[object] = None,
+        ml_risk_threshold: float = 0.5,
     ):
         """
         Initialize paper trading executor.
@@ -67,6 +69,8 @@ class PaperTradingExecutor:
             logger_instance: ExecutionLogger for audit trail (optional)
             exit_evaluator: ExitEvaluator for exit signals (optional)
             trade_ledger: TradeLedger for completed trade accounting (optional)
+            ml_trainer: OfflineTrainer for ML risk filtering (optional, read-only)
+            ml_risk_threshold: Probability threshold for blocking trades (0-1)
         """
         self.broker = broker
         self.risk_manager = risk_manager
@@ -74,6 +78,8 @@ class PaperTradingExecutor:
         self.exec_logger = logger_instance or ExecutionLogger()
         self.exit_evaluator = exit_evaluator or ExitEvaluator()
         self.trade_ledger = trade_ledger or TradeLedger()
+        self.ml_trainer = ml_trainer
+        self.ml_risk_threshold = ml_risk_threshold
         
         # Safe mode flags (set by main.py after reconciliation)
         self.safe_mode_enabled = False
@@ -97,7 +103,8 @@ class PaperTradingExecutor:
         logger.info(f"  Monitoring: {'Enabled' if monitor else 'Disabled'}")
         logger.info(f"  Exit Evaluator: {'Enabled' if exit_evaluator else 'Disabled'}")
         logger.info(f"  Trade Ledger: Enabled ({len(self.trade_ledger.trades)} existing trades)")
-    
+        logger.info(f"  ML Risk Filter: {'Enabled' if ml_trainer else 'Disabled'}")
+
     def execute_signal(
         self,
         symbol: str,
@@ -180,6 +187,26 @@ class PaperTradingExecutor:
         if symbol in self.pending_entries:
             logger.info(f"Skipping {symbol} — entry already filled and awaiting exit")
             return False, None
+        
+        # Guardrail 4: ML RISK CHECK (read-only, advisory)
+        # If ML model is loaded, use it to filter high-risk trades
+        if self.ml_trainer and self.ml_trainer.model is not None:
+            ml_risk_score = self.ml_trainer.predict_risk(features)
+            if ml_risk_score is not None:
+                logger.info(f"ML Risk Score: {ml_risk_score:.3f} (threshold: {self.ml_risk_threshold:.3f})")
+                
+                if ml_risk_score > self.ml_risk_threshold:
+                    logger.warning(
+                        f"ML RISK FILTER: Trade {symbol} has high risk probability ({ml_risk_score:.1%}). "
+                        f"Blocking entry (rules still allow)."
+                    )
+                    self.exec_logger.log_error(
+                        "ml_risk_filter_applied",
+                        f"{symbol}: ML risk score {ml_risk_score:.3f} exceeds threshold {self.ml_risk_threshold:.3f}"
+                    )
+                    return False, None
+                else:
+                    logger.info(f"ML RISK FILTER: {symbol} approved (low risk)")
         
         # Step 3: Get RiskManager approval
         entry_price = float(features.get("close", 0) or 0)

@@ -124,7 +124,7 @@ DATASET_FILE_FORMAT = "parquet"  # Use 'parquet' or 'csv'
 # PAPER TRADING (Phase I)
 # ============================================================================
 # SAFETY: Paper trading only. Set to False to prevent execution.
-RUN_PAPER_TRADING = False        # Set to True to enable paper trading
+RUN_PAPER_TRADING = True         # Set to True to enable paper trading
 PAPER_TRADING_MODE_REQUIRED = True  # Safety: fail if not in paper trading mode
 
 # Paper trading broker

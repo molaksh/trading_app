@@ -11,6 +11,7 @@ import logging
 import os
 import sys
 import argparse
+from typing import Optional
 import pandas as pd
 from datetime import datetime
 
@@ -50,6 +51,11 @@ from config.settings import (
     LOG_FORMAT,
     LOG_DATE_FORMAT,
     START_CAPITAL,
+)
+from execution.runtime import (
+    PaperTradingRuntime,
+    build_paper_trading_runtime,
+    reconcile_runtime,
 )
 from universe.symbols import SYMBOLS
 from data.price_loader import load_price_data
@@ -244,7 +250,7 @@ def main():
     return results_df
 
 
-def run_paper_trading(mode='trade'):
+def run_paper_trading(mode='trade', runtime: Optional[PaperTradingRuntime] = None) -> PaperTradingRuntime:
     """
     Execute paper trading flow.
     
@@ -265,90 +271,35 @@ def run_paper_trading(mode='trade'):
         logger.info("TRADING MODE - Full Signal Generation & Execution")
     logger.info("=" * PRINT_WIDTH)
     
-    from broker.alpaca_adapter import AlpacaAdapter
-    from broker.paper_trading_executor import PaperTradingExecutor
-    from broker.execution_logger import ExecutionLogger
-    from broker.trade_ledger import TradeLedger
-    from broker.account_reconciliation import AccountReconciler
-    from risk.portfolio_state import PortfolioState
-    from risk.risk_manager import RiskManager
-    from monitoring.system_guard import SystemGuard
-    from strategy.exit_evaluator import ExitEvaluator
+    # Build or reuse long-lived runtime so pending orders and ledger persist across tasks
+    if runtime is None:
+        try:
+            runtime = build_paper_trading_runtime()
+        except Exception as e:
+            logger.error(f"Failed to initialize trading runtime: {e}")
+            logger.error("Paper trading disabled")
+            raise
     
-    # Initialize broker
-    try:
-        broker = AlpacaAdapter()
-    except Exception as e:
-        logger.error(f"Failed to initialize broker: {e}")
-        logger.error("Paper trading disabled")
-        return
-    
-    # Initialize components
-    portfolio_state = PortfolioState(START_CAPITAL)
-    risk_manager = RiskManager(portfolio_state)
-    
-    # Initialize trade ledger
-    trade_ledger = TradeLedger()
+    broker = runtime.broker
+    risk_manager = runtime.risk_manager
+    trade_ledger = runtime.trade_ledger
+    executor = runtime.executor
     
     # ========================================================================
     # STARTUP RECONCILIATION (MANDATORY)
     # ========================================================================
-    # Synchronize local state with Alpaca before allowing any trades
-    reconciler = AccountReconciler(broker, trade_ledger, risk_manager)
-    reconciliation_result = reconciler.reconcile_on_startup()
-    
+    reconciliation_result = reconcile_runtime(runtime)
     startup_status = reconciliation_result["status"]
     safe_mode = reconciliation_result["safe_mode"]
     
-    # Store reconciliation state in executor (set later)
     # Check if we can proceed with trading
     if startup_status == "FAILED":
         logger.error("CRITICAL: Startup validation failed. NO TRADING.")
-        return
+        return runtime
     elif startup_status == "EXIT_ONLY":
         logger.warning("Risk validation failed. Entering EXIT_ONLY mode.")
-        # Continue but disable new entries
     elif startup_status == "SAFE_MODE":
         logger.warning("Startup warnings detected. Entering SAFE_MODE.")
-        # Continue but be cautious
-    
-    # Initialize monitoring (Phase H)
-    monitor = None
-    if RUN_MONITORING:
-        monitor = SystemGuard()
-        logger.info("Monitoring enabled (Phase H)")
-    
-    # Initialize execution logging
-    exec_logger = ExecutionLogger("./logs")
-    
-    # Initialize exit evaluator
-    exit_evaluator = ExitEvaluator(
-        swing_config={
-            "max_holding_days": 20,
-            "profit_target_pct": 0.10,  # 10% profit target
-            # Trend invalidation is enabled but only triggers when SMA_200 data is provided
-            # (otherwise it is skipped, so there is no capital risk if SMA is missing).
-            "use_trend_invalidation": True,
-        },
-        emergency_config={
-            "max_position_loss_pct": 0.03,  # 3% of portfolio max loss per position
-            "atr_multiplier": 4.0,           # 4× ATR for extreme moves
-            "enable_volatility_check": True,
-        }
-    )
-    
-    # Initialize executor
-    executor = PaperTradingExecutor(
-        broker=broker,
-        risk_manager=risk_manager,
-        monitor=monitor,
-        logger_instance=exec_logger,
-        exit_evaluator=exit_evaluator,
-    )
-    
-    # Store reconciliation state in executor
-    executor.safe_mode_enabled = safe_mode
-    executor.startup_status = startup_status
     
     # TRADE MODE: Generate signals and submit orders
     if mode == 'trade':
@@ -469,6 +420,8 @@ def run_paper_trading(mode='trade'):
     logger.info("=" * PRINT_WIDTH)
     logger.info("✓ Paper trading execution complete")
     logger.info("=" * PRINT_WIDTH)
+    
+    return runtime
 
 
 if __name__ == '__main__':
@@ -498,11 +451,18 @@ Examples:
         action='store_true',
         help='Monitor mode: check exits only, no new signals (run during market hours)'
     )
+    parser.add_argument(
+        '--schedule',
+        action='store_true',
+        help='Run continuous scheduler (intraday monitoring + daily entries)'
+    )
     
     args = parser.parse_args()
     
     # Determine mode
-    if args.monitor:
+    if args.schedule:
+        trading_mode = 'schedule'
+    elif args.monitor:
         trading_mode = 'monitor'
     elif args.trade:
         trading_mode = 'trade'
@@ -512,7 +472,13 @@ Examples:
     
     # Execute paper trading if enabled
     if RUN_PAPER_TRADING and trading_mode:
-        run_paper_trading(mode=trading_mode)
+        if trading_mode == 'schedule':
+            from execution.scheduler import TradingScheduler
+            
+            scheduler = TradingScheduler()
+            scheduler.run_forever()
+        else:
+            run_paper_trading(mode=trading_mode)
     
     # Execute dataset building if enabled
     elif BUILD_DATASET:
