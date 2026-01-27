@@ -192,6 +192,27 @@ class TradeLedger:
         # Persist immediately
         self._save_to_disk()
     
+    def get_all_trades(self) -> List[Trade]:
+        """
+        Get all trades in the ledger.
+        
+        Returns:
+            List of all Trade objects
+        """
+        return self.trades.copy()
+    
+    def get_trades_for_symbol(self, symbol: str) -> List[Trade]:
+        """
+        Get all trades for a specific symbol.
+        
+        Args:
+            symbol: Ticker symbol
+        
+        Returns:
+            List of trades for that symbol
+        """
+        return [t for t in self.trades if t.symbol == symbol]
+    
     def get_trades(
         self,
         symbol: Optional[str] = None,

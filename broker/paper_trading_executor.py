@@ -75,6 +75,10 @@ class PaperTradingExecutor:
         self.exit_evaluator = exit_evaluator or ExitEvaluator()
         self.trade_ledger = trade_ledger or TradeLedger()
         
+        # Safe mode flags (set by main.py after reconciliation)
+        self.safe_mode_enabled = False
+        self.startup_status = "UNKNOWN"
+        
         # Track submitted orders
         self.pending_orders: Dict[str, str] = {}  # order_id -> symbol
         self.filled_orders: Dict[str, float] = {}  # symbol -> fill_price
@@ -125,6 +129,14 @@ class PaperTradingExecutor:
         logger.info("=" * 80)
         logger.info(f"EXECUTING SIGNAL: {symbol} (confidence={confidence})")
         logger.info("=" * 80)
+        
+        # SAFE MODE CHECK: Block new entries if safe mode is active
+        if self.safe_mode_enabled and self.startup_status != "READY":
+            logger.warning(
+                f"Safe mode active ({self.startup_status}). "
+                f"Blocking new entry for {symbol}. Exits only."
+            )
+            return False, None
         
         # Step 1: Log signal
         try:

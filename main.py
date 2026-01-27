@@ -268,6 +268,8 @@ def run_paper_trading(mode='trade'):
     from broker.alpaca_adapter import AlpacaAdapter
     from broker.paper_trading_executor import PaperTradingExecutor
     from broker.execution_logger import ExecutionLogger
+    from broker.trade_ledger import TradeLedger
+    from broker.account_reconciliation import AccountReconciler
     from risk.portfolio_state import PortfolioState
     from risk.risk_manager import RiskManager
     from monitoring.system_guard import SystemGuard
@@ -284,6 +286,31 @@ def run_paper_trading(mode='trade'):
     # Initialize components
     portfolio_state = PortfolioState(START_CAPITAL)
     risk_manager = RiskManager(portfolio_state)
+    
+    # Initialize trade ledger
+    trade_ledger = TradeLedger()
+    
+    # ========================================================================
+    # STARTUP RECONCILIATION (MANDATORY)
+    # ========================================================================
+    # Synchronize local state with Alpaca before allowing any trades
+    reconciler = AccountReconciler(broker, trade_ledger, risk_manager)
+    reconciliation_result = reconciler.reconcile_on_startup()
+    
+    startup_status = reconciliation_result["status"]
+    safe_mode = reconciliation_result["safe_mode"]
+    
+    # Store reconciliation state in executor (set later)
+    # Check if we can proceed with trading
+    if startup_status == "FAILED":
+        logger.error("CRITICAL: Startup validation failed. NO TRADING.")
+        return
+    elif startup_status == "EXIT_ONLY":
+        logger.warning("Risk validation failed. Entering EXIT_ONLY mode.")
+        # Continue but disable new entries
+    elif startup_status == "SAFE_MODE":
+        logger.warning("Startup warnings detected. Entering SAFE_MODE.")
+        # Continue but be cautious
     
     # Initialize monitoring (Phase H)
     monitor = None
@@ -319,10 +346,20 @@ def run_paper_trading(mode='trade'):
         exit_evaluator=exit_evaluator,
     )
     
+    # Store reconciliation state in executor
+    executor.safe_mode_enabled = safe_mode
+    executor.startup_status = startup_status
+    
     # TRADE MODE: Generate signals and submit orders
     if mode == 'trade':
-        logger.info("\n🔵 TRADE MODE: Generating signals and submitting orders...")
-        results = main()
+        # Check if safe mode blocks new entries
+        if safe_mode and startup_status != "READY":
+            logger.warning(f"Safe mode active ({startup_status}). New entries blocked.")
+            # Skip signal generation and go straight to exit evaluation
+            results = pd.DataFrame()
+        else:
+            logger.info("\n🔵 TRADE MODE: Generating signals and submitting orders...")
+            results = main()
         
         if results.empty:
             logger.warning("No signals generated. Proceeding to exit evaluation only.")
