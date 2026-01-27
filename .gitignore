@@ -1,1 +1,141 @@
+# ============================================================================
+# Python Trading Platform - Git Ignore
+# ============================================================================
+
+# Environment & Secrets
 .env
+.env.local
+.env.*.local
+
+# ============================================================================
+# LIVE TRADING LOGS (CRITICAL: NEVER COMMIT)
+# ============================================================================
+# Live trading logs contain real money transactions and must not be tracked
+logs/*/live/
+logs/india/live/**
+logs/us/live/**
+
+# Temporary or development logs
+logs/test/
+logs/dev/
+
+# ============================================================================
+# PAPER TRADING LOGS (SAFE TO COMMIT)
+# ============================================================================
+# Paper trading logs are kept in Git for analysis and audit
+# logs/india/paper/
+# logs/us/paper/
+# logs/india/observation/
+
+# Optional: Exclude large paper trading logs (uncomment if needed)
+# logs/*/paper/*.jsonl
+# logs/*/observation/*.jsonl
+
+# ============================================================================
+# Python
+# ============================================================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# pyenv
+.python-version
+
+# Environments
+venv/
+ENV/
+env/
+.venv
+
+# ============================================================================
+# Docker
+# ============================================================================
+# Docker compose override (for local development)
+docker-compose.override.yml
+
+# Docker volumes (if using named volumes)
+# docker-volumes/
+
+# ============================================================================
+# IDE
+# ============================================================================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# ============================================================================
+# Data & Cache
+# ============================================================================
+data/cache/
+*.cache
+*.tmp
+*.temp
+
+# ============================================================================
+# IMPORTANT NOTES
+# ============================================================================
+#
+# 1. LIVE LOGS:
+#    - logs/*/live/ is ALWAYS excluded
+#    - This prevents accidentally committing real money transactions
+#    - Live logs persist on host but never in Git
+#
+# 2. PAPER LOGS:
+#    - Paper trading logs are SAFE to commit
+#    - Useful for analysis, backtesting, and audit
+#    - Can be excluded if they get too large (uncomment sections above)
+#
+# 3. OBSERVATION LOGS:
+#    - Monitoring logs without trading
+#    - Safe to commit
+#    - India market observation runs 24/7
+#
+# 4. SECRETS:
+#    - .env files contain API keys and MUST be excluded
+#    - Use .env.example for documentation
+#
+# ============================================================================

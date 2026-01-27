@@ -1,0 +1,222 @@
+# ============================================================================
+# Multi-Market Trading Platform - Docker Compose
+# ============================================================================
+#
+# PURPOSE:
+#   Orchestrate trading services with proper log persistence
+#
+# SERVICES:
+#   1. swing-trader: Main trading engine (--trade mode)
+#   2. risk-monitor: Emergency exit monitor (--monitor mode)
+#
+# CRITICAL DESIGN:
+#   - Logs persist on host, NOT in containers
+#   - Each service can run independently
+#   - Containers restart automatically (unless stopped)
+#   - Environment-driven configuration
+#
+# USAGE:
+#   # Start all services
+#   docker-compose up -d
+#
+#   # Start only swing trader
+#   docker-compose up -d swing-trader
+#
+#   # Start only risk monitor
+#   docker-compose up -d risk-monitor
+#
+#   # View logs
+#   docker-compose logs -f swing-trader
+#
+#   # Stop all
+#   docker-compose down
+#
+# ============================================================================
+
+version: '3.8'
+
+services:
+  # ==========================================================================
+  # SWING TRADER SERVICE
+  # ==========================================================================
+  # 
+  # Runs main trading flow:
+  # - Generate signals (post-market close)
+  # - Submit orders
+  # - Poll fills
+  # - Evaluate swing exits
+  #
+  # Schedule: Run once daily after market close
+  # For now: Manual or cron trigger
+  # ==========================================================================
+  
+  swing-trader:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    
+    container_name: swing-trader
+    
+    # Run in --trade mode (full trading flow)
+    command: python main.py --trade
+    
+    # Environment variables
+    environment:
+      # Trading configuration
+      - MARKET=us              # Market: india or us
+      - APP_ENV=paper          # Mode: paper or live
+      - LOG_ROOT=/app/logs     # Log directory inside container
+      
+      # Alpaca API credentials (paper trading)
+      # WARNING: Use .env file or Docker secrets in production
+      - APCA_API_BASE_URL=${APCA_API_BASE_URL:-https://paper-api.alpaca.markets}
+      - APCA_API_KEY_ID=${APCA_API_KEY_ID}
+      - APCA_API_SECRET_KEY=${APCA_API_SECRET_KEY}
+      
+      # Python settings
+      - PYTHONUNBUFFERED=1     # Force unbuffered output for real-time logs
+    
+    # Volume mounts (CRITICAL for log persistence)
+    volumes:
+      # Mount host logs directory to container
+      - ./logs:/app/logs
+      
+      # Optional: Mount .env file if needed
+      # - ./.env:/app/.env:ro
+    
+    # Restart policy
+    restart: unless-stopped
+    
+    # Logging configuration
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+  
+  # ==========================================================================
+  # RISK MONITOR SERVICE
+  # ==========================================================================
+  #
+  # Runs emergency exit monitoring:
+  # - Continuous intraday position monitoring
+  # - Catastrophic loss detection (>3% portfolio)
+  # - Extreme adverse moves (4× ATR)
+  # - Volatility shocks
+  #
+  # Schedule: Run every 15-30 minutes during market hours
+  # For now: Manual or cron trigger
+  # ==========================================================================
+  
+  risk-monitor:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    
+    container_name: risk-monitor
+    
+    # Run in --monitor mode (exits only, no signal generation)
+    command: python main.py --monitor
+    
+    # Environment variables
+    environment:
+      # Trading configuration
+      - MARKET=us              # Market: india or us
+      - APP_ENV=paper          # Mode: paper or live
+      - LOG_ROOT=/app/logs     # Log directory inside container
+      
+      # Alpaca API credentials (paper trading)
+      - APCA_API_BASE_URL=${APCA_API_BASE_URL:-https://paper-api.alpaca.markets}
+      - APCA_API_KEY_ID=${APCA_API_KEY_ID}
+      - APCA_API_SECRET_KEY=${APCA_API_SECRET_KEY}
+      
+      # Python settings
+      - PYTHONUNBUFFERED=1     # Force unbuffered output for real-time logs
+    
+    # Volume mounts (CRITICAL for log persistence)
+    volumes:
+      # Mount host logs directory to container
+      - ./logs:/app/logs
+    
+    # Restart policy
+    restart: unless-stopped
+    
+    # Logging configuration
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+# ============================================================================
+# VOLUMES (Named volumes for future use)
+# ============================================================================
+# Currently using bind mounts (./logs) for simplicity and visibility
+# Can switch to named volumes if needed:
+#
+# volumes:
+#   trading_logs:
+#     driver: local
+#
+# Then in service:
+#   volumes:
+#     - trading_logs:/app/logs
+#
+# ============================================================================
+
+# ============================================================================
+# NETWORKS (Optional, for future multi-service architecture)
+# ============================================================================
+# networks:
+#   trading_net:
+#     driver: bridge
+#
+# Then in service:
+#   networks:
+#     - trading_net
+#
+# ============================================================================
+
+# ============================================================================
+# IMPORTANT NOTES
+# ============================================================================
+#
+# 1. LOG PERSISTENCE:
+#    - ./logs directory on host maps to /app/logs in container
+#    - All execution logs, trade ledgers persist across restarts
+#    - Log structure: logs/{market}/{mode}/execution_log.jsonl
+#
+# 2. SECRETS MANAGEMENT:
+#    - Use .env file in same directory as docker-compose.yml
+#    - Format:
+#        APCA_API_KEY_ID=your_key_here
+#        APCA_API_SECRET_KEY=your_secret_here
+#    - .env file should be in .gitignore
+#
+# 3. SCHEDULING:
+#    - swing-trader: Run once daily after market close
+#    - risk-monitor: Run every 15-30 min during market hours
+#    - Use cron or task scheduler to trigger:
+#        docker-compose up -d swing-trader (runs once, exits)
+#        docker-compose up -d risk-monitor (runs, stays up)
+#
+# 4. MARKETS:
+#    - India: Set MARKET=india
+#    - US: Set MARKET=us
+#    - Logs separate per market
+#
+# 5. MODES:
+#    - paper: Paper trading (safe, current default)
+#    - live: Real money (future, logs excluded from Git)
+#    - observation: Monitor only, no orders
+#
+# 6. MONITORING:
+#    - View logs: docker-compose logs -f swing-trader
+#    - Check status: docker-compose ps
+#    - Stop: docker-compose down
+#
+# 7. REBUILDING:
+#    - After code changes: docker-compose build
+#    - Or: docker-compose up --build
+#
+# ============================================================================
