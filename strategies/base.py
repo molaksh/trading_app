@@ -18,6 +18,12 @@ from enum import Enum
 
 from risk.scaling_policy import StrategyScalingPolicy
 
+# Avoid circular import
+def _get_strategy_metadata():
+    """Import here to avoid circular dependency."""
+    from strategies.registry import StrategyMetadata
+    return StrategyMetadata
+
 
 class TradeDirection(Enum):
     """Universal trade direction."""
@@ -191,6 +197,27 @@ class Strategy(ABC):
         pass
     
     @abstractmethod
+    def get_metadata(self) -> "StrategyMetadata":
+        """
+        Get strategy metadata for scope filtering and isolation.
+        
+        Returns:
+            StrategyMetadata instance
+        
+        Must be implemented by all strategies to declare:
+        - supported_markets (["us"], ["india"], etc.)
+        - supported_modes (["swing"], ["daytrade"], etc.)
+        - instrument_type ("equity", "option", "crypto", etc.)
+        """
+        StrategyMetadata = _get_strategy_metadata()
+        return StrategyMetadata(
+            name=self.name,
+            version="1.0",
+            supported_markets=["us"],  # Override in subclass
+            supported_modes=["swing"],  # Override in subclass
+            instrument_type="equity",  # Override in subclass
+        )
+    
     def get_strategy_type(self) -> str:
         """Return strategy type identifier (e.g., 'swing', 'options', 'intraday')."""
         pass

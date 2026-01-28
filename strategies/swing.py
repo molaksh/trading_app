@@ -76,6 +76,22 @@ class SwingEquityStrategy(Strategy):
         logger.info(f"  Max positions: {self.config['max_positions']}")
         logger.info(f"  Hold period: {self.config['hold_days_min']}-{self.config['hold_days_max']} days")
     
+    def get_metadata(self):
+        """
+        Declare scope metadata for strategy isolation.
+        
+        Returns:
+            StrategyMetadata
+        """
+        from strategies.registry import StrategyMetadata
+        return StrategyMetadata(
+            name="swing_equity",
+            version="1.0",
+            supported_markets=["us"],  # Swing strategies available for US only
+            supported_modes=["swing"],  # Only for swing mode
+            instrument_type="equity",  # Equities only
+        )
+    
     def generate_entry_intents(
         self,
         market_data: Dict[str, Any],

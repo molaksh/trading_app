@@ -9,6 +9,8 @@ Comprehensive logging of all trades:
 - Position tracking
 
 All logs are machine-readable JSON for automated analysis.
+
+Phase 0: Uses ScopePathResolver for scope-isolated log paths.
 """
 
 import logging
@@ -17,7 +19,8 @@ from datetime import datetime
 from typing import Optional, Dict, Any
 from pathlib import Path
 
-from config.log_paths import get_log_path_resolver
+from config.scope import get_scope
+from config.scope_paths import get_scope_paths
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +33,8 @@ class ExecutionLogger:
     - Daily JSON trade log (or continuous execution log)
     - Error log for issues
     
-    Uses centralized log path resolver for Docker/multi-market support.
+    Phase 0: Uses ScopePathResolver for scope-isolated log paths.
+    All logs stored under BASE_DIR/<scope>/logs/
     """
     
     def __init__(self, log_dir: Optional[str] = None):
@@ -38,24 +42,27 @@ class ExecutionLogger:
         Initialize execution logger.
         
         Args:
-            log_dir: Directory for log files (deprecated, uses log_paths resolver)
+            log_dir: Directory for log files (deprecated, uses ScopePathResolver)
         """
-        # Use centralized log path resolver
-        resolver = get_log_path_resolver()
+        # Phase 0: Use scope-aware path resolver
+        scope = get_scope()
+        scope_paths = get_scope_paths(scope)
         
         # Primary log: execution_log.jsonl (continuous, append-only)
-        self.trade_log_path = resolver.get_execution_log_path()
+        self.trade_log_path = scope_paths.get_execution_log_path()
         
         # Error log in same directory
-        self.error_log_path = resolver.get_custom_log_path("errors.jsonl")
+        logs_dir = scope_paths.get_logs_dir()
+        self.error_log_path = logs_dir / "errors.jsonl"
         
         # Ensure parent directories exist
         self.trade_log_path.parent.mkdir(parents=True, exist_ok=True)
         
         logger.info("=" * 80)
-        logger.info("EXECUTION LOGGER INITIALIZED")
+        logger.info(f"EXECUTION LOGGER INITIALIZED (SCOPE: {scope})")
         logger.info(f"  Execution Log: {self.trade_log_path}")
         logger.info(f"  Error Log: {self.error_log_path}")
+        logger.info(f"  Base Directory: {logs_dir.parent.parent}")
         logger.info("=" * 80)
     
     def log_signal_generated(

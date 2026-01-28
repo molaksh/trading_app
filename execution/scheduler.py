@@ -5,6 +5,8 @@ Long-running scheduler to orchestrate trading tasks for a continuous container.
 - Daily entries near close and swing exits after close
 - Offline ML training after market close
 All tasks run with a shared runtime so pending orders and ledgers persist.
+
+Phase 0: SCOPE-driven, uses MLStateManager for idempotent training.
 """
 
 import json
@@ -28,11 +30,14 @@ from config.scheduler_settings import (
     RUN_HEALTH_CHECK_ON_BOOT,
 )
 from config.settings import RUN_PAPER_TRADING
+from config.scope import get_scope
 from execution.runtime import (
     PaperTradingRuntime,
     build_paper_trading_runtime,
     reconcile_runtime,
 )
+from ml.ml_state import MLStateManager
+from startup.validator import validate_startup
 
 logger = logging.getLogger(__name__)
 
@@ -77,16 +82,28 @@ class SchedulerState:
 
 class TradingScheduler:
     def __init__(self, runtime: Optional[PaperTradingRuntime] = None):
+        # Phase 0: Validate startup configuration before doing anything
+        logger.info("=" * 80)
+        logger.info("TRADING SCHEDULER STARTUP (Phase 0)")
+        logger.info("=" * 80)
+        
+        validate_startup()  # Fails fast if config invalid
+        
         self.tz = ZoneInfo(MARKET_TIMEZONE)
         self.runtime = runtime or build_paper_trading_runtime()
-        self.state = SchedulerState(self.runtime.log_resolver.get_custom_log_path("scheduler_state.json"))
+        scope = get_scope()
+        self.scope_paths = self.runtime.scope_paths
+        
+        # Use scope-aware paths
+        self.state = SchedulerState(self.scope_paths.get_state_dir() / "scheduler_state.json")
         self.tick_seconds = max(15, SCHEDULER_TICK_SECONDS)
         
         # Cache for market clock (fallback when API fails)
         self._last_good_clock: Optional[Dict[str, Optional[datetime]]] = None
         self._clock_fetch_failures = 0
         
-        # Offline ML orchestrator (lazy-loaded)
+        # ML state manager for idempotent training
+        self._ml_state_manager = MLStateManager()
         self._ml_orchestrator = None
 
         # Optional boot tasks
@@ -96,7 +113,7 @@ class TradingScheduler:
         if RUN_HEALTH_CHECK_ON_BOOT:
             self._run_health_check(now)
         
-        # Load active ML model if available
+        # PHASE 0: Load active ML model (DO NOT TRAIN at startup)
         self._load_ml_model()
     
     def _get_ml_orchestrator(self):
@@ -109,8 +126,8 @@ class TradingScheduler:
                 from ml.model_registry import ModelRegistry
                 from ml.ml_orchestrator import OfflineMLOrchestrator
                 
-                dataset_dir = self.runtime.log_resolver.get_base_directory() / "ml_datasets"
-                model_dir = self.runtime.log_resolver.get_base_directory() / "ml_models"
+                dataset_dir = self.scope_paths.get_features_dir()
+                model_dir = self.scope_paths.get_models_dir()
                 
                 builder = DatasetBuilder(dataset_dir, self.runtime.trade_ledger)
                 trainer = OfflineTrainer(model_dir, builder)
@@ -125,20 +142,61 @@ class TradingScheduler:
         return self._ml_orchestrator
     
     def _load_ml_model(self) -> None:
-        """Load active ML model at startup."""
-        ml = self._get_ml_orchestrator()
-        if ml:
-            ml.maybe_load_active_model()
+        """Load active ML model at startup (DO NOT TRAIN)."""
+        try:
+            active_version = self._ml_state_manager.get_active_model_version()
+            if active_version:
+                logger.info(f"Loading active ML model version: {active_version}")
+                # Load the model into the executor if available
+                if self.runtime.executor.ml_trainer:
+                    self.runtime.executor.ml_trainer.load_model(active_version)
+            else:
+                logger.info("No active ML model - using rules-based trading only")
+        except Exception as e:
+            logger.warning(f"Could not load active ML model: {e}")
     
     def _run_offline_ml_cycle(self, now: datetime) -> None:
-        """Run offline ML training after market close (once per day)."""
+        """
+        Run offline ML training after market close (once per day).
+        
+        Phase 0: Idempotent training via MLStateManager
+        - Compute dataset fingerprint
+        - Skip training if data unchanged (idempotent)
+        - Update state and promote model on success
+        """
         if not self._should_run_interval("offline_ml", now, 24*60):  # Once per day
             return
         
         try:
             ml = self._get_ml_orchestrator()
-            if ml:
-                ml.run_offline_ml_cycle()
+            if not ml:
+                logger.debug("ML orchestrator not available")
+                return
+            
+            # Get current dataset
+            trades = self.runtime.trade_ledger.get_all_trades()
+            if not trades:
+                logger.info("No trades yet - skipping ML training")
+                return
+            
+            # Check if we should train (idempotent via fingerprinting)
+            from ml.ml_state import compute_dataset_fingerprint
+            current_fingerprint = compute_dataset_fingerprint(trades)
+            
+            if not self._ml_state_manager.should_train(current_fingerprint):
+                logger.info(f"Dataset unchanged (fingerprint: {current_fingerprint[:8]}...) - skipping training")
+                return
+            
+            logger.info("Running offline ML training cycle...")
+            model_version = ml.run_offline_ml_cycle()
+            
+            if model_version:
+                # Update state with new training metadata
+                run_id = f"run_{now.isoformat()}"
+                self._ml_state_manager.update_dataset_fingerprint(current_fingerprint, run_id)
+                self._ml_state_manager.promote_model(model_version)
+                logger.info(f"Promoted model version: {model_version}")
+                
                 self.state.update("offline_ml", now)
         except Exception as e:
             logger.warning(f"Offline ML cycle failed: {e}")

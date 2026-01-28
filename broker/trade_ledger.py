@@ -12,7 +12,9 @@ Design:
 - Queryable by symbol, date, exit type, profitability
 - Exportable to CSV/JSON
 - Survives restarts via persistence
-- Uses centralized log path resolver for Docker/multi-market support
+- Phase 0: Uses ScopePathResolver for scope-isolated ledger paths
+
+All ledger files stored under BASE_DIR/<scope>/data/
 """
 
 import json
@@ -24,7 +26,8 @@ from pathlib import Path
 from typing import List, Optional, Dict, Any
 import csv
 
-from config.log_paths import get_log_path_resolver
+from config.scope import get_scope
+from config.scope_paths import get_scope_paths
 
 logger = logging.getLogger(__name__)
 
@@ -149,14 +152,15 @@ class TradeLedger:
         Initialize trade ledger.
         
         Args:
-            ledger_file: Path to persist ledger (JSON). If None, uses centralized resolver.
+            ledger_file: Path to persist ledger (JSON). If None, uses ScopePathResolver.
         """
         self.trades: List[Trade] = []
         
         if ledger_file is None:
-            # Use centralized log path resolver
-            resolver = get_log_path_resolver()
-            ledger_file = resolver.get_trade_ledger_path()
+            # Phase 0: Use scope-aware path resolver
+            scope = get_scope()
+            scope_paths = get_scope_paths(scope)
+            ledger_file = scope_paths.get_trade_ledger_path()
         
         self.ledger_file = Path(ledger_file)
         self.ledger_file.parent.mkdir(parents=True, exist_ok=True)
@@ -164,8 +168,9 @@ class TradeLedger:
         # Load existing trades
         self._load_from_disk()
         
+        scope = get_scope()
         logger.info("=" * 80)
-        logger.info("TRADE LEDGER INITIALIZED")
+        logger.info(f"TRADE LEDGER INITIALIZED (SCOPE: {scope})")
         logger.info(f"  Ledger file: {self.ledger_file}")
         logger.info(f"  Existing trades: {len(self.trades)}")
         logger.info("=" * 80)
