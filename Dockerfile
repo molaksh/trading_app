@@ -50,14 +50,12 @@ RUN mkdir -p /app/logs/india/observation && \
     mkdir -p /app/logs/us/live
 
 # Environment variables (defaults, can be overridden)
-ENV MARKET=india
-ENV APP_ENV=paper
-ENV LOG_ROOT=/app/logs
 ENV PYTHONUNBUFFERED=1
+ENV PYTHONPATH=/app
 
-# Default command: run trading platform
-# Override in docker-compose.yml for different modes
-CMD ["python", "main.py"]
+# Default command: run trading platform with scheduler (continuous mode)
+# Override in docker-compose.yml or docker run for different modes
+CMD ["python", "main.py", "--schedule"]
 
 # ============================================================================
 # IMPORTANT NOTES:
