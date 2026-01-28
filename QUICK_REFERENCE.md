@@ -1,34 +1,204 @@
-# Hardening Summary - Quick Reference
+# QUICK REFERENCE: Policy System
 
-## Status: ✅ ALL REQUIREMENTS MET
+## For Users: How to Use New Indicators
+
+```python
+from features.feature_engine import compute_features
+
+# Original behavior (9 features)
+features = compute_features(df)
+
+# With new indicators (9 + 6 extended features)
+features = compute_features(df, include_extended=True)
+
+# Features available:
+# Original: SMA20, SMA200, distance_to_sma, sma_slope, ATR, ATR%, volume_ratio, pullback_depth
+# Extended: RSI, MACD, MACD_signal, MACD_hist, EMA12, EMA26, BB_upper, BB_middle, BB_lower, BB_width, ADX, OBV
+```
+
+## For Developers: How to Add a New Mode
+
+### Example: Adding US Day Trading
+
+1. **Create DayTradeHoldPolicy** (replace stub in `policies/hold_policy.py`)
+
+```python
+class DayTradeHoldPolicy(HoldPolicy):
+    def min_hold_days(self) -> int:
+        return 0  # Can exit same day
+    
+    def max_hold_days(self) -> int:
+        return 1  # Must exit by end of day
+    
+    def allows_same_day_exit(self) -> bool:
+        return True  # Required for day trading
+```
+
+2. **Register the scope** (update `policies/policy_factory.py`)
+
+```python
+SUPPORTED_SCOPES = {
+    ("swing", "us", "equity"): True,
+    ("daytrade", "us", "equity"): True,  # ← Add this line
+    # ... rest of scopes
+}
+```
+
+3. **Test it**
+
+```python
+from policies.policy_factory import create_policies_for_scope
+
+# This now works!
+policies = create_policies_for_scope("daytrade", "us")
+assert isinstance(policies.hold_policy, DayTradeHoldPolicy)
+```
+
+## For Operators: How to Check What's Supported
+
+```python
+from policies.policy_factory import is_scope_supported, get_supported_scopes
+
+# Check single scope
+if is_scope_supported("swing", "us", "equity"):
+    print("✅ US Swing is supported")
+
+# Check what's available
+for scope in get_supported_scopes():
+    print(f"✅ {scope['mode']}/{scope['market']}/{scope['instrument']}")
+```
+
+## For Architects: Policy Interfaces
+
+### HoldPolicy
+- `min_hold_days()` → int (minimum holding period in days)
+- `max_hold_days()` → int (maximum holding period in days)
+- `allows_same_day_exit()` → bool (can exit on entry day)
+- `validate_hold_period(holding_days, is_risk_reducing)` → (bool, str)
+
+### ExitPolicy
+- `evaluation_frequency()` → str ('eod', 'intraday', 'continuous')
+- `get_exit_urgency(exit_type)` → str ('immediate', 'urgent', 'eod', 'optional')
+- `get_execution_window()` → (int, int) (min_minutes, max_minutes after open)
+- `supports_intraday_evaluation()` → bool
+
+### EntryTimingPolicy
+- `entry_frequency()` → str ('once_per_day', 'multiple_intraday', 'continuous')
+- `get_entry_window_minutes_before_close()` → int
+- `supports_intraday_entry()` → bool
+
+### MarketHoursPolicy
+- `get_timezone()` → str ('America/New_York', 'Asia/Kolkata', etc.)
+- `get_market_open_time()` → time
+- `get_market_close_time()` → time
+- `is_24x7_market()` → bool
+- `has_market_close()` → bool
+
+## Files to Know
+
+### Core Policy Files
+- `policies/base.py` - Interface definitions
+- `policies/hold_policy.py` - Hold-related policies
+- `policies/exit_policy.py` - Exit-related policies
+- `policies/entry_timing_policy.py` - Entry timing policies
+- `policies/market_hours_policy.py` - Market hours policies
+- `policies/policy_factory.py` - Factory and registry
+
+### Integration Files
+- `runtime_config.py` - Policy-driven runtime setup
+- `risk/trade_intent_guard.py` - Uses HoldPolicy (line ~50)
+- `features/feature_engine.py` - Extended indicators (include_extended param)
+- `startup/validator.py` - Policy support validation (phase 0)
+
+### Documentation
+- `EXECUTIVE_SUMMARY.md` - High-level overview
+- `FUTURE_PROOFING_REFACTOR_SUMMARY.md` - Detailed technical docs
+- `DEPLOYMENT_CHECKLIST.md` - Verification results
+
+### Testing
+- `verify_refactor.py` - Comprehensive verification suite
+- `tests/test_trade_intent_guard.py` - Updated with SwingHoldPolicy
+
+## Common Tasks
+
+### Check if scope is supported
+```python
+from policies.policy_factory import is_scope_supported
+is_scope_supported("swing", "us", "equity")  # True
+is_scope_supported("daytrade", "us", "equity")  # False
+```
+
+### Create policies for US Swing
+```python
+from policies.policy_factory import create_policies_for_scope
+policies = create_policies_for_scope("swing", "us")
+# policies.hold_policy, policies.exit_policy, policies.entry_timing_policy, policies.market_hours_policy
+```
+
+### Use extended indicators
+```python
+from features.feature_engine import compute_features
+features = compute_features(price_data, include_extended=True)
+# Now has RSI, MACD, EMA, Bollinger Bands, ADX, OBV
+```
+
+### Check hold period constraints
+```python
+hold_policy = SwingHoldPolicy()
+min_hold = hold_policy.min_hold_days()  # 2
+max_hold = hold_policy.max_hold_days()  # 20
+same_day_allowed = hold_policy.allows_same_day_exit()  # False
+```
+
+## Error Messages
+
+### "Unsupported Mode/Market Combination"
+This means you tried to use a mode/market that isn't implemented yet.
+
+**Solution:** 
+1. Check `SUPPORTED_SCOPES` in `policies/policy_factory.py`
+2. If you need it, implement the policy stubs
+3. Set the scope to True in registry
+
+### "Policy Not Implemented"
+A policy stub was called but not fully implemented.
+
+**Solution:**
+1. Find the stub in `policies/` folder
+2. Replace NotImplementedError with actual implementation
+3. Update SUPPORTED_SCOPES registry
+
+### "Module Not Found: policies"
+You need to be in the trading_app directory.
+
+**Solution:**
+```bash
+cd /Users/mohan/Documents/SandBox/test/trading_app
+python3 your_script.py
+```
 
 ---
 
-## 1. Logging - All Print Statements Replaced ✅
+## Quick Verification
 
-### Files Modified:
-- **config/settings.py** - Added logging configuration
-- **data/price_loader.py** - DEBUG/WARNING logging
-- **features/feature_engine.py** - DEBUG/ERROR logging  
-- **scoring/rule_scorer.py** - DEBUG/ERROR logging
-- **main.py** - Complete rewrite with logging
-- **demo.py** - Complete rewrite with logging
+To verify everything works:
 
-### Logging Levels Used:
-```
-INFO   - Normal flow, headers, summaries
-WARNING - Graceful failures (no data, NaN, etc.)
-ERROR - Unexpected exceptions
-DEBUG - Detailed computation steps (when enabled)
+```bash
+cd /Users/mohan/Documents/SandBox/test/trading_app
+python3 verify_refactor.py
+# Should output: ✅ ALL VERIFICATION TESTS PASSED
 ```
 
-**Example Output:**
+To run demo:
+
+```bash
+python3 demo_architecture.py
+# Should complete successfully with all demos running
 ```
-2026-01-24 02:31:57 | INFO     | root | Trading Screener
-2026-01-24 02:31:57 | INFO     | root | [ 1/43] SPY - OK (confidence 1)
-2026-01-24 02:31:59 | WARNING  | root | [ 5/43] BAD - SKIP (NaN values)
-2026-01-24 02:31:59 | ERROR    | root | [ 7/43] ERR - ERROR: SymbolNotFound
-```
+
+---
+
+**Status: ✅ Ready to Use**
 
 ---
 
