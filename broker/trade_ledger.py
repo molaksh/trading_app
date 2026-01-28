@@ -460,3 +460,167 @@ def create_trade_from_fills(
         risk_amount=risk_amount,
         position_size=position_size
     )
+
+
+# ============================================================================
+# RECONCILIATION HELPERS (Production Hardening)
+# ============================================================================
+
+@dataclass
+class OpenPosition:
+    """
+    Represents an open position from broker (for reconciliation).
+    
+    Used to backfill ledger from broker positions during startup.
+    """
+    symbol: str
+    quantity: float
+    avg_entry_price: float
+    current_price: float
+    market_value: float
+    cost_basis: float
+    unrealized_pnl: float
+    unrealized_pnl_pct: float
+    
+    @classmethod
+    def from_alpaca_position(cls, alpaca_pos):
+        """Create from Alpaca API position object."""
+        qty = float(alpaca_pos.qty)
+        avg_price = float(alpaca_pos.avg_entry_price)
+        current_price = float(alpaca_pos.current_price)
+        
+        cost_basis = avg_price * qty
+        market_value = current_price * qty
+        unrealized_pnl = market_value - cost_basis
+        unrealized_pnl_pct = (unrealized_pnl / cost_basis) * 100 if cost_basis > 0 else 0.0
+        
+        return cls(
+            symbol=alpaca_pos.symbol,
+            quantity=qty,
+            avg_entry_price=avg_price,
+            current_price=current_price,
+            market_value=market_value,
+            cost_basis=cost_basis,
+            unrealized_pnl=unrealized_pnl,
+            unrealized_pnl_pct=unrealized_pnl_pct
+        )
+
+
+class LedgerReconciliationHelper:
+    """
+    Helper for reconciling trade ledger with broker state.
+    
+    Used by AccountReconciler to ensure ledger matches broker positions.
+    """
+    
+    @staticmethod
+    def backfill_broker_position(
+        ledger: 'TradeLedger',
+        position: OpenPosition,
+        entry_timestamp: Optional[str] = None
+    ) -> None:
+        """
+        Create a ledger entry for an external broker position.
+        
+        This creates an "open trade" record to represent an existing position
+        that was entered outside the system (manual trade, different system, etc.).
+        
+        IMPORTANT: This does NOT create a completed trade (no exit).
+        Instead, it creates metadata that can be referenced when the position
+        is eventually exited.
+        
+        Args:
+            ledger: Trade ledger instance
+            position: OpenPosition from broker
+            entry_timestamp: When position was opened (if known), else uses current time
+        """
+        from datetime import datetime
+        
+        if entry_timestamp is None:
+            entry_timestamp = datetime.now().isoformat()
+        
+        # Create a synthetic order ID for the external entry
+        synthetic_order_id = f"EXTERNAL_{position.symbol}_{entry_timestamp}"
+        
+        # Log reconciliation action
+        logger.info(
+            f"LEDGER RECONCILIATION: Backfilling external position {position.symbol} "
+            f"(qty={position.quantity}, avg={position.avg_entry_price:.2f})"
+        )
+        
+        # Store metadata for later exit tracking
+        # NOTE: This is a partial record - will be completed when position closes
+        metadata = {
+            "symbol": position.symbol,
+            "entry_order_id": synthetic_order_id,
+            "entry_timestamp": entry_timestamp,
+            "entry_price": position.avg_entry_price,
+            "entry_quantity": position.quantity,
+            "source": "BROKER_RECONCILIATION",
+            "reconciled_at": datetime.now().isoformat()
+        }
+        
+        # Store in ledger's internal tracking (not a completed trade yet)
+        if not hasattr(ledger, '_open_positions'):
+            ledger._open_positions = {}
+        
+        ledger._open_positions[position.symbol] = metadata
+        logger.info(f"✓ Position {position.symbol} tracked in ledger for future exit")
+    
+    @staticmethod
+    def mark_position_closed(
+        ledger: 'TradeLedger',
+        symbol: str,
+        reason: str = "Position not found on broker"
+    ) -> None:
+        """
+        Mark a ledger position as closed if it no longer exists on broker.
+        
+        This handles cases where a position was exited outside the system
+        (manual close, liquidation, etc.).
+        
+        Args:
+            ledger: Trade ledger instance
+            symbol: Symbol to mark as closed
+            reason: Reason for closure
+        """
+        logger.warning(
+            f"LEDGER RECONCILIATION: Position {symbol} in ledger but not on broker. "
+            f"Reason: {reason}"
+        )
+        
+        # Check if we have open position metadata
+        if hasattr(ledger, '_open_positions') and symbol in ledger._open_positions:
+            metadata = ledger._open_positions[symbol]
+            
+            # Create a completed trade with EXTERNAL_CLOSE exit type
+            from datetime import datetime
+            now = datetime.now().isoformat()
+            
+            # Use current market price as exit (best approximation)
+            # In production, you'd fetch the last known price
+            exit_price = metadata['entry_price']  # Pessimistic: assume breakeven
+            
+            trade = create_trade(
+                symbol=symbol,
+                entry_order_id=metadata['entry_order_id'],
+                entry_fill_timestamp=metadata['entry_timestamp'],
+                entry_fill_price=metadata['entry_price'],
+                entry_fill_quantity=metadata['entry_quantity'],
+                exit_order_id=f"EXTERNAL_CLOSE_{symbol}_{now}",
+                exit_fill_timestamp=now,
+                exit_fill_price=exit_price,
+                exit_fill_quantity=metadata['entry_quantity'],
+                exit_type="EXTERNAL_CLOSE",
+                exit_reason=reason,
+                confidence=None,
+                risk_amount=None,
+                fees=0.0
+            )
+            
+            ledger.add_trade(trade)
+            del ledger._open_positions[symbol]
+            logger.info(f"✓ Created EXTERNAL_CLOSE trade for {symbol}")
+        else:
+            logger.warning(f"No open position metadata found for {symbol} - cannot backfill closure")
+

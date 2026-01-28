@@ -131,6 +131,23 @@ PAPER_TRADING_MODE_REQUIRED = True  # Safety: fail if not in paper trading mode
 PAPER_TRADING_BROKER = "alpaca"  # Currently supported: "alpaca"
 
 # ============================================================================
+# ACCOUNT RECONCILIATION (Production Hardening)
+# ============================================================================
+# Broker-as-source-of-truth settings
+RECONCILIATION_BACKFILL_ENABLED = True   # Backfill ledger from broker positions
+RECONCILIATION_MARK_UNKNOWN_CLOSED = True  # Mark ledger positions not on broker as CLOSED
+
+# Position state and add-on buy logic
+MAX_ALLOCATION_PER_SYMBOL_PCT = 0.05     # Max 5% of portfolio per symbol (notional value)
+ADD_ON_BUY_CONFIDENCE_THRESHOLD = 5      # Require confidence 5 for add-on buys
+ADD_ON_BUY_ENABLED = True                # Enable add-on buy logic
+
+# Swing exit two-phase separation
+SWING_EXIT_TWO_PHASE_ENABLED = True      # Separate decision (EOD) from execution (next day)
+SWING_EXIT_EXECUTION_WINDOW_START_MIN = 5   # Execute exits 5 min after market open
+SWING_EXIT_EXECUTION_WINDOW_END_MIN = 30    # Execute exits by 30 min after market open
+
+# ============================================================================
 # MONITORING & DEGRADATION DETECTION (Phase H)
 # ============================================================================
 # Global monitoring settings

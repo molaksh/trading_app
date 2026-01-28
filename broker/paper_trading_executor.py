@@ -81,6 +81,10 @@ class PaperTradingExecutor:
         self.ml_trainer = ml_trainer
         self.ml_risk_threshold = ml_risk_threshold
         
+        # PRODUCTION: Two-phase exit system
+        from broker.exit_intent_tracker import ExitIntentTracker
+        self.exit_intent_tracker = ExitIntentTracker()
+        
         # Safe mode flags (set by main.py after reconciliation)
         self.safe_mode_enabled = False
         self.startup_status = "UNKNOWN"
@@ -146,14 +150,71 @@ class PaperTradingExecutor:
             )
             return False, None
         
-        # EXTERNAL SYMBOL CHECK: Block duplicate BUY on symbols already held in Alpaca
-        if symbol in self.external_symbols:
-            logger.warning(
-                f"Symbol {symbol} is held externally in Alpaca (not in ledger). "
-                f"Blocking duplicate BUY to prevent position doubling. "
-                f"To trade this symbol, close the external position first."
+        # PRODUCTION FIX: Position state model for add-on buy logic
+        from config.settings import (
+            ADD_ON_BUY_ENABLED,
+            MAX_ALLOCATION_PER_SYMBOL_PCT,
+            ADD_ON_BUY_CONFIDENCE_THRESHOLD
+        )
+        
+        # Check if we have an existing position for this symbol
+        try:
+            existing_position = self.broker.get_position(symbol)
+        except Exception as e:
+            existing_position = None
+            logger.warning(f"Could not check existing position for {symbol}: {e}")
+        
+        # Calculate current allocation % if position exists
+        if existing_position and abs(existing_position.quantity) > 0:
+            # Check if symbol is external (not tracked in our system)
+            if symbol in self.external_symbols:
+                # Position exists ONLY on broker, not in our ledger
+                logger.warning(
+                    f"EXTERNAL SYMBOL - NO ADD-ON: {symbol} is held externally "
+                    f"(Alpaca position but not in ledger). Cannot add to external position."
+                )
+                return False, None
+            
+            # Position is known (in our ledger) - check add-on eligibility
+            if not ADD_ON_BUY_ENABLED:
+                logger.info(
+                    f"Skipping {symbol} — existing position qty={existing_position.quantity} "
+                    f"(add-on buys disabled)"
+                )
+                return False, None
+            
+            # Calculate current allocation
+            account_value = self.risk_manager.portfolio.current_equity
+            position_value = abs(existing_position.quantity) * existing_position.current_price
+            current_allocation_pct = position_value / account_value if account_value > 0 else 0.0
+            
+            # Check if we're at/over max allocation
+            if current_allocation_pct >= MAX_ALLOCATION_PER_SYMBOL_PCT:
+                logger.warning(
+                    f"AT MAX ALLOCATION: {symbol} current allocation "
+                    f"{current_allocation_pct:.2%} >= max {MAX_ALLOCATION_PER_SYMBOL_PCT:.2%}. "
+                    f"Skipping add-on buy to prevent over-concentration."
+                )
+                return False, None
+            
+            # Check if confidence meets add-on threshold
+            if confidence < ADD_ON_BUY_CONFIDENCE_THRESHOLD:
+                logger.warning(
+                    f"CONFIDENCE TOO LOW FOR ADD-ON: {symbol} confidence={confidence} "
+                    f"< threshold={ADD_ON_BUY_CONFIDENCE_THRESHOLD}. "
+                    f"Add-on buys require higher confidence to justify increased exposure."
+                )
+                return False, None
+            
+            # Add-on buy approved - calculate remaining allocation room
+            remaining_allocation = MAX_ALLOCATION_PER_SYMBOL_PCT - current_allocation_pct
+            logger.info(
+                f"ADD-ON BUY APPROVED: {symbol} current={current_allocation_pct:.2%}, "
+                f"max={MAX_ALLOCATION_PER_SYMBOL_PCT:.2%}, remaining={remaining_allocation:.2%}, "
+                f"confidence={confidence}>={ADD_ON_BUY_CONFIDENCE_THRESHOLD}"
             )
-            return False, None
+            # Continue to risk manager evaluation (will respect allocation limits)
+
         
         # Step 1: Log signal
         try:
@@ -175,30 +236,15 @@ class PaperTradingExecutor:
             )
             return False, None
 
-        # Guardrail 1: Skip if we already have exposure for this symbol (prevents double-buy on reruns)
-        try:
-            existing_position = self.broker.get_position(symbol)
-        except Exception as e:
-            existing_position = None
-            logger.warning(f"Could not check existing position for {symbol}: {e}")
-
-        if existing_position and abs(existing_position.quantity) > 0:
-            logger.info(
-                f"Skipping {symbol} — existing position qty={existing_position.quantity} at avg={existing_position.avg_entry_price}"
-            )
-            return False, None
-
-        # Guardrail 2: Skip if an order for this symbol is already pending in this session
+        # Guardrail 1: Skip if an order for this symbol is already pending in this session
         if symbol in self.pending_orders.values():
             logger.info(f"Skipping {symbol} — pending order already submitted in this session")
             return False, None
 
-        # Guardrail 3: Skip if we have a recorded pending entry awaiting exit
-        if symbol in self.pending_entries:
-            logger.info(f"Skipping {symbol} — entry already filled and awaiting exit")
-            return False, None
+        # Guardrail 2: Skip if we have a recorded pending entry awaiting exit (REMOVED - now handled by add-on logic above)
+        # Note: This was too restrictive - prevented add-on buys. Now using allocation-based logic instead.
         
-        # Guardrail 4: ML RISK CHECK (read-only, advisory)
+        # Guardrail 3: ML RISK CHECK (read-only, advisory)
         # If ML model is loaded, use it to filter high-risk trades
         if self.ml_trainer and self.ml_trainer.model is not None:
             ml_risk_score = self.ml_trainer.predict_risk(features)
@@ -531,43 +577,117 @@ class PaperTradingExecutor:
     def execute_exit(
         self,
         exit_signal: ExitSignal,
+        force_immediate: bool = False,
     ) -> bool:
         """
-        Execute an exit signal by closing the position.
+        Execute an exit signal - either immediately or record intent for later.
+        
+        PRODUCTION: Two-phase swing exit system:
+        - SWING exits with urgency='eod': Record intent, execute next day
+        - EMERGENCY exits or urgency='immediate': Execute now
+        - force_immediate=True: Override two-phase (for manual exits)
         
         Args:
             exit_signal: ExitSignal to execute
+            force_immediate: Force immediate execution (default: False)
         
         Returns:
-            True if exit order submitted successfully
+            True if exit submitted OR intent recorded successfully
         """
+        from config.settings import SWING_EXIT_TWO_PHASE_ENABLED
+        from broker.exit_intent_tracker import ExitIntent, ExitIntentState
+        
         symbol = exit_signal.symbol
         
+        # Determine if we should execute immediately or record intent
+        should_execute_now = (
+            force_immediate or
+            exit_signal.urgency == 'immediate' or
+            not SWING_EXIT_TWO_PHASE_ENABLED
+        )
+        
+        if not should_execute_now:
+            # Two-phase: Record exit intent for next-day execution
+            logger.info(
+                f"TWO-PHASE EXIT: Recording intent for {symbol} "
+                f"(urgency={exit_signal.urgency}, type={exit_signal.exit_type.value}). "
+                f"Will execute during next execution window."
+            )
+            
+            intent = ExitIntent(
+                symbol=symbol,
+                state=ExitIntentState.EXIT_PLANNED,
+                decision_timestamp=datetime.now().isoformat(),
+                decision_date=date.today().isoformat(),
+                exit_type=exit_signal.exit_type.value,
+                exit_reason=exit_signal.reason,
+                entry_date=exit_signal.entry_date.isoformat(),
+                holding_days=exit_signal.holding_days,
+                confidence=exit_signal.confidence,
+                urgency=exit_signal.urgency
+            )
+            
+            self.exit_intent_tracker.add_intent(intent)
+            
+            # Log intent recorded
+            self.exec_logger.log_exit_signal(
+                symbol=symbol,
+                exit_type=exit_signal.exit_type.value,
+                reason=f"INTENT RECORDED: {exit_signal.reason}",
+                entry_date=exit_signal.entry_date.isoformat(),
+                holding_days=exit_signal.holding_days,
+                confidence=exit_signal.confidence,
+                urgency=exit_signal.urgency,
+            )
+            
+            return True
+        
+        # Immediate execution path (original logic)
         try:
             # Get current position
             position = self.broker.get_position(symbol)
             if not position:
                 logger.warning(f"No position to close: {symbol}")
+                # Clean up intent if exists
+                if self.exit_intent_tracker.has_intent(symbol):
+                    self.exit_intent_tracker.mark_executed(symbol)
                 return False
             
             # Get portfolio position for entry metadata
             portfolio_positions = self.risk_manager.portfolio.open_positions
             if symbol not in portfolio_positions or not portfolio_positions[symbol]:
                 logger.warning(f"Position {symbol} not in portfolio state")
+                if self.exit_intent_tracker.has_intent(symbol):
+                    self.exit_intent_tracker.mark_executed(symbol)
                 return False
             
             portfolio_pos = portfolio_positions[symbol][0]  # FIFO
             
-            # Submit close order
-            close_result = self.broker.submit_market_order(
-                symbol=symbol,
-                quantity=abs(position.quantity),
-                side="sell" if position.is_long() else "buy",
-                time_in_force="day",
-            )
+            # PRODUCTION: Use limit orders for planned exits, market orders only for emergencies
+            order_type = "limit" if exit_signal.urgency == 'eod' else "market"
+            current_price = position.current_price
+            
+            if order_type == "limit":
+                # Limit order: Use current price as limit (conservative fill)
+                close_result = self.broker.submit_limit_order(
+                    symbol=symbol,
+                    quantity=abs(position.quantity),
+                    side="sell" if position.is_long() else "buy",
+                    limit_price=current_price,
+                    time_in_force="day",
+                )
+                logger.info(f"Submitted LIMIT exit order for {symbol} @ {current_price:.2f}")
+            else:
+                # Market order: Emergency/immediate exits only
+                close_result = self.broker.submit_market_order(
+                    symbol=symbol,
+                    quantity=abs(position.quantity),
+                    side="sell" if position.is_long() else "buy",
+                    time_in_force="day",
+                )
+                logger.warning(f"Submitted MARKET exit order for {symbol} (emergency)")
             
             # Calculate PnL
-            current_price = position.current_price
             pnl = (current_price - portfolio_pos.entry_price) * position.quantity
             pnl_pct = (current_price - portfolio_pos.entry_price) / portfolio_pos.entry_price
             
@@ -602,6 +722,10 @@ class PaperTradingExecutor:
                 exit_date=pd.Timestamp.now(),
                 exit_price=current_price,
             )
+            
+            # Clean up exit intent if it existed
+            if self.exit_intent_tracker.has_intent(symbol):
+                self.exit_intent_tracker.mark_executed(symbol)
             
             logger.info(
                 f"✓ Exit executed: {symbol} ({exit_signal.exit_type.value}) "
@@ -686,6 +810,67 @@ class PaperTradingExecutor:
         except Exception as e:
             logger.error(f"Failed to close position {symbol}: {e}")
             return False
+    
+    def execute_pending_exit_intents(self) -> int:
+        """
+        Execute all pending exit intents (two-phase swing exits).
+        
+        This is called during the exit execution window (e.g., 5-30 min after market open).
+        
+        Returns:
+            Number of exit orders submitted
+        """
+        from config.settings import SWING_EXIT_TWO_PHASE_ENABLED
+        from broker.exit_intent_tracker import ExitIntentState
+        from strategy.exit_evaluator import ExitSignal, ExitType
+        
+        if not SWING_EXIT_TWO_PHASE_ENABLED:
+            logger.debug("Two-phase exits disabled - skipping pending intent execution")
+            return 0
+        
+        pending_intents = self.exit_intent_tracker.get_all_intents(state=ExitIntentState.EXIT_PLANNED)
+        
+        if not pending_intents:
+            logger.debug("No pending exit intents to execute")
+            return 0
+        
+        logger.info("=" * 80)
+        logger.info(f"EXECUTING PENDING EXIT INTENTS ({len(pending_intents)} intents)")
+        logger.info("=" * 80)
+        
+        executed_count = 0
+        
+        for intent in pending_intents:
+            try:
+                # Convert intent back to ExitSignal for execution
+                exit_signal = ExitSignal(
+                    symbol=intent.symbol,
+                    exit_type=ExitType(intent.exit_type),
+                    reason=intent.exit_reason,
+                    timestamp=datetime.now(),  # Current execution time
+                    entry_date=date.fromisoformat(intent.entry_date),
+                    holding_days=intent.holding_days,
+                    confidence=intent.confidence or 0,
+                    urgency=intent.urgency
+                )
+                
+                # Execute with force_immediate=True to bypass two-phase check
+                success = self.execute_exit(exit_signal, force_immediate=True)
+                
+                if success:
+                    executed_count += 1
+                    logger.info(
+                        f"✓ Executed pending exit: {intent.symbol} "
+                        f"(decided: {intent.decision_date}, executed: {date.today().isoformat()})"
+                    )
+                else:
+                    logger.warning(f"Failed to execute pending exit: {intent.symbol}")
+            
+            except Exception as e:
+                logger.error(f"Error executing pending exit for {intent.symbol}: {e}")
+        
+        logger.info(f"Executed {executed_count}/{len(pending_intents)} pending exit intents")
+        return executed_count
     
     def get_account_status(self) -> Dict:
         """

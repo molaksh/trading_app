@@ -284,6 +284,48 @@ class TradingScheduler:
         # Swing exit evaluation already runs inside monitor cycle; reuse for clarity
         self._run_monitoring_cycle(now)
         self.state.update("swing_exit", now)
+    
+    def _run_exit_intent_execution(self, now: datetime, clock: Dict) -> None:
+        """
+        Execute pending exit intents during execution window.
+        
+        PRODUCTION: Two-phase swing exit system.
+        Execution window: SWING_EXIT_EXECUTION_WINDOW_START_MIN to END_MIN after market open.
+        """
+        from config.settings import (
+            SWING_EXIT_TWO_PHASE_ENABLED,
+            SWING_EXIT_EXECUTION_WINDOW_START_MIN,
+            SWING_EXIT_EXECUTION_WINDOW_END_MIN
+        )
+        
+        if not SWING_EXIT_TWO_PHASE_ENABLED:
+            return
+        
+        # Check if we've already run today
+        if self.state.last_run_date("exit_intent_execution") == now.date():
+            return
+        
+        # Check if we're in the execution window
+        market_open = clock.get("timestamp")  # Current market time
+        if not market_open:
+            return
+        
+        # Calculate time since market open
+        next_open = clock.get("next_open")
+        if next_open and next_open.date() == now.date():
+            # Market just opened today - check if we're in window
+            time_since_open = (now - next_open).total_seconds() / 60  # minutes
+            
+            if SWING_EXIT_EXECUTION_WINDOW_START_MIN <= time_since_open <= SWING_EXIT_EXECUTION_WINDOW_END_MIN:
+                logger.info("=" * 80)
+                logger.info("EXIT INTENT EXECUTION WINDOW REACHED")
+                logger.info(f"Time since open: {time_since_open:.1f} minutes")
+                logger.info("=" * 80)
+                
+                executed_count = self.runtime.executor.execute_pending_exit_intents()
+                
+                logger.info(f"Executed {executed_count} pending exit intents")
+                self.state.update("exit_intent_execution", now)
 
     def _run_health_check(self, now: datetime) -> None:
         if not self._should_run_interval("health_check", now, HEALTH_CHECK_INTERVAL_MINUTES):
@@ -331,6 +373,9 @@ class TradingScheduler:
 
             # Intraday monitoring/polling
             if clock["is_open"]:
+                # PRODUCTION: Execute pending exit intents during execution window
+                self._run_exit_intent_execution(now, clock)
+                
                 if self._should_run_interval("monitor", now, EMERGENCY_EXIT_INTERVAL_MINUTES):
                     self._run_monitoring_cycle(now)
 

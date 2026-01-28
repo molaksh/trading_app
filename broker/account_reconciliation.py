@@ -287,6 +287,10 @@ class AccountReconciler:
             logger.info("No open positions to validate")
             return
         
+        # Phase 0 Production: Import reconciliation settings
+        from config.settings import RECONCILIATION_BACKFILL_ENABLED, RECONCILIATION_MARK_UNKNOWN_CLOSED
+        from broker.trade_ledger import OpenPosition, LedgerReconciliationHelper
+        
         for pos in self.alpaca_positions:
             symbol = pos.symbol
             qty = float(pos.qty)
@@ -313,11 +317,35 @@ class AccountReconciler:
                 )
                 logger.warning(msg)
                 self.validation_warnings.append(msg)
+                
+                # PRODUCTION FIX: Backfill ledger from broker position
+                if RECONCILIATION_BACKFILL_ENABLED:
+                    logger.info(f"Backfilling ledger with broker position: {symbol}")
+                    broker_position = OpenPosition.from_alpaca_position(pos)
+                    LedgerReconciliationHelper.backfill_broker_position(
+                        self.trade_ledger,
+                        broker_position,
+                        entry_timestamp=None  # Unknown entry time
+                    )
             else:
                 status_result["status"] = PositionStatus.KEEP.value
                 logger.info(f"✓ Position known: {symbol} ({qty} shares)")
             
             self.position_validation[symbol] = status_result
+        
+        # PRODUCTION FIX: Check for ledger positions not on broker (closed externally)
+        if RECONCILIATION_MARK_UNKNOWN_CLOSED and hasattr(self.trade_ledger, '_open_positions'):
+            broker_symbols = {pos.symbol for pos in self.alpaca_positions}
+            ledger_symbols = set(self.trade_ledger._open_positions.keys())
+            
+            orphaned_symbols = ledger_symbols - broker_symbols
+            for symbol in orphaned_symbols:
+                logger.warning(f"Position {symbol} in ledger but not on broker - marking as closed")
+                LedgerReconciliationHelper.mark_position_closed(
+                    self.trade_ledger,
+                    symbol,
+                    reason="Position not found on broker during reconciliation"
+                )
         
         logger.info("=" * 80)
     
