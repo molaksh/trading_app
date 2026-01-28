@@ -2,6 +2,53 @@
 Trading Screener - ML-Ready Algorithmic Trading Prototype
 =========================================================
 
+## SWING TRADING ARCHITECTURE (Updated Jan 2026)
+
+The project now includes a modular swing trading strategy framework:
+
+**Five Distinct Trading Philosophies:**
+- **Trend Pullback**: Trade shallow pullbacks in confirmed uptrends
+- **Momentum Breakout**: Trade strength continuation with volume confirmation  
+- **Mean Reversion**: Trade snapbacks within valid uptrends
+- **Volatility Squeeze**: Trade volatility expansion after compression
+- **Event-Driven**: Trade predictable post-event behavior
+
+**Market-Agnostic Design:**
+- Same 5 philosophies work for US equities, Indian equities, and cryptocurrencies
+- Strategy container automatically loads appropriate market variant
+- No hardcoded assumptions about market hours, lot sizes, or brokers
+
+**Folder Structure:**
+```
+strategies/
+├── us/equity/swing/
+│   ├── swing.py                    (US container orchestrator)
+│   ├── swing_base.py               (Abstract base class)
+│   ├── swing_trend_pullback.py     (Philosophy #1)
+│   ├── swing_momentum_breakout.py  (Philosophy #2)
+│   ├── swing_mean_reversion.py     (Philosophy #3)
+│   ├── swing_volatility_squeeze.py (Philosophy #4)
+│   └── swing_event_driven.py       (Philosophy #5)
+├── india/equity/swing/             (India-specific variants)
+│   └── (same 7 files, India-tuned)
+└── swing.py                        (Backward compatibility shim)
+```
+
+**Key Features:**
+- ✅ Philosophy metadata: Each strategy declares risks, caveats, and edge  
+- ✅ Metadata-aware intents: Entry/exit intents include philosophy origin
+- ✅ Backward compatible: Old imports still work via shim  
+- ✅ Market-specific imports: `from strategies.us.equity.swing.swing import SwingEquityStrategy`
+- ✅ ML-ready: Each intent carries philosophy ID, risks, caveats for downstream scoring
+
+**Documentation:**
+- [SWING_ARCHITECTURE_REFACTOR.md](SWING_ARCHITECTURE_REFACTOR.md) - Complete architecture design
+- [SWING_MIGRATION_GUIDE.md](SWING_MIGRATION_GUIDE.md) - Developer migration guide
+
+---
+
+## SCREENER
+
 This is a minimal, rule-based trading screener that:
 - Loads daily OHLCV data for 43+ US equities
 - Computes explainable technical features
