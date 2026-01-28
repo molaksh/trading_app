@@ -148,7 +148,7 @@ class Scope:
         return cls(env=env, broker=broker, mode=mode, market=market)
     
     @classmethod
-    def from_env() -> "Scope":
+    def from_env(cls) -> "Scope":
         """
         Load scope from environment variable.
         

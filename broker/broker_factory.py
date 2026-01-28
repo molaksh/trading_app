@@ -42,7 +42,7 @@ def get_broker_adapter(scope: Optional[Scope] = None) -> BrokerAdapter:
     
     if broker_name == "alpaca":
         from broker.alpaca_adapter import AlpacaAdapter
-        return AlpacaAdapter(paper_mode=(scope.env == "paper"))
+        return AlpacaAdapter()
     
     elif broker_name == "ibkr":
         from broker.ibkr_adapter import IBKRAdapter

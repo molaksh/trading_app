@@ -23,18 +23,45 @@ class IBKRAdapter(BrokerAdapter):
         self.mode = "paper" if paper_mode else "live"
         logger.info(f"IBKRAdapter initialized (mode={self.mode})")
     
-    def submit_order(self, symbol: str, quantity: int, side: str, order_type: str = "market") -> OrderResult:
-        """Submit order (stub)."""
+    @property
+    def is_paper_trading(self) -> bool:
+        """Check if in paper trading mode."""
+        return self.paper_mode
+    
+    @property
+    def account_equity(self) -> float:
+        """Get account equity (stub)."""
+        raise NotImplementedError("IBKR adapter not implemented in Phase 0")
+    
+    @property
+    def buying_power(self) -> float:
+        """Get buying power (stub)."""
+        raise NotImplementedError("IBKR adapter not implemented in Phase 0")
+    
+    def submit_market_order(self, symbol: str, quantity: float, side: str, time_in_force: str = "opg") -> OrderResult:
+        """Submit market order (stub)."""
         raise NotImplementedError("IBKR adapter not implemented in Phase 0")
     
     def get_order_status(self, order_id: str) -> OrderResult:
         """Get order status (stub)."""
         raise NotImplementedError("IBKR adapter not implemented in Phase 0")
     
+    def get_positions(self) -> Dict:
+        """Get all positions (stub)."""
+        raise NotImplementedError("IBKR adapter not implemented in Phase 0")
+    
     def get_position(self, symbol: str) -> Optional[Dict]:
         """Get position (stub)."""
         raise NotImplementedError("IBKR adapter not implemented in Phase 0")
     
-    def get_account_equity(self) -> float:
-        """Get account equity (stub)."""
+    def close_position(self, symbol: str) -> OrderResult:
+        """Close position (stub)."""
+        raise NotImplementedError("IBKR adapter not implemented in Phase 0")
+    
+    def get_market_hours(self, date: datetime) -> tuple:
+        """Get market hours (stub)."""
+        raise NotImplementedError("IBKR adapter not implemented in Phase 0")
+    
+    def is_market_open(self) -> bool:
+        """Check if market is open (stub)."""
         raise NotImplementedError("IBKR adapter not implemented in Phase 0")
