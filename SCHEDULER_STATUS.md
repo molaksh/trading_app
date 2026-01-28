@@ -234,30 +234,26 @@ clock = {
 ### Override Any Setting at Container Runtime
 
 ```bash
-# Change reconciliation interval to 30 min
-docker run -e RECONCILIATION_INTERVAL_MINUTES=30 ...
-
-# Change emergency exit check to 15 min
-docker run -e EMERGENCY_EXIT_INTERVAL_MINUTES=15 ...
-
-# Change polling frequency
-docker run -e ORDER_POLL_INTERVAL_MINUTES=2 ...
-
-# Change entry window to 30 min before close
-docker run -e ENTRY_WINDOW_MINUTES_BEFORE_CLOSE=30 ...
-
-# Change scheduler tick speed (careful: lower CPU usage but less responsive)
-docker run -e SCHEDULER_TICK_SECONDS=30 ...
-
-# Disable startup reconciliation
-docker run -e RUN_STARTUP_RECONCILIATION=false ...
-
-# Disable startup health check
-docker run -e RUN_HEALTH_CHECK_ON_BOOT=false ...
-
-# Change timezone
-docker run -e MARKET_TIMEZONE="America/Chicago" ...
+# Base command with .env file for credentials
+docker run -d \
+  --name paper-alpaca-swing-us \
+  --env-file ./.env \
+  -e MARKET=us \
+  -e APP_ENV=paper \
+  -e RECONCILIATION_INTERVAL_MINUTES=30 \
+  -e EMERGENCY_EXIT_INTERVAL_MINUTES=15 \
+  -e ORDER_POLL_INTERVAL_MINUTES=2 \
+  -e ENTRY_WINDOW_MINUTES_BEFORE_CLOSE=30 \
+  -e SCHEDULER_TICK_SECONDS=30 \
+  -e RUN_STARTUP_RECONCILIATION=true \
+  -e RUN_HEALTH_CHECK_ON_BOOT=true \
+  -e MARKET_TIMEZONE="America/Chicago" \
+  -v $(pwd)/logs:/app/logs \
+  trading-app:latest \
+  python main.py --schedule
 ```
+
+**All settings are optional** - defaults apply if not specified. Only provide `--env-file ./.env` once for credentials.
 
 ---
 
@@ -299,14 +295,24 @@ docker run -e MARKET_TIMEZONE="America/Chicago" ...
 
 ### Docker Container
 ```bash
-# Run scheduler continuously (default)
+# Run scheduler continuously (credentials from .env file)
 docker run -d \
-  --name trading-scheduler \
+  --name paper-alpaca-swing-us \
+  --env-file ./.env \
   -e MARKET=us \
   -e APP_ENV=paper \
+  -e BASE_DIR=/app/logs \
+  -e PYTHONUNBUFFERED=1 \
   -v $(pwd)/logs:/app/logs \
   trading-app:latest \
   python main.py --schedule
+```
+
+**Note:** Alpaca credentials are loaded from `.env` file:
+```dotenv
+APCA_API_BASE_URL=https://paper-api.alpaca.markets
+APCA_API_KEY_ID=your_key_here
+APCA_API_SECRET_KEY=your_secret_here
 ```
 
 ### Local Development
