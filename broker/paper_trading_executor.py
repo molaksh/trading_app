@@ -84,6 +84,7 @@ class PaperTradingExecutor:
         # Safe mode flags (set by main.py after reconciliation)
         self.safe_mode_enabled = False
         self.startup_status = "UNKNOWN"
+        self.external_symbols = set()  # Symbols in Alpaca but not in ledger (block duplicate buys)
         
         # Track submitted orders
         self.pending_orders: Dict[str, str] = {}  # order_id -> symbol
@@ -142,6 +143,15 @@ class PaperTradingExecutor:
             logger.warning(
                 f"Safe mode active ({self.startup_status}). "
                 f"Blocking new entry for {symbol}. Exits only."
+            )
+            return False, None
+        
+        # EXTERNAL SYMBOL CHECK: Block duplicate BUY on symbols already held in Alpaca
+        if symbol in self.external_symbols:
+            logger.warning(
+                f"Symbol {symbol} is held externally in Alpaca (not in ledger). "
+                f"Blocking duplicate BUY to prevent position doubling. "
+                f"To trade this symbol, close the external position first."
             )
             return False, None
         

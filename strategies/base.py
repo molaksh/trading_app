@@ -16,6 +16,8 @@ from datetime import datetime
 from typing import List, Optional, Dict, Any
 from enum import Enum
 
+from risk.scaling_policy import StrategyScalingPolicy
+
 
 class TradeDirection(Enum):
     """Universal trade direction."""
@@ -106,6 +108,51 @@ class Strategy(ABC):
         self.name = name
         self.config = config
         self.enabled = config.get("enabled", True)
+        
+        # Strategy declares its multi-entry policy
+        # If not provided, defaults to single-entry (no scaling)
+        self._scaling_policy = self._init_scaling_policy()
+    
+    def _init_scaling_policy(self) -> StrategyScalingPolicy:
+        """
+        Initialize scaling policy from config.
+        
+        Override in subclass to customize. Default: no scaling.
+        
+        Returns:
+            StrategyScalingPolicy (defaults to single-entry if not configured)
+        """
+        scaling_config = self.config.get("scaling_policy", {})
+        
+        if not scaling_config.get("allows_multiple_entries", False):
+            # Default: single-entry only
+            return StrategyScalingPolicy(allows_multiple_entries=False)
+        
+        # Multi-entry configured
+        policy = StrategyScalingPolicy(
+            allows_multiple_entries=True,
+            max_entries_per_symbol=scaling_config.get("max_entries_per_symbol", 3),
+            max_total_position_pct=scaling_config.get("max_total_position_pct", 5.0),
+            scaling_type=scaling_config.get("scaling_type", "pyramid"),
+            min_bars_between_entries=scaling_config.get("min_bars_between_entries", 5),
+            min_time_between_entries_seconds=scaling_config.get("min_time_between_entries_seconds", 300),
+            min_signal_strength_for_add=scaling_config.get("min_signal_strength_for_add", 3.0),
+            max_atr_drawdown_multiple=scaling_config.get("max_atr_drawdown_multiple", 2.0),
+            require_no_lower_low=scaling_config.get("require_no_lower_low", True),
+            require_volatility_above_median=scaling_config.get("require_volatility_above_median", True),
+        )
+        
+        # Validate policy
+        is_valid, error_msg = policy.validate()
+        if not is_valid:
+            raise ValueError(f"Invalid scaling policy for {self.name}: {error_msg}")
+        
+        return policy
+    
+    @property
+    def scaling_policy(self) -> StrategyScalingPolicy:
+        """Get this strategy's scaling policy."""
+        return self._scaling_policy
     
     @abstractmethod
     def generate_entry_intents(

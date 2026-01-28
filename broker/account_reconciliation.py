@@ -80,6 +80,9 @@ class AccountReconciler:
         self.validation_warnings = []
         self.validation_errors = []
         
+        # External symbol tracking (not in ledger but in Alpaca)
+        self.external_symbols = set()  # Symbols only in Alpaca, block duplicate buys
+        
         # Snapshots from Alpaca
         self.account_snapshot = None
         self.alpaca_positions = []
@@ -505,6 +508,19 @@ class AccountReconciler:
             logger.warning(msg)
             self.validation_warnings.append(msg)
         
+        # Check for external positions (Alpaca but not in ledger)
+        external_positions = alpaca_symbols - ledger_symbols
+        if external_positions:
+            msg = (
+                f"Found {len(external_positions)} external position(s) in Alpaca "
+                f"not tracked in ledger: {sorted(external_positions)}. "
+                f"Will block duplicate BUY orders on these symbols only."
+            )
+            logger.warning(msg)
+            # Track for symbol-level blocking, NOT global SAFE_MODE
+            self.external_symbols.update(external_positions)
+            logger.info(f"External symbols tracked: {self.external_symbols}")
+        
         # Check for closed trades that somehow have open positions
         closed_with_positions = []
         for trade in closed_trades:
@@ -523,6 +539,7 @@ class AccountReconciler:
             "open_trades": len(open_trades),
             "closed_trades": len(closed_trades),
             "missing_from_alpaca": list(missing_from_alpaca),
+            "external_symbols": list(self.external_symbols),
             "closed_with_positions": closed_with_positions,
         }
         
@@ -538,9 +555,12 @@ class AccountReconciler:
         
         Status hierarchy:
         - FAILED: Critical validation failures
-        - EXIT_ONLY: Risk checks triggered
-        - SAFE_MODE: Warnings exist but no critical failures
-        - READY: All checks pass cleanly
+        - EXIT_ONLY: Risk checks triggered (account blocked, trading blocked)
+        - SAFE_MODE: Serious ledger mismatches (closed trades with open positions, etc.)
+        - READY: All checks pass (external symbols tracked separately for symbol-level blocking)
+        
+        Note: External positions do NOT trigger SAFE_MODE. They're tracked in
+        self.external_symbols and blocked at symbol level during trade execution.
         """
         # If any critical errors, fail
         if self.validation_errors:
@@ -555,15 +575,30 @@ class AccountReconciler:
             self.safe_mode = True
             return
         
-        # If warnings exist, enter SAFE_MODE
-        if self.validation_warnings:
+        # Check for SERIOUS warnings that should trigger SAFE_MODE
+        # (but NOT external positions - those are handled symbol-level)
+        serious_warnings = []
+        for warning in self.validation_warnings:
+            # Skip external position warnings - handled via self.external_symbols
+            if "external position" in warning.lower():
+                continue
+            # Other warnings are serious
+            serious_warnings.append(warning)
+        
+        if serious_warnings:
             self.startup_status = StartupStatus.SAFE_MODE
             self.safe_mode = True
+            logger.warning(f"Entering SAFE_MODE due to: {serious_warnings}")
             return
         
-        # All clear
+        # All clear (external symbols tracked separately)
         self.startup_status = StartupStatus.READY
         self.safe_mode = False
+        if self.external_symbols:
+            logger.info(
+                f"Status: READY with {len(self.external_symbols)} external symbols tracked "
+                f"(will block duplicate BUY orders only): {self.external_symbols}"
+            )
     
     # ========================================================================
     # Logging Helpers

@@ -1,0 +1,2 @@
+{"event": "system_error", "timestamp": "2026-01-28T02:44:55.942994", "error_type": "order_submission_failed", "details": "Failed to submit order: Cannot submit order: {\"buying_power\":\"514.67\",\"code\":40310000,\"cost_basis\":\"750.27\",\"message\":\"insufficient buying power\"}"}
+{"event": "system_error", "timestamp": "2026-01-28T02:44:56.145859", "error_type": "order_submission_failed", "details": "Failed to submit order: Cannot submit order: {\"buying_power\":\"514.67\",\"code\":40310000,\"cost_basis\":\"749.72\",\"message\":\"insufficient buying power\"}"}
