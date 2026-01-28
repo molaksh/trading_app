@@ -2,6 +2,10 @@
 Unit tests for Trade Intent Guard.
 
 Tests all rules and edge cases with clear naming and documentation.
+
+PHASE: Future-proofing refactor
+- Updated to use HoldPolicy for mode-specific behavior
+- SwingHoldPolicy used for all tests (swing trading mode)
 """
 
 import pytest
@@ -17,6 +21,7 @@ from risk.trade_intent_guard import (
     create_trade,
     create_account_context,
 )
+from policies.hold_policy import SwingHoldPolicy
 
 
 # =============================================================================
@@ -25,14 +30,16 @@ from risk.trade_intent_guard import (
 
 @pytest.fixture
 def guard():
-    """Standard guard with manual override disabled."""
-    return create_guard(allow_manual_override=False)
+    """Standard guard with SwingHoldPolicy, manual override disabled."""
+    hold_policy = SwingHoldPolicy()
+    return create_guard(hold_policy=hold_policy, allow_manual_override=False)
 
 
 @pytest.fixture
 def guard_with_override():
-    """Guard with manual override enabled."""
-    return create_guard(allow_manual_override=True)
+    """Guard with SwingHoldPolicy, manual override enabled."""
+    hold_policy = SwingHoldPolicy()
+    return create_guard(hold_policy=hold_policy, allow_manual_override=True)
 
 
 @pytest.fixture

@@ -9,6 +9,12 @@ PHILOSOPHY:
 - Regulatory PDT (5-day rule) applies to MARGIN < $25k only
 - Risk-reducing exits (STOP_LOSS, RISK_MANAGER) ALWAYS allowed
 - All blocks return structured reasons for auditability
+
+PHASE: Future-proofing refactor
+- Hold period logic delegated to HoldPolicy (mode-specific)
+- PDT logic remains in guard (regulatory, not mode-specific)
+- SwingHoldPolicy: MIN_HOLD=2, MAX_HOLD=20, no same-day exits
+- DayTradeHoldPolicy: MIN_HOLD=0, MAX_HOLD=1, same-day exits allowed (NOT IMPLEMENTED)
 """
 
 import logging
@@ -16,6 +22,7 @@ from enum import Enum
 from dataclasses import dataclass
 from datetime import date, timedelta
 from typing import Tuple, Optional, Dict, List
+from policies.base import HoldPolicy
 
 logger = logging.getLogger(__name__)
 
@@ -86,32 +93,39 @@ class TradeIntentGuard:
     
     Rules are applied in priority order:
     1. Risk-reducing exits (STOP_LOSS, RISK_MANAGER) ALWAYS allowed
-    2. Same-day discretionary exits blocked
-    3. Minimum hold period enforced for small accounts
-    4. Regulatory PDT soft/hard limits for margin < $25k
-    5. Max hold period enforced
+    2. Hold period validation delegated to HoldPolicy
+    3. Regulatory PDT soft/hard limits for margin < $25k
+    
+    PHASE: Future-proofing refactor
+    - Hold period logic delegated to HoldPolicy (mode-specific)
+    - Swing mode uses SwingHoldPolicy (2-20 days, no same-day exits)
+    - Day trade mode will use DayTradeHoldPolicy (0-1 days, same-day allowed)
+    - Guard focuses on regulatory PDT only
     """
     
-    # Configuration
+    # Configuration (PDT-specific, not hold-period related)
     MIN_EQUITY_THRESHOLD = 25000.0          # Account size threshold for PDT rules
-    MIN_HOLD_DAYS = 2                       # Minimum days before discretionary exit
-    MAX_HOLD_DAYS = 20                      # Maximum days before forced exit
     PDT_SOFT_LIMIT = 2                      # Warn at 2 day trades
     PDT_HARD_LIMIT = 3                      # Block at 3 day trades (regulatory)
     PDT_WINDOW_DAYS = 5                     # Rolling window for day trade count
     ALLOW_MANUAL_OVERRIDE = False           # Disable manual overrides by default
     
-    def __init__(self, allow_manual_override: bool = False):
+    def __init__(self, hold_policy: HoldPolicy, allow_manual_override: bool = False):
         """
-        Initialize guard.
+        Initialize guard with mode-specific hold policy.
         
         Args:
+            hold_policy: HoldPolicy implementation (SwingHoldPolicy, DayTradeHoldPolicy, etc.)
             allow_manual_override: Enable manual overrides (normally disabled)
         """
+        self.hold_policy = hold_policy
         self.ALLOW_MANUAL_OVERRIDE = allow_manual_override
+        
         logger.info("TradeIntentGuard initialized")
-        logger.info(f"  Min hold days: {self.MIN_HOLD_DAYS}")
-        logger.info(f"  Max hold days: {self.MAX_HOLD_DAYS}")
+        logger.info(f"  Hold Policy: {hold_policy.get_name()}")
+        logger.info(f"  Min hold days: {hold_policy.min_hold_days()}")
+        logger.info(f"  Max hold days: {hold_policy.max_hold_days()}")
+        logger.info(f"  Same-day exits allowed: {hold_policy.allows_same_day_exit()}")
         logger.info(f"  PDT soft limit: {self.PDT_SOFT_LIMIT}")
         logger.info(f"  PDT hard limit: {self.PDT_HARD_LIMIT}")
         logger.info(f"  Manual override: {'ENABLED' if allow_manual_override else 'DISABLED'}")
@@ -128,12 +142,11 @@ class TradeIntentGuard:
         
         LOGIC:
         1. Calculate holding days
-        2. Check if max hold exceeded → FORCE EXIT
+        2. Check if max hold exceeded → FORCE EXIT (delegated to HoldPolicy)
         3. Check if risk-reducing → ALLOW (bypasses all rules)
-        4. Check behavioral PDT (same-day discretionary) → BLOCK if violated
-        5. Check minimum hold period → BLOCK if violated
-        6. Check regulatory PDT limits (margin < $25k) → BLOCK if violated
-        7. Check manual override status → ALLOW/BLOCK
+        4. Validate hold period (delegated to HoldPolicy)
+        5. Check regulatory PDT limits (margin < $25k) → BLOCK if violated
+        6. Check manual override status → ALLOW/BLOCK
         
         Args:
             trade: Trade record
@@ -155,11 +168,12 @@ class TradeIntentGuard:
         logger.info(f"Exit reason: {exit_reason.value}")
         logger.info(f"Account: {account_context.account_type} (${account_context.account_equity:,.2f})")
         logger.info(f"Day trades (5d): {account_context.day_trade_count_5d}")
+        logger.info(f"Hold Policy: {self.hold_policy.get_name()}")
         
         # ====================================================================
-        # RULE 1: Force exit if max hold exceeded
+        # RULE 1: Force exit if max hold exceeded (HoldPolicy)
         # ====================================================================
-        if holding_days > self.MAX_HOLD_DAYS:
+        if self.hold_policy.is_forced_exit_required(holding_days):
             decision = ExitDecision(
                 allowed=True,
                 reason=BlockReason.MAX_HOLD_EXCEEDED.value,
@@ -169,13 +183,14 @@ class TradeIntentGuard:
                 account_type=account_context.account_type,
                 day_trade_count_5d=account_context.day_trade_count_5d,
             )
-            logger.info(f"✅ FORCED EXIT: Max hold period exceeded ({holding_days} > {self.MAX_HOLD_DAYS})")
+            logger.info(f"✅ FORCED EXIT: Max hold period exceeded ({holding_days} > {self.hold_policy.max_hold_days()})")
             return decision
         
         # ====================================================================
         # RULE 2: Risk-reducing exits ALWAYS allowed (override all rules)
         # ====================================================================
-        if exit_reason in [ExitReason.STOP_LOSS, ExitReason.RISK_MANAGER]:
+        is_risk_reducing = exit_reason in [ExitReason.STOP_LOSS, ExitReason.RISK_MANAGER]
+        if is_risk_reducing:
             decision = ExitDecision(
                 allowed=True,
                 reason=BlockReason.ALLOWED.value,
@@ -189,41 +204,25 @@ class TradeIntentGuard:
             return decision
         
         # ====================================================================
-        # RULE 3: Behavioral PDT - Block same-day discretionary exits
+        # RULE 3: Validate hold period (delegated to HoldPolicy)
         # ====================================================================
-        # This applies to ALL accounts (not just margin < $25k)
-        if holding_days == 0:
+        allowed, block_reason = self.hold_policy.validate_hold_period(holding_days, is_risk_reducing)
+        if not allowed:
             decision = ExitDecision(
                 allowed=False,
-                reason=BlockReason.SAME_DAY_DISCRETIONARY.value,
-                block_reason=f"Cannot exit same day as entry ({exit_reason.value} not allowed)",
+                reason=BlockReason.MIN_HOLD_NOT_MET.value if holding_days < self.hold_policy.min_hold_days() 
+                       else BlockReason.SAME_DAY_DISCRETIONARY.value,
+                block_reason=block_reason,
                 holding_days=holding_days,
                 account_equity=account_context.account_equity,
                 account_type=account_context.account_type,
                 day_trade_count_5d=account_context.day_trade_count_5d,
             )
-            logger.warning(f"❌ BLOCKED: Same-day discretionary exit not allowed")
+            logger.warning(f"❌ BLOCKED: {block_reason}")
             return decision
         
         # ====================================================================
-        # RULE 4: Minimum hold period (accounts < $25k)
-        # ====================================================================
-        if account_context.account_equity < self.MIN_EQUITY_THRESHOLD:
-            if holding_days < self.MIN_HOLD_DAYS:
-                decision = ExitDecision(
-                    allowed=False,
-                    reason=BlockReason.MIN_HOLD_NOT_MET.value,
-                    block_reason=f"Must hold for {self.MIN_HOLD_DAYS} days ({holding_days} days held)",
-                    holding_days=holding_days,
-                    account_equity=account_context.account_equity,
-                    account_type=account_context.account_type,
-                    day_trade_count_5d=account_context.day_trade_count_5d,
-                )
-                logger.warning(f"❌ BLOCKED: Minimum hold period not met ({holding_days} < {self.MIN_HOLD_DAYS})")
-                return decision
-        
-        # ====================================================================
-        # RULE 5: Regulatory PDT limits (MARGIN only, < $25k)
+        # RULE 4: Regulatory PDT limits (MARGIN only, < $25k)
         # ====================================================================
         if (account_context.account_type == "MARGIN" and 
             account_context.account_equity < self.MIN_EQUITY_THRESHOLD):
@@ -260,7 +259,7 @@ class TradeIntentGuard:
                     return decision
         
         # ====================================================================
-        # RULE 6: Manual override (normally disabled)
+        # RULE 5: Manual override (normally disabled)
         # ====================================================================
         if exit_reason == ExitReason.MANUAL_OVERRIDE:
             if not self.ALLOW_MANUAL_OVERRIDE:
@@ -335,9 +334,18 @@ class TradeIntentGuard:
 # CONVENIENCE FACTORY FUNCTIONS
 # =============================================================================
 
-def create_guard(allow_manual_override: bool = False) -> TradeIntentGuard:
-    """Create a TradeIntentGuard with defaults."""
-    return TradeIntentGuard(allow_manual_override=allow_manual_override)
+def create_guard(hold_policy: HoldPolicy, allow_manual_override: bool = False) -> TradeIntentGuard:
+    """
+    Create a TradeIntentGuard with hold policy.
+    
+    Args:
+        hold_policy: HoldPolicy implementation (SwingHoldPolicy, DayTradeHoldPolicy, etc.)
+        allow_manual_override: Enable manual overrides (normally disabled)
+    
+    Returns:
+        Configured TradeIntentGuard
+    """
+    return TradeIntentGuard(hold_policy=hold_policy, allow_manual_override=allow_manual_override)
 
 
 def create_trade(

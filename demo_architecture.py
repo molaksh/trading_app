@@ -20,7 +20,8 @@ from instruments.base import EquityInstrument, OptionInstrument
 from markets.base import IndiaMarket, USMarket
 
 # Risk components
-from risk.trade_intent_guard import TradeIntentGuard, create_account_context
+from risk.trade_intent_guard import TradeIntentGuard, create_guard, create_account_context
+from policies.hold_policy import SwingHoldPolicy
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -55,8 +56,12 @@ def demo_india_swing_trading():
         }
     )
     
-    # 3. Initialize intent guard
-    intent_guard = TradeIntentGuard(allow_manual_override=False)
+    # 3. Initialize intent guard with HoldPolicy (PHASE: Future-proofing refactor)
+    from policies.hold_policy import SwingHoldPolicy
+    from risk.trade_intent_guard import create_guard
+    
+    hold_policy = SwingHoldPolicy()
+    intent_guard = create_guard(hold_policy=hold_policy, allow_manual_override=False)
     
     # 4. Mock broker and risk manager
     class MockBroker:
@@ -131,8 +136,9 @@ def demo_us_multi_strategy():
         config={"min_confidence": 3, "max_positions": 10}
     )
     
-    # 3. Initialize intent guard
-    intent_guard = TradeIntentGuard(allow_manual_override=False)
+    # 3. Initialize intent guard with HoldPolicy (PHASE: Future-proofing refactor)
+    hold_policy = SwingHoldPolicy()
+    intent_guard = create_guard(hold_policy=hold_policy, allow_manual_override=False)
     
     # 4. Mock broker (small account with PDT)
     class MockBroker:
