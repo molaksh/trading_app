@@ -14,7 +14,7 @@ from config.settings import START_CAPITAL, RUN_MONITORING
 from config.scope import get_scope, Scope
 from config.scope_paths import get_scope_paths
 from broker.broker_factory import get_broker_adapter
-from broker.broker import BrokerAdapter  # Abstract base
+from broker.adapter import BrokerAdapter  # Abstract base
 from broker.paper_trading_executor import PaperTradingExecutor
 from broker.execution_logger import ExecutionLogger
 from broker.trade_ledger import TradeLedger
