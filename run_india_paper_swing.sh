@@ -23,13 +23,21 @@ if [ -f ".env" ]; then
     source .env
 fi
 
-# Build Docker image
-echo "Building Docker image: paper-nse-swing-india..."
-docker build -t paper-nse-swing-india .
+# Stop old container if running
+echo "Stopping old container (if running)..."
+docker stop paper-nse-swing-india 2>/dev/null || true
 
 # Remove old container if exists
 echo "Removing old container (if exists)..."
-docker rm -f paper-nse-swing-india 2>/dev/null || true
+docker rm paper-nse-swing-india 2>/dev/null || true
+
+# Remove old image if exists
+echo "Removing old image (if exists)..."
+docker rmi paper-nse-swing-india 2>/dev/null || true
+
+# Build Docker image
+echo "Building Docker image: paper-nse-swing-india..."
+docker build -f Dockerfile.india -t paper-nse-swing-india .
 
 # Run container
 echo "Starting container: paper-nse-swing-india..."
