@@ -11,6 +11,9 @@ import yfinance as yf
 from datetime import datetime, timedelta, timezone
 import warnings
 
+from config.scope import get_scope
+from core.data.providers.nse_provider import NSEProvider
+
 # Suppress yfinance warnings
 warnings.filterwarnings('ignore')
 
@@ -103,6 +106,49 @@ def load_price_data(symbol: str, lookback_days: int) -> Optional[pd.DataFrame]:
         Clean DataFrame with columns [Open, High, Low, Close, Volume]
         indexed by date. Returns None if fetch fails or data insufficient.
     """
+    scope = get_scope()
+
+    # India swing (equity): NSE provider only (no yfinance)
+    if scope.market.lower() == "india" and scope.mode.lower() == "swing":
+        try:
+            end_date = datetime.now()
+            start_date = end_date - timedelta(days=lookback_days * 1.5)
+
+            provider = NSEProvider(scope=scope)
+            bars = provider.get_daily_ohlcv(symbol, start_date, end_date)
+
+            if not bars:
+                logger.error(f"NSE returned no data for {symbol}")
+                return None
+
+            df = pd.DataFrame([
+                {
+                    "Date": b.date.date(),
+                    "Open": b.open,
+                    "High": b.high,
+                    "Low": b.low,
+                    "Close": b.close,
+                    "Volume": b.volume,
+                }
+                for b in bars
+            ])
+
+            if df.empty:
+                logger.error(f"NSE returned empty DataFrame for {symbol}")
+                return None
+
+            df["Date"] = pd.to_datetime(df["Date"])
+            df = df.set_index("Date").sort_index()
+
+            if len(df) > lookback_days:
+                df = df.iloc[-lookback_days:]
+
+            logger.debug(f"Successfully loaded {len(df)} days for {symbol} via NSE")
+            return df
+        except Exception as e:
+            logger.error(f"NSE data error for {symbol}: {type(e).__name__}: {e}")
+            return None
+
     # 1) Try Alpaca first
     alpaca_df = _load_from_alpaca(symbol, lookback_days)
     if alpaca_df is not None and not alpaca_df.empty:

@@ -52,6 +52,7 @@ from config.settings import (
     LOG_DATE_FORMAT,
     START_CAPITAL,
 )
+from config.scope import get_scope
 from execution.runtime import (
     PaperTradingRuntime,
     build_paper_trading_runtime,
@@ -111,6 +112,7 @@ def main():
     logger.info(f"Trading Screener | {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     logger.info("=" * PRINT_WIDTH)
     
+    scope = get_scope()
     results = []
     failed_symbols = []
     skipped_symbols = []
@@ -127,6 +129,8 @@ def main():
             if df is None or len(df) == 0:
                 logger.warning(f"  {symbol}: Skipping (no data)")
                 skipped_symbols.append((symbol, "no_data"))
+                if scope.market.lower() == "india":
+                    raise RuntimeError(f"NSE returned empty data for {symbol}")
                 continue
             
             # Compute features
@@ -173,6 +177,8 @@ def main():
         except Exception as e:
             logger.error(f"  {symbol}: Unexpected error: {type(e).__name__}: {e}")
             failed_symbols.append((symbol, str(e)))
+            if scope.market.lower() == "india":
+                raise
             continue
     
     # Step 4: Rank by confidence (deterministically)
