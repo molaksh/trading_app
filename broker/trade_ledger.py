@@ -155,6 +155,7 @@ class TradeLedger:
             ledger_file: Path to persist ledger (JSON). If None, uses ScopePathResolver.
         """
         self.trades: List[Trade] = []
+        self._open_positions: Dict[str, Dict[str, Any]] = {}  # Track external positions
         
         if ledger_file is None:
             # Phase 0: Use scope-aware path resolver
@@ -163,16 +164,19 @@ class TradeLedger:
             ledger_file = ledger_dir / "trades.jsonl"
         
         self.ledger_file = Path(ledger_file)
+        self.open_positions_file = self.ledger_file.parent / "open_positions.json"
         self.ledger_file.parent.mkdir(parents=True, exist_ok=True)
         
-        # Load existing trades
+        # Load existing trades and open positions
         self._load_from_disk()
+        self._load_open_positions()
         
         scope = get_scope()
         logger.info("=" * 80)
         logger.info(f"TRADE LEDGER INITIALIZED (SCOPE: {scope})")
         logger.info(f"  Ledger file: {self.ledger_file}")
         logger.info(f"  Existing trades: {len(self.trades)}")
+        logger.info(f"  Open positions: {len(self._open_positions)}")
         logger.info("=" * 80)
     
     def add_trade(self, trade: Trade) -> None:
@@ -383,6 +387,26 @@ class TradeLedger:
         except Exception as e:
             logger.error(f"Failed to load trade ledger: {e}")
             # Continue with empty ledger rather than crash
+    
+    def _save_open_positions(self) -> None:
+        """Persist open positions to disk."""
+        try:
+            with open(self.open_positions_file, 'w') as f:
+                json.dump(self._open_positions, f, indent=2)
+        except Exception as e:
+            logger.error(f"Failed to save open positions: {e}")
+    
+    def _load_open_positions(self) -> None:
+        """Load open positions from disk."""
+        if not self.open_positions_file.exists():
+            return
+        
+        try:
+            with open(self.open_positions_file, 'r') as f:
+                self._open_positions = json.load(f)
+            logger.info(f"Loaded {len(self._open_positions)} open positions")
+        except Exception as e:
+            logger.error(f"Failed to load open positions: {e}")
 
 
 def create_trade_from_fills(
@@ -562,11 +586,8 @@ class LedgerReconciliationHelper:
             "reconciled_at": datetime.now().isoformat()
         }
         
-        # Store in ledger's internal tracking (not a completed trade yet)
-        if not hasattr(ledger, '_open_positions'):
-            ledger._open_positions = {}
-        
         ledger._open_positions[position.symbol] = metadata
+        ledger._save_open_positions()
         logger.info(f"✓ Position {position.symbol} tracked in ledger for future exit")
     
     @staticmethod

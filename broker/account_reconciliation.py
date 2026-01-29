@@ -333,9 +333,11 @@ class AccountReconciler:
                 "status": None,
             }
             
-            # Check if position exists in local ledger
+            # Check if position exists in local ledger (trades or open positions)
             ledger_trades = self.trade_ledger.get_trades_for_symbol(symbol)
-            position_known = bool(ledger_trades)
+            has_open_position = (hasattr(self.trade_ledger, '_open_positions') and 
+                                symbol in self.trade_ledger._open_positions)
+            position_known = bool(ledger_trades) or has_open_position
             
             if not position_known:
                 status_result["status"] = PositionStatus.EXTERNAL.value

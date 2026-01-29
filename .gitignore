@@ -116,6 +116,24 @@ data/cache/
 *.temp
 
 # ============================================================================
+# Logs, Ledgers & ML Data
+# ============================================================================
+# All logs (paper, live, observation)
+logs/
+
+# Ledger data (trades, positions, reconciliation)
+ledgers/
+
+# ML model data and training artifacts
+ml_data/
+models/
+*.pkl
+*.joblib
+*.h5
+*.pt
+*.pth
+
+# ============================================================================
 # IMPORTANT NOTES
 # ============================================================================
 #
