@@ -56,9 +56,9 @@ docker run -d \
   -e MARKET_TIMEZONE=America/New_York \
   -e ENTRY_WINDOW_MINUTES_BEFORE_CLOSE=5 \
   -e SWING_EXIT_DELAY_MINUTES_AFTER_CLOSE=15 \
-  -e ALPACA_API_KEY="${APCA_API_KEY_ID}" \
-  -e ALPACA_API_SECRET="${APCA_API_SECRET_KEY}" \
-  -e ALPACA_BASE_URL="${APCA_API_BASE_URL}" \
+  -e APCA_API_KEY_ID="${APCA_API_KEY_ID}" \
+  -e APCA_API_SECRET_KEY="${APCA_API_SECRET_KEY}" \
+  -e APCA_API_BASE_URL="${APCA_API_BASE_URL}" \
   paper-alpaca-swing-us python -m execution.scheduler
 
 echo ""
