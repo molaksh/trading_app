@@ -213,6 +213,16 @@ class TradingScheduler:
 
     def _get_clock(self) -> Dict[str, Optional[datetime]]:
         """Get market clock with retry logic and caching."""
+        # Handle mock mode (no client)
+        if not self.runtime.broker.client:
+            logger.info("Mock mode: using default market clock")
+            return {
+                "is_open": False,  # Conservative - assume market is closed
+                "timestamp": self._now(),
+                "next_open": None,
+                "next_close": None,
+            }
+        
         max_retries = 3
         retry_delay = 1  # seconds
         
@@ -411,3 +421,23 @@ class TradingScheduler:
             self._run_health_check(now)
 
             time.sleep(self.tick_seconds)
+
+
+if __name__ == "__main__":
+    import logging.config
+    
+    # Configure logging
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s | %(levelname)-8s | %(name)-20s | %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+    
+    try:
+        scheduler = TradingScheduler()
+        scheduler.run_forever()
+    except KeyboardInterrupt:
+        logger.info("Scheduler interrupted by user")
+    except Exception as e:
+        logger.error(f"Scheduler failed: {e}", exc_info=True)
+        raise

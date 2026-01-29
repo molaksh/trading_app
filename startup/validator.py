@@ -215,6 +215,13 @@ class StartupValidator:
             scope = get_scope()
             return True, f"{scope.broker} adapter (stub implementation)"
         except Exception as e:
+            # For paper trading, warn but don't fail
+            scope = get_scope()
+            if scope.env == "paper":
+                error_str = str(e).lower()
+                if "credential" in error_str or "unauthorized" in error_str or "api key" in error_str:
+                    self._warn(f"Alpaca API credentials not validated (paper mode): {e}")
+                    return True, f"{scope.broker} adapter (paper mode - skipped credential check)"
             return False, f"Broker selection failed: {e}"
     
     def _validate_strategies(self) -> Tuple[bool, str]:

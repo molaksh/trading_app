@@ -97,12 +97,12 @@ class SwingEquityStrategy(Strategy):
         enabled_names = self.config.get("enabled_strategies", [])
         per_strategy_configs = self.config.get("strategy_configs", {})
         
-        # Import all strategy implementations
-        from strategies.us.equity.swing.swing_trend_pullback import SwingTrendPullbackStrategy
-        from strategies.us.equity.swing.swing_momentum_breakout import SwingMomentumBreakoutStrategy
-        from strategies.us.equity.swing.swing_mean_reversion import SwingMeanReversionStrategy
-        from strategies.us.equity.swing.swing_volatility_squeeze import SwingVolatilitySqueezeStrategy
-        from strategies.us.equity.swing.swing_event_driven import SwingEventDrivenStrategy
+        # Import all strategy implementations from canonical core location
+        from core.strategies.equity.swing.swing_trend_pullback import SwingTrendPullbackStrategy
+        from core.strategies.equity.swing.swing_momentum_breakout import SwingMomentumBreakoutStrategy
+        from core.strategies.equity.swing.swing_mean_reversion import SwingMeanReversionStrategy
+        from core.strategies.equity.swing.swing_volatility_squeeze import SwingVolatilitySqueezeStrategy
+        from core.strategies.equity.swing.swing_event_driven import SwingEventDrivenStrategy
         
         strategy_classes = [
             ("trend_pullback", SwingTrendPullbackStrategy),

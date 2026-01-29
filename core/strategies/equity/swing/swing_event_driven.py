@@ -37,7 +37,7 @@ CAVEATS:
 import logging
 from typing import List, Dict, Any
 
-from strategies.us.equity.swing.swing_base import BaseSwingStrategy, SwingStrategyMetadata
+from core.strategies.equity.swing.swing_base import BaseSwingStrategy, SwingStrategyMetadata
 from strategies.base import TradeIntent, TradeDirection, IntentType, IntentUrgency
 
 logger = logging.getLogger(__name__)

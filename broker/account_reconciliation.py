@@ -157,6 +157,22 @@ class AccountReconciler:
         logger.info("Fetching account snapshot...")
         
         try:
+            # Handle mock mode (no client)
+            if not self.broker.client:
+                logger.warning("Mock mode: using default account snapshot")
+                self.account_snapshot = {
+                    "status": "ACTIVE",
+                    "equity": 100000.0,
+                    "cash": 100000.0,
+                    "buying_power": 100000.0,
+                    "multiplier": 1.0,
+                    "trading_blocked": False,
+                    "account_blocked": False,
+                    "pattern_day_trader": False,
+                    "day_trade_count": 0,
+                }
+                return
+            
             account = self.broker.client.get_account()
             
             # Build snapshot from available attributes
@@ -208,6 +224,12 @@ class AccountReconciler:
         logger.info("Fetching open positions from Alpaca...")
         
         try:
+            # Handle mock mode (no client)
+            if not self.broker.client:
+                logger.warning("Mock mode: using empty positions list")
+                self.alpaca_positions = []
+                return
+            
             positions = self.broker.client.get_all_positions()
             self.alpaca_positions = positions or []
             
@@ -237,6 +259,12 @@ class AccountReconciler:
         logger.info("Fetching open orders from Alpaca...")
         
         try:
+            # Handle mock mode (no client)
+            if not self.broker.client:
+                logger.warning("Mock mode: using empty orders list")
+                self.alpaca_orders = []
+                return
+            
             # Try different possible API methods for fetching orders
             orders = None
             

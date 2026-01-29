@@ -117,12 +117,17 @@ class AlpacaAdapter(BrokerAdapter):
             secret_key = os.getenv("APCA_API_SECRET_KEY")
             base_url = os.getenv("APCA_API_BASE_URL", "https://paper-api.alpaca.markets")
             
+            # For demo/testing: allow running without real credentials
             if not api_key or not secret_key:
-                raise ValueError(
-                    "Missing API credentials. "
-                    "Set APCA_API_KEY_ID and APCA_API_SECRET_KEY environment variables."
+                logger.warning(
+                    "No Alpaca API credentials provided (APCA_API_KEY_ID/APCA_API_SECRET_KEY). "
+                    "Running in mock mode. Orders will not be executed."
                 )
+                self.client = None
+                self.is_mock = True
+                return  # Skip client initialization
             
+            self.is_mock = False
             self.client = TradingClient(
                 api_key=api_key,
                 secret_key=secret_key,
@@ -130,16 +135,27 @@ class AlpacaAdapter(BrokerAdapter):
                 url_override=base_url
             )
         except Exception as e:
+            # Check if this is just missing credentials
+            if "APCA_API_KEY_ID" in str(e) or "APCA_API_SECRET_KEY" in str(e):
+                logger.warning(
+                    "Alpaca API credentials not configured. "
+                    "Running in mock mode. Orders will not be executed."
+                )
+                self.client = None
+                self.is_mock = True
+                return
+            
             raise ValueError(
                 "Failed to initialize Alpaca client. "
                 "Check APCA_API_KEY_ID and APCA_API_SECRET_KEY environment variables. "
                 f"Error: {e}"
             ) from e
         
-        # Verify paper trading
-        self._verify_paper_trading()
+        # Verify paper trading only if client is initialized
+        if self.client:
+            self._verify_paper_trading()
         
-        logger.info("Alpaca adapter initialized (paper trading)")
+        logger.info(f"Alpaca adapter initialized ({'mock mode' if self.is_mock else 'paper trading'})")
     
     def _verify_paper_trading(self) -> None:
         """
@@ -148,6 +164,10 @@ class AlpacaAdapter(BrokerAdapter):
         Raises:
             RuntimeError: If live trading URL is detected
         """
+        if not self.client:
+            logger.warning("Skipping paper trading verification (mock mode)")
+            return
+        
         # Get account to verify trading mode
         try:
             account = self.client.get_account()
@@ -175,6 +195,9 @@ class AlpacaAdapter(BrokerAdapter):
         Raises:
             RuntimeError: If configuration indicates live trading
         """
+        if not self.client:
+            return True  # Mock mode is safe (paper)
+        
         # Alpaca doesn't explicitly flag paper vs live in same way,
         # but we can check base URL
         try:
@@ -192,6 +215,10 @@ class AlpacaAdapter(BrokerAdapter):
         Returns:
             Equity in USD
         """
+        if not self.client:
+            logger.warning("Mock mode: returning $100,000 for account equity")
+            return 100000.0
+        
         try:
             account = self.client.get_account()
             return float(account.equity)
@@ -207,6 +234,10 @@ class AlpacaAdapter(BrokerAdapter):
         Returns:
             Buying power in USD
         """
+        if not self.client:
+            logger.warning("Mock mode: returning $100,000 for buying power")
+            return 100000.0
+        
         try:
             account = self.client.get_account()
             return float(account.buying_power)
@@ -248,6 +279,21 @@ class AlpacaAdapter(BrokerAdapter):
         
         if side.lower() not in ("buy", "sell"):
             raise ValueError(f"Side must be 'buy' or 'sell': {side}")
+        
+        # For mock mode, return a mock order
+        if not self.client:
+            logger.warning(f"Mock mode: simulating {side} order for {quantity} {symbol.upper()}")
+            return OrderResult(
+                order_id=f"MOCK-{symbol.upper()}-{quantity}",
+                symbol=symbol.upper(),
+                side=side.lower(),
+                quantity=float(quantity),
+                status=OrderStatus.PENDING,
+                timestamp=datetime.now(),
+                filled_quantity=0.0,
+                filled_price=None,
+                avg_fill_price=None,
+            )
         
         # Map to Alpaca enums
         try:
@@ -303,6 +349,19 @@ class AlpacaAdapter(BrokerAdapter):
         if not order_id:
             raise ValueError("order_id cannot be empty")
         
+        if not self.client:
+            logger.warning(f"Mock mode: returning pending status for order {order_id}")
+            return OrderResult(
+                order_id=order_id,
+                symbol="UNKNOWN",
+                side="unknown",
+                quantity=0.0,
+                status=OrderStatus.PENDING,
+                filled_qty=0.0,
+                filled_price=None,
+                submit_time=datetime.now(),
+            )
+        
         try:
             order = self.client.get_order_by_id(order_id)
             
@@ -330,6 +389,10 @@ class AlpacaAdapter(BrokerAdapter):
         Returns:
             Dict mapping symbol -> Position
         """
+        if not self.client:
+            logger.warning("Mock mode: returning no positions")
+            return {}
+        
         try:
             positions = self.client.get_all_positions()
 
@@ -438,6 +501,10 @@ class AlpacaAdapter(BrokerAdapter):
         Returns:
             True if market open, False otherwise
         """
+        if not self.client:
+            logger.warning("Mock mode: assuming market is open")
+            return False  # Conservative - don't assume market is open
+        
         try:
             clock = self.client.get_clock()
             return clock.is_open
