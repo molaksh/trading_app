@@ -5,40 +5,96 @@ All data, logs, models, state must be stored OUTSIDE the container
 in mounted persistent volumes, organized by SCOPE.
 
 Expected filesystem layout:
-  <BASE_DIR>/
-    <SCOPE>/
-      logs/
-        execution_log.jsonl
-        trade_ledger.json
-        observations.jsonl
-      models/
-        <strategy_name>/
-          v00001/
-            model.pkl
-            metadata.json
-          v00002/
-            ...
-          active.json  (which version is active)
-      state/
-        ml_state.json
-        scheduler_state.json
-      features/
-        features_YYYY-MM-DD.csv
-      labels/
-        labels_YYYY-MM-DD.csv
-      data/
-        trades.jsonl
-        market_data.csv
+    <PERSISTENCE_ROOT>/
+        <SCOPE>/
+            ledger/
+                trades.jsonl
+            models/
+                active_model.json
+                <strategy_name>/
+                    v00001/
+                        model.pkl
+                        metadata.json
+                    v00002/
+                        ...
+            features/
+                features_YYYY-MM-DD.csv
+            labels/
+                labels_YYYY-MM-DD.csv
+            state/
+                ml_state.json
+                broker_state.json
+                scheduler_state.json
+            logs/
+                execution_log.jsonl
+                errors.jsonl
+                observations.jsonl
+            cache/
+                ohlcv/
+                    <symbol>_daily.csv
 """
 
 import os
 import logging
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Union
 
 from config.scope import Scope, get_scope
 
 logger = logging.getLogger(__name__)
+
+
+def _is_docker_environment() -> bool:
+    """Return True if running inside a Docker container."""
+    return Path("/.dockerenv").exists()
+
+
+def _is_mounted_path(path: Path) -> bool:
+    """Best-effort check for mount points inside containers."""
+    try:
+        if path.is_mount():
+            return True
+    except Exception:
+        pass
+
+    try:
+        mountinfo = Path("/proc/self/mountinfo")
+        if mountinfo.exists():
+            with mountinfo.open() as f:
+                for line in f:
+                    # mount point is the 5th field in mountinfo
+                    parts = line.split()
+                    if len(parts) > 4 and parts[4] == str(path):
+                        return True
+    except Exception:
+        pass
+
+    return False
+
+
+def _validate_persistence_root(root: Path) -> None:
+    """Fail fast if persistence root is missing, not mounted, or not writable."""
+    if not root.is_absolute():
+        raise ValueError(f"PERSISTENCE_ROOT must be absolute: {root}")
+
+    try:
+        root.mkdir(parents=True, exist_ok=True)
+    except Exception as e:
+        raise ValueError(f"Cannot create PERSISTENCE_ROOT {root}: {e}")
+
+    if _is_docker_environment() and not _is_mounted_path(root):
+        raise ValueError(
+            f"PERSISTENCE_ROOT {root} is not a mounted volume. "
+            f"Refusing to start to avoid container-local state."
+        )
+
+    # Write permission check
+    test_file = root / ".persist_test"
+    try:
+        test_file.write_text("test")
+        test_file.unlink()
+    except Exception as e:
+        raise ValueError(f"PERSISTENCE_ROOT not writable: {e}")
 
 
 class ScopePathResolver:
@@ -64,42 +120,36 @@ class ScopePathResolver:
         """
         self.scope = scope
         
-        # Get base directory (required)
-        base_dir = os.getenv("BASE_DIR")
-        if not base_dir:
+        # Get persistence root (required)
+        persistence_root = os.getenv("PERSISTENCE_ROOT")
+        if not persistence_root:
             raise ValueError(
-                "BASE_DIR env var not set. "
-                "Must point to persistent storage directory (e.g., /persistent/data)"
+                "PERSISTENCE_ROOT env var not set. "
+                "Must point to a mounted persistent storage directory (e.g., /app/persist)"
             )
-        
-        self.base_dir = Path(base_dir)
+
+        self.base_dir = Path(persistence_root)
+        _validate_persistence_root(self.base_dir)
         self.scope_dir = self.base_dir / str(scope)
-        
-        # Validate base directory is accessible
-        try:
-            self.base_dir.mkdir(parents=True, exist_ok=True)
-        except Exception as e:
-            raise ValueError(
-                f"Cannot create BASE_DIR {self.base_dir}: {e}. "
-                f"Ensure it's a mounted persistent volume."
-            )
         
         # Create scope-specific subdirectories
         self._ensure_subdirectories()
         
         logger.info(f"ScopePathResolver initialized for {scope}")
-        logger.info(f"  Base directory: {self.base_dir.absolute()}")
+        logger.info(f"  Persistence root: {self.base_dir.absolute()}")
         logger.info(f"  Scope directory: {self.scope_dir.absolute()}")
     
     def _ensure_subdirectories(self) -> None:
         """Create all required subdirectories."""
         subdirs = [
             self.get_logs_dir(),
+            self.get_ledger_dir(),
             self.get_models_dir(),
             self.get_state_dir(),
             self.get_features_dir(),
             self.get_labels_dir(),
-            self.get_data_dir(),
+            self.get_cache_dir(),
+            self.get_ohlcv_cache_dir(),
         ]
         
         for path in subdirs:
@@ -109,7 +159,7 @@ class ScopePathResolver:
                 logger.warning(f"Could not create {path}: {e}")
     
     # =========================================================================
-    # Logs (execution_log.jsonl, trade_ledger.json, observations.jsonl)
+    # Logs (execution_log.jsonl, errors.jsonl, observations.jsonl)
     # =========================================================================
     
     def get_logs_dir(self) -> Path:
@@ -122,8 +172,20 @@ class ScopePathResolver:
     
     def get_trade_ledger_path(self) -> Path:
         """Path to trade ledger (completed trades only)."""
-        return self.get_logs_dir() / "trade_ledger.json"
-    
+        return self.get_ledger_dir() / "trades.jsonl"
+
+    # =========================================================================
+    # Ledger (trade history)
+    # =========================================================================
+
+    def get_ledger_dir(self) -> Path:
+        """Get ledger directory."""
+        return self.scope_dir / "ledger"
+
+    def get_ledger_file(self) -> Path:
+        """Get trades ledger file (JSONL)."""
+        return self.get_ledger_dir() / "trades.jsonl"
+
     def get_observation_log_path(self) -> Path:
         """Path to observation log (monitoring without trading)."""
         return self.get_logs_dir() / "observations.jsonl"
@@ -148,9 +210,9 @@ class ScopePathResolver:
         """Get specific model version directory (e.g., v00001)."""
         return self.get_strategy_models_dir(strategy_name) / version
     
-    def get_active_model_file(self, strategy_name: str) -> Path:
-        """Get active.json file that pins current model version."""
-        return self.get_strategy_models_dir(strategy_name) / "active.json"
+    def get_active_model_file(self) -> Path:
+        """Get active_model.json file that pins current model version."""
+        return self.get_models_dir() / "active_model.json"
     
     # =========================================================================
     # State (ml_state.json, scheduler_state.json, etc.)
@@ -183,22 +245,22 @@ class ScopePathResolver:
     def get_dataset_dir(self) -> Path:
         """Get dataset directory (combined features+labels)."""
         return self.scope_dir / "dataset"
-    
+
     # =========================================================================
-    # Raw Data
+    # Cache (market data)
     # =========================================================================
-    
-    def get_data_dir(self) -> Path:
-        """Get data directory for raw market data, trades, etc."""
-        return self.scope_dir / "data"
-    
-    def get_trades_file(self) -> Path:
-        """Get file for serialized trades."""
-        return self.get_data_dir() / "trades.jsonl"
-    
+
+    def get_cache_dir(self) -> Path:
+        """Get cache directory for raw market data."""
+        return self.scope_dir / "cache"
+
+    def get_ohlcv_cache_dir(self) -> Path:
+        """Get OHLCV cache directory."""
+        return self.get_cache_dir() / "ohlcv"
+
     def get_market_data_file(self) -> Path:
-        """Get file for market data."""
-        return self.get_data_dir() / "market_data.csv"
+        """Get file for market data (optional, legacy)."""
+        return self.get_cache_dir() / "market_data.csv"
     
     # =========================================================================
     # Utilities
@@ -208,15 +270,52 @@ class ScopePathResolver:
         """Return summary of resolved paths for validation/logging."""
         return {
             "scope": str(self.scope),
-            "base_dir": str(self.base_dir.absolute()),
+            "persistence_root": str(self.base_dir.absolute()),
             "scope_dir": str(self.scope_dir.absolute()),
             "logs_dir": str(self.get_logs_dir().absolute()),
+            "ledger_dir": str(self.get_ledger_dir().absolute()),
             "models_dir": str(self.get_models_dir().absolute()),
             "state_dir": str(self.get_state_dir().absolute()),
             "features_dir": str(self.get_features_dir().absolute()),
             "labels_dir": str(self.get_labels_dir().absolute()),
-            "data_dir": str(self.get_data_dir().absolute()),
+            "cache_dir": str(self.get_cache_dir().absolute()),
         }
+
+
+def get_scope_path(scope: Union[Scope, str, None], component: str) -> Path:
+    """
+    Resolve a component path for a given scope.
+
+    Allowed components:
+    - ledger
+    - models
+    - features
+    - labels
+    - state
+    - logs
+    - cache
+    """
+    if scope is None:
+        scope = get_scope()
+    elif isinstance(scope, str):
+        scope = Scope.from_string(scope)
+
+    resolver = ScopePathResolver(scope)
+
+    allowed = {
+        "ledger": resolver.get_ledger_dir,
+        "models": resolver.get_models_dir,
+        "features": resolver.get_features_dir,
+        "labels": resolver.get_labels_dir,
+        "state": resolver.get_state_dir,
+        "logs": resolver.get_logs_dir,
+        "cache": resolver.get_cache_dir,
+    }
+
+    if component not in allowed:
+        raise ValueError(f"Invalid component: {component}. Allowed: {sorted(allowed.keys())}")
+
+    return allowed[component]()
 
 
 def get_scope_paths(scope: Optional[Scope] = None) -> ScopePathResolver:

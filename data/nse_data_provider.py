@@ -8,7 +8,7 @@ Fetches historical OHLCV data for NSE stocks:
 - Independent from US data sources
 
 Cache Structure:
-- data/<scope>/ohlcv/<symbol>_daily.csv
+- cache/<scope>/ohlcv/<symbol>_daily.csv
 
 Data Format (CSV):
 - Date, Open, High, Low, Close, Volume
@@ -21,6 +21,9 @@ from pathlib import Path
 from typing import Dict, List, Optional
 from dataclasses import dataclass
 from zoneinfo import ZoneInfo
+
+from config.scope import get_scope
+from config.scope_paths import get_scope_path
 
 logger = logging.getLogger(__name__)
 
@@ -47,19 +50,23 @@ class NSEDataProvider:
     - Validation and cleaning
     
     Cache Directory:
-    - data/<scope>/ohlcv/
+    - cache/<scope>/ohlcv/
     
     File Format:
     - <symbol>_daily.csv
     """
     
-    def __init__(self, cache_dir: Path):
+    def __init__(self, cache_dir: Optional[Path] = None):
         """
         Initialize NSE data provider.
         
         Args:
             cache_dir: Directory for OHLCV cache
         """
+        if cache_dir is None:
+            scope = get_scope()
+            cache_dir = get_scope_path(scope, "cache") / "ohlcv"
+
         self.cache_dir = cache_dir
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         

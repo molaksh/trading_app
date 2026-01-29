@@ -24,7 +24,7 @@ ENV=paper                                          # Paper trading mode
 BROKER=nse_simulator                               # Simulated broker
 MODE=swing                                         # Swing strategy
 MARKET=india                                       # NSE India
-BASE_DIR=/app/logs                                 # Storage directory
+PERSISTENCE_ROOT=/app/persist                      # Storage directory
 MARKET_TIMEZONE=Asia/Kolkata                       # IST timezone
 ENTRY_WINDOW_MINUTES_BEFORE_CLOSE=20              # Entry timing
 SWING_EXIT_DELAY_MINUTES_AFTER_CLOSE=15           # Exit timing
@@ -123,11 +123,12 @@ docker-compose up -d paper-nse-swing-india
 # Or manual docker
 docker run -d \
   --name paper-nse-swing-india \
+    -v $(pwd)/logs:/app/persist \
   -e ENV=paper \
   -e BROKER=nse_simulator \
   -e MODE=swing \
   -e MARKET=india \
-  -e BASE_DIR=/app/logs \
+    -e PERSISTENCE_ROOT=/app/persist \
   -e MARKET_TIMEZONE=Asia/Kolkata \
   -e ENTRY_WINDOW_MINUTES_BEFORE_CLOSE=20 \
   -e SWING_EXIT_DELAY_MINUTES_AFTER_CLOSE=15 \

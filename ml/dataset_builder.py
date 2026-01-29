@@ -20,6 +20,9 @@ from typing import List, Dict, Optional, Tuple
 import pandas as pd
 import numpy as np
 
+from config.scope import get_scope
+from config.scope_paths import get_scope_path
+
 logger = logging.getLogger(__name__)
 
 
@@ -106,7 +109,7 @@ class DatasetBuilder:
     - No future price leakage
     """
 
-    def __init__(self, dataset_dir: Path, trade_ledger):
+    def __init__(self, dataset_dir: Optional[Path], trade_ledger):
         """
         Initialize dataset builder.
         
@@ -114,6 +117,10 @@ class DatasetBuilder:
             dataset_dir: Directory to store dataset files
             trade_ledger: TradeLedger instance with closed trades
         """
+        if dataset_dir is None:
+            scope = get_scope()
+            dataset_dir = get_scope_path(scope, "features")
+
         self.dataset_dir = Path(dataset_dir)
         self.dataset_dir.mkdir(parents=True, exist_ok=True)
         self.trade_ledger = trade_ledger

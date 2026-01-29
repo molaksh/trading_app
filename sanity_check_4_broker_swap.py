@@ -13,7 +13,7 @@ import os
 from pathlib import Path
 
 # Setup
-os.environ['BASE_DIR'] = '/tmp/test_broker_swap'
+os.environ['PERSISTENCE_ROOT'] = '/tmp/test_broker_swap'
 os.environ['SCOPE'] = 'paper_alpaca_swing_us'
 # Set dummy Alpaca credentials for testing
 os.environ['APCA_API_KEY_ID'] = 'TEST_KEY'

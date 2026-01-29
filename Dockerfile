@@ -41,13 +41,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY . .
 
-# Create log directory structure inside container
-# (These will be mounted from host via docker-compose volumes)
-RUN mkdir -p /app/logs/india/observation && \
-    mkdir -p /app/logs/india/paper && \
-    mkdir -p /app/logs/india/live && \
-    mkdir -p /app/logs/us/paper && \
-    mkdir -p /app/logs/us/live
+# Create persistence root inside container
+# (Mounted from host via docker-compose or docker run)
+RUN mkdir -p /app/persist
 
 # Environment variables (defaults, can be overridden)
 ENV PYTHONUNBUFFERED=1
@@ -62,9 +58,9 @@ CMD ["python", "main.py", "--schedule"]
 # ============================================================================
 #
 # 1. LOGS & PERSISTENCE:
-#    - /app/logs MUST be mounted as a volume in docker-compose.yml
-#    - Without volume mount, logs will be lost on container restart
-#    - Log structure: /app/logs/{market}/{mode}/execution_log.jsonl
+#    - /app/persist MUST be mounted as a volume in docker-compose.yml
+#    - Without volume mount, state will be lost on container restart
+#    - Log structure: /app/persist/<scope>/logs/execution_log.jsonl
 #
 # 2. SECRETS & API KEYS:
 #    - NEVER bake secrets into the image

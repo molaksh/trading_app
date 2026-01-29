@@ -179,8 +179,12 @@ class StartupValidator:
             # Check each critical path
             critical_paths = [
                 ("logs_dir", summary["logs_dir"]),
+                ("ledger_dir", summary.get("ledger_dir")),
                 ("models_dir", summary["models_dir"]),
                 ("state_dir", summary["state_dir"]),
+                ("features_dir", summary.get("features_dir")),
+                ("labels_dir", summary.get("labels_dir")),
+                ("cache_dir", summary.get("cache_dir")),
             ]
             
             for path_name, path_str in critical_paths:
@@ -196,7 +200,7 @@ class StartupValidator:
                 except Exception as e:
                     return False, f"{path_name} not writable: {e}"
             
-            return True, f"Base directory: {summary['base_dir']}"
+            return True, f"Persistence root: {summary['persistence_root']}"
         
         except Exception as e:
             return False, f"Path validation failed: {e}"

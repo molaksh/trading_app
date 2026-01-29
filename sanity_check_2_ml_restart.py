@@ -13,7 +13,7 @@ import json
 from pathlib import Path
 
 # Setup
-os.environ['BASE_DIR'] = '/tmp/test_ml_restart'
+os.environ['PERSISTENCE_ROOT'] = '/tmp/test_ml_restart'
 os.environ['SCOPE'] = 'paper_alpaca_swing_us'
 Path('/tmp/test_ml_restart/paper_alpaca_swing_us/state').mkdir(parents=True, exist_ok=True)
 

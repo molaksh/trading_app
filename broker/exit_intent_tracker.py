@@ -23,7 +23,7 @@ from typing import List, Dict, Optional
 from enum import Enum
 
 from config.scope import get_scope
-from config.scope_paths import get_scope_paths
+from config.scope_paths import get_scope_path
 
 logger = logging.getLogger(__name__)
 
@@ -89,9 +89,8 @@ class ExitIntentTracker:
         """
         if intent_file is None:
             scope = get_scope()
-            scope_paths = get_scope_paths(scope)
-            data_dir = scope_paths.get_data_dir()
-            intent_file = data_dir / "exit_intents.json"
+            state_dir = get_scope_path(scope, "state")
+            intent_file = state_dir / "exit_intents.json"
         
         self.intent_file = Path(intent_file)
         self.intent_file.parent.mkdir(parents=True, exist_ok=True)

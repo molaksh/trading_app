@@ -12,6 +12,10 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
+# Host persistence directory (outside container)
+PERSISTENCE_ROOT_HOST="${PERSISTENCE_ROOT_HOST:-$SCRIPT_DIR/logs}"
+mkdir -p "$PERSISTENCE_ROOT_HOST"
+
 echo "=========================================="
 echo "India NSE Paper Trading Container"
 echo "=========================================="
@@ -43,11 +47,12 @@ docker build -f Dockerfile.india -t paper-nse-swing-india .
 echo "Starting container: paper-nse-swing-india..."
 docker run -d \
   --name paper-nse-swing-india \
+  -v "$PERSISTENCE_ROOT_HOST:/app/persist" \
   -e ENV=paper \
   -e BROKER=nse_simulator \
   -e MODE=swing \
   -e MARKET=india \
-  -e BASE_DIR=/app/logs \
+  -e PERSISTENCE_ROOT=/app/persist \
   -e MARKET_TIMEZONE=Asia/Kolkata \
   -e ENTRY_WINDOW_MINUTES_BEFORE_CLOSE=20 \
   -e SWING_EXIT_DELAY_MINUTES_AFTER_CLOSE=15 \

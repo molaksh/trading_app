@@ -122,7 +122,7 @@ def main():
         # Set dummy scope for testing
         import os
         os.environ['SCOPE'] = 'paper_alpaca_swing_us'
-        os.environ['BASE_DIR'] = '/tmp/trading_app_test'
+        os.environ['PERSISTENCE_ROOT'] = '/tmp/trading_app_test'
         
         # Create base directory
         Path('/tmp/trading_app_test').mkdir(exist_ok=True)

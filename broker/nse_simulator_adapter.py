@@ -26,6 +26,8 @@ from pathlib import Path
 from dataclasses import dataclass, asdict
 
 from broker.adapter import BrokerAdapter, OrderStatus, OrderResult, Position
+from config.scope import get_scope
+from config.scope_paths import get_scope_path
 
 logger = logging.getLogger(__name__)
 
@@ -87,14 +89,18 @@ class NSESimulatedBrokerAdapter(BrokerAdapter):
     MIN_SLIPPAGE_PCT = 0.05  # 0.05%
     MAX_SLIPPAGE_PCT = 0.15  # 0.15%
     
-    def __init__(self, state_dir: Path):
+    def __init__(self, state_dir: Optional[Path] = None):
         """
         Initialize NSE simulator.
         
         Args:
             state_dir: Directory for broker state persistence
         """
-        self.state_dir = state_dir
+        if state_dir is None:
+            scope = get_scope()
+            state_dir = get_scope_path(scope, "state")
+
+        self.state_dir = Path(state_dir)
         self.state_file = state_dir / "broker_state.json"
         
         # In-memory state

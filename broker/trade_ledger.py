@@ -14,7 +14,7 @@ Design:
 - Survives restarts via persistence
 - Phase 0: Uses ScopePathResolver for scope-isolated ledger paths
 
-All ledger files stored under BASE_DIR/<scope>/data/
+All ledger files stored under PERSISTENCE_ROOT/<scope>/ledger/
 """
 
 import json
@@ -27,7 +27,7 @@ from typing import List, Optional, Dict, Any
 import csv
 
 from config.scope import get_scope
-from config.scope_paths import get_scope_paths
+from config.scope_paths import get_scope_path
 
 logger = logging.getLogger(__name__)
 
@@ -159,8 +159,8 @@ class TradeLedger:
         if ledger_file is None:
             # Phase 0: Use scope-aware path resolver
             scope = get_scope()
-            scope_paths = get_scope_paths(scope)
-            ledger_file = scope_paths.get_trade_ledger_path()
+            ledger_dir = get_scope_path(scope, "ledger")
+            ledger_file = ledger_dir / "trades.jsonl"
         
         self.ledger_file = Path(ledger_file)
         self.ledger_file.parent.mkdir(parents=True, exist_ok=True)
@@ -354,28 +354,30 @@ class TradeLedger:
         logger.info(f"Exported {len(self.trades)} trades to {filepath}")
     
     def _save_to_disk(self) -> None:
-        """Persist ledger to disk (JSON format)."""
+        """Persist ledger to disk (JSONL format)."""
         try:
-            trades_dict = [trade.to_dict() for trade in self.trades]
             with open(self.ledger_file, 'w') as f:
-                json.dump(trades_dict, f, indent=2)
+                for trade in self.trades:
+                    f.write(json.dumps(trade.to_dict()) + "\n")
         except Exception as e:
             # Logging failures must not block execution
             logger.error(f"Failed to save trade ledger: {e}")
     
     def _load_from_disk(self) -> None:
-        """Load existing trades from disk."""
+        """Load existing trades from disk (JSONL)."""
         if not self.ledger_file.exists():
             logger.info("No existing ledger file found (will create on first trade)")
             return
         
         try:
             with open(self.ledger_file, 'r') as f:
-                trades_dict = json.load(f)
-            
-            for trade_dict in trades_dict:
-                trade = Trade(**trade_dict)
-                self.trades.append(trade)
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    trade_dict = json.loads(line)
+                    trade = Trade(**trade_dict)
+                    self.trades.append(trade)
             
             logger.info(f"Loaded {len(self.trades)} trades from {self.ledger_file}")
         except Exception as e:

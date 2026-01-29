@@ -161,7 +161,7 @@ while True:
 ## State Persistence
 
 ### State File
-- **Location:** `{BASE_DIR}/state/scheduler_state.json`
+- **Location:** `{PERSISTENCE_ROOT}/<scope>/state/scheduler_state.json`
 - **Format:** JSON with ISO timestamps
 - **Purpose:** Track last run time for each task
 - **Loaded at:** Scheduler startup
@@ -301,9 +301,9 @@ docker run -d \
   --env-file ./.env \
   -e MARKET=us \
   -e APP_ENV=paper \
-  -e BASE_DIR=/app/logs \
+    -e PERSISTENCE_ROOT=/app/persist \
   -e PYTHONUNBUFFERED=1 \
-  -v $(pwd)/logs:/app/logs \
+    -v $(pwd)/logs:/app/persist \
   trading-app:latest \
   python main.py --schedule
 ```
@@ -322,8 +322,8 @@ python main.py --schedule
 
 ### Logs Location
 ```
-logs/us/paper/scheduler.log    # Main logs
-logs/us/paper/trades.jsonl     # Trade execution logs
+logs/<scope>/logs/             # Execution logs
+logs/<scope>/ledger/trades.jsonl  # Trade ledger
 ```
 
 ---

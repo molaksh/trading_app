@@ -22,7 +22,8 @@ from dataclasses import dataclass, field, asdict
 from datetime import datetime
 from typing import Optional, List
 
-from config.scope_paths import get_scope_paths
+from config.scope import get_scope, Scope
+from config.scope_paths import get_scope_path
 
 logger = logging.getLogger(__name__)
 
@@ -65,13 +66,13 @@ class MLStateManager:
             scope_name: Optional scope name; uses global scope if not provided
         """
         if scope_name is None:
-            paths = get_scope_paths()
+            scope = get_scope()
         else:
             # For testing
-            from config.scope import Scope
-            paths = get_scope_paths(Scope.from_string(scope_name))
-        
-        self.state_file = paths.get_ml_state_file()
+            scope = Scope.from_string(scope_name)
+
+        state_dir = get_scope_path(scope, "state")
+        self.state_file = state_dir / "ml_state.json"
         self._ensure_state_file_exists()
     
     def _ensure_state_file_exists(self) -> None:
@@ -146,7 +147,25 @@ class MLStateManager:
     def get_active_model_version(self) -> Optional[str]:
         """Get currently pinned active model version."""
         state = self.load()
-        return state.active_model_version
+        if state.active_model_version:
+            return state.active_model_version
+
+        # Fallback to active_model.json if present
+        try:
+            scope = get_scope()
+            active_file = get_scope_path(scope, "models") / "active_model.json"
+            if active_file.exists():
+                with open(active_file) as f:
+                    data = json.load(f)
+                model_version = data.get("active_model_version")
+                if model_version:
+                    state.active_model_version = model_version
+                    self._save_state(state)
+                    return model_version
+        except Exception as e:
+            logger.warning(f"Failed to load active_model.json: {e}")
+
+        return None
     
     def should_train(self, current_fingerprint: str) -> bool:
         """

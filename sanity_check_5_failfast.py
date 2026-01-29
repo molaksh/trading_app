@@ -8,7 +8,7 @@ Expected behavior:
 1. Invalid SCOPE format → raises ValueError
 2. Unsupported market → raises ValueError
 3. Unsupported mode → raises ValueError
-4. Missing BASE_DIR → creates directories
+4. Missing PERSISTENCE_ROOT → creates directories
 5. Valid SCOPEs pass validation
 """
 
@@ -64,11 +64,11 @@ def test_unsupported_market():
     
     # Save original
     original_scope = os.environ.get("SCOPE")
-    original_base = os.environ.get("BASE_DIR")
+    original_base = os.environ.get("PERSISTENCE_ROOT")
     
     # Use temp dir
     temp_dir = tempfile.mkdtemp(prefix="test_failfast_")
-    os.environ["BASE_DIR"] = temp_dir
+    os.environ["PERSISTENCE_ROOT"] = temp_dir
     
     invalid_markets = ["europe", "asia", "invalid"]
     
@@ -94,7 +94,7 @@ def test_unsupported_market():
     if original_scope:
         os.environ["SCOPE"] = original_scope
     if original_base:
-        os.environ["BASE_DIR"] = original_base
+        os.environ["PERSISTENCE_ROOT"] = original_base
     
     print("  ✓ Unsupported markets correctly rejected\n")
 
@@ -105,11 +105,11 @@ def test_unsupported_mode():
     
     # Save original
     original_scope = os.environ.get("SCOPE")
-    original_base = os.environ.get("BASE_DIR")
+    original_base = os.environ.get("PERSISTENCE_ROOT")
     
     # Use temp dir
     temp_dir = tempfile.mkdtemp(prefix="test_failfast_")
-    os.environ["BASE_DIR"] = temp_dir
+    os.environ["PERSISTENCE_ROOT"] = temp_dir
     
     invalid_modes = ["scalping", "arbitrage", "invalid"]
     
@@ -124,34 +124,34 @@ def test_unsupported_mode():
             # Try to validate
             from startup.validator import validate_startup
             validate_startup()
-            print(f"  ✗ FAILED: Mode '{mode}' should have been rejected")
+                original_base = os.environ.get("PERSISTENCE_ROOT")
             sys.exit(1)
         except ValueError as e:
             print(f"  ✓ Mode '{mode}' correctly rejected: {str(e)[:60]}")
     
-    # Cleanup
+                os.environ["PERSISTENCE_ROOT"] = test_dir
     shutil.rmtree(temp_dir, ignore_errors=True)
     
     if original_scope:
         os.environ["SCOPE"] = original_scope
     if original_base:
-        os.environ["BASE_DIR"] = original_base
+        os.environ["PERSISTENCE_ROOT"] = original_base
     
     print("  ✓ Unsupported modes correctly rejected\n")
 
 
 def test_missing_base_dir():
-    """Test that BASE_DIR path creation works."""
-    print("TEST 5.4: BASE_DIR Path Creation")
+    """Test that PERSISTENCE_ROOT path creation works."""
+    print("TEST 5.4: PERSISTENCE_ROOT Path Creation")
     
     # Save original
     original_scope = os.environ.get("SCOPE")
-    original_base = os.environ.get("BASE_DIR")
+    original_base = os.environ.get("PERSISTENCE_ROOT")
     
     # Set valid scope and point to non-existent directory
     os.environ["SCOPE"] = "paper_alpaca_swing_us"
     test_dir = "/tmp/test_nonexistent_base_dir_12345"
-    os.environ["BASE_DIR"] = test_dir
+    os.environ["PERSISTENCE_ROOT"] = test_dir
     
     # Clean up if exists from previous run
     if os.path.exists(test_dir):
@@ -169,8 +169,8 @@ def test_missing_base_dir():
         
         # Get path (should work even if directory doesn't exist yet)
         logs_dir = paths.get_logs_dir()
-        state_dir = paths.get_state_dir()
-        
+                if original_base:
+                    os.environ["PERSISTENCE_ROOT"] = original_base
         # Create the directories
         os.makedirs(logs_dir, exist_ok=True)
         os.makedirs(state_dir, exist_ok=True)
@@ -184,7 +184,7 @@ def test_missing_base_dir():
             sys.exit(1)
             
     except Exception as e:
-        print(f"  ✗ FAILED: {str(e)[:80]}")
+                os.environ["PERSISTENCE_ROOT"] = temp_dir
         shutil.rmtree(test_dir, ignore_errors=True)
         sys.exit(1)
     
@@ -192,9 +192,9 @@ def test_missing_base_dir():
     if original_scope:
         os.environ["SCOPE"] = original_scope
     if original_base:
-        os.environ["BASE_DIR"] = original_base
+        os.environ["PERSISTENCE_ROOT"] = original_base
     
-    print("  ✓ BASE_DIR path creation works\n")
+    print("  ✓ PERSISTENCE_ROOT path creation works\n")
 
 
 def test_valid_scope_passes():
@@ -203,11 +203,11 @@ def test_valid_scope_passes():
     
     # Save original
     original_scope = os.environ.get("SCOPE")
-    original_base = os.environ.get("BASE_DIR")
+    original_base = os.environ.get("PERSISTENCE_ROOT")
     
     # Use temp dir
     temp_dir = tempfile.mkdtemp(prefix="test_failfast_")
-    os.environ["BASE_DIR"] = temp_dir
+    os.environ["PERSISTENCE_ROOT"] = temp_dir
     
     valid_scopes = [
         "paper_alpaca_swing_us",
@@ -217,8 +217,8 @@ def test_valid_scope_passes():
     
     for scope_str in valid_scopes:
         os.environ["SCOPE"] = scope_str
-        try:
-            from importlib import reload
+                if original_base:
+                    os.environ["PERSISTENCE_ROOT"] = original_base
             import config.scope
             reload(config.scope)
             scope = config.scope.get_scope()
@@ -241,7 +241,7 @@ def test_valid_scope_passes():
     if original_scope:
         os.environ["SCOPE"] = original_scope
     if original_base:
-        os.environ["BASE_DIR"] = original_base
+        os.environ["PERSISTENCE_ROOT"] = original_base
     
     print("  ✓ Valid SCOPEs correctly accepted\n")
 

@@ -14,7 +14,7 @@ import sys
 from pathlib import Path
 
 # Set test environment
-os.environ['BASE_DIR'] = '/tmp/test_isolation'
+os.environ['PERSISTENCE_ROOT'] = '/tmp/test_isolation'
 Path('/tmp/test_isolation').mkdir(exist_ok=True)
 
 # Import after env setup

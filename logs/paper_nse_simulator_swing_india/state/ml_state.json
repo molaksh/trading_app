@@ -1,0 +1,9 @@
+{
+  "last_trained_data_end_ts": null,
+  "last_dataset_fingerprint": null,
+  "last_run_id": null,
+  "last_promoted_model_version": null,
+  "promotion_timestamp": null,
+  "active_model_loaded_at": null,
+  "active_model_version": null
+}

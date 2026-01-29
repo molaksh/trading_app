@@ -31,6 +31,7 @@ from config.scheduler_settings import (
 )
 from config.settings import RUN_PAPER_TRADING
 from config.scope import get_scope
+from config.scope_paths import get_scope_path
 from execution.runtime import (
     PaperTradingRuntime,
     build_paper_trading_runtime,
@@ -95,7 +96,7 @@ class TradingScheduler:
         self.scope_paths = self.runtime.scope_paths
         
         # Use scope-aware paths
-        self.state = SchedulerState(self.scope_paths.get_state_dir() / "scheduler_state.json")
+        self.state = SchedulerState(get_scope_path(scope, "state") / "scheduler_state.json")
         self.tick_seconds = max(15, SCHEDULER_TICK_SECONDS)
         
         # Cache for market clock (fallback when API fails)
@@ -126,8 +127,9 @@ class TradingScheduler:
                 from ml.model_registry import ModelRegistry
                 from ml.ml_orchestrator import OfflineMLOrchestrator
                 
-                dataset_dir = self.scope_paths.get_features_dir()
-                model_dir = self.scope_paths.get_models_dir()
+                scope = get_scope()
+                dataset_dir = get_scope_path(scope, "features")
+                model_dir = get_scope_path(scope, "models")
                 
                 builder = DatasetBuilder(dataset_dir, self.runtime.trade_ledger)
                 trainer = OfflineTrainer(model_dir, builder)

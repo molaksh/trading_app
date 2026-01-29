@@ -25,7 +25,7 @@ ENV ENV=paper
 ENV BROKER=nse_simulator
 ENV MODE=swing
 ENV MARKET=india
-ENV BASE_DIR=/app/logs
+ENV PERSISTENCE_ROOT=/app/persist
 
 # India-specific settings
 ENV MARKET_TIMEZONE=Asia/Kolkata
@@ -33,7 +33,7 @@ ENV ENTRY_WINDOW_MINUTES_BEFORE_CLOSE=20
 ENV SWING_EXIT_DELAY_MINUTES_AFTER_CLOSE=15
 
 # Create necessary directories
-RUN mkdir -p /app/logs/data /app/logs/models /app/logs/state
+RUN mkdir -p /app/persist
 
 # Run scheduler
 CMD ["python", "-m", "execution.scheduler"]

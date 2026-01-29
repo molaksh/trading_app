@@ -125,8 +125,8 @@ def test_phase_0_abstractions_preserved():
     print("=" * 80)
     
     import os
-    # Set BASE_DIR and valid SCOPE for testing
-    os.environ['BASE_DIR'] = '/tmp/trading_test'
+    # Set PERSISTENCE_ROOT and valid SCOPE for testing
+    os.environ['PERSISTENCE_ROOT'] = '/tmp/trading_test'
     os.environ['SCOPE'] = 'paper_alpaca_swing_us'  # Valid SCOPE format
     
     from config.scope import get_scope
@@ -136,7 +136,7 @@ def test_phase_0_abstractions_preserved():
     paths = get_scope_paths(scope)
     
     print(f"✓ SCOPE system working: {scope}")
-    print(f"✓ Scope paths resolver working: {paths.get_data_dir()}")
+    print(f"✓ Scope paths resolver working: {paths.get_cache_dir()}")
     
     # Verify new components use scope paths (by checking source code)
     tracker_path = '/Users/mohan/Documents/SandBox/test/trading_app/broker/exit_intent_tracker.py'

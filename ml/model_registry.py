@@ -16,22 +16,29 @@ from pathlib import Path
 from datetime import datetime
 from typing import Optional, Dict
 
+from config.scope import get_scope
+from config.scope_paths import get_scope_path
+
 logger = logging.getLogger(__name__)
 
 
 class ModelRegistry:
     """Manage model versions and promotion."""
 
-    def __init__(self, model_dir: Path):
+    def __init__(self, model_dir: Optional[Path] = None):
         """
         Initialize registry.
         
         Args:
             model_dir: Directory containing model artifacts
         """
+        if model_dir is None:
+            scope = get_scope()
+            model_dir = get_scope_path(scope, "models")
+
         self.model_dir = Path(model_dir)
         self.registry_file = self.model_dir / "model_registry.json"
-        self.active_model_file = self.model_dir / "active_model.txt"
+        self.active_model_file = self.model_dir / "active_model.json"
         
         self.registry = self._load_registry()
 
@@ -102,6 +109,22 @@ class ModelRegistry:
         self.registry["candidates"][model_id]["promoted_at"] = datetime.now().isoformat()
         
         self._save_registry()
+
+        # Persist active model file
+        try:
+            self.active_model_file.parent.mkdir(parents=True, exist_ok=True)
+            with open(self.active_model_file, "w") as f:
+                json.dump(
+                    {
+                        "active_model_version": model_id,
+                        "promoted_at": datetime.now().isoformat(),
+                        "reason": reason,
+                    },
+                    f,
+                    indent=2,
+                )
+        except Exception as e:
+            logger.warning(f"Could not write active_model.json: {e}")
         
         logger.info("=" * 80)
         logger.info(f"MODEL PROMOTED: {model_id}")

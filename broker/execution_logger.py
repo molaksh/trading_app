@@ -20,7 +20,7 @@ from typing import Optional, Dict, Any
 from pathlib import Path
 
 from config.scope import get_scope
-from config.scope_paths import get_scope_paths
+from config.scope_paths import get_scope_path
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +34,7 @@ class ExecutionLogger:
     - Error log for issues
     
     Phase 0: Uses ScopePathResolver for scope-isolated log paths.
-    All logs stored under BASE_DIR/<scope>/logs/
+    All logs stored under PERSISTENCE_ROOT/<scope>/logs/
     """
     
     def __init__(self, log_dir: Optional[str] = None):
@@ -46,13 +46,12 @@ class ExecutionLogger:
         """
         # Phase 0: Use scope-aware path resolver
         scope = get_scope()
-        scope_paths = get_scope_paths(scope)
+        logs_dir = get_scope_path(scope, "logs")
         
         # Primary log: execution_log.jsonl (continuous, append-only)
-        self.trade_log_path = scope_paths.get_execution_log_path()
+        self.trade_log_path = logs_dir / "execution_log.jsonl"
         
         # Error log in same directory
-        logs_dir = scope_paths.get_logs_dir()
         self.error_log_path = logs_dir / "errors.jsonl"
         
         # Ensure parent directories exist

@@ -12,7 +12,7 @@ from typing import Optional, List
 
 from config.settings import START_CAPITAL, RUN_MONITORING
 from config.scope import get_scope, Scope
-from config.scope_paths import get_scope_paths
+from config.scope_paths import get_scope_paths, get_scope_path
 from broker.broker_factory import get_broker_adapter
 from broker.adapter import BrokerAdapter  # Abstract base
 from broker.paper_trading_executor import PaperTradingExecutor
@@ -40,7 +40,7 @@ class PaperTradingRuntime:
     monitor: Optional[SystemGuard]
     exit_evaluator: ExitEvaluator
     strategies: List[Strategy]  # Scope-filtered strategies
-    scope_paths: "ScopePathResolver"  # Persistent paths under BASE_DIR/<scope>/
+    scope_paths: "ScopePathResolver"  # Persistent paths under PERSISTENCE_ROOT/<scope>/
 
 
 def build_paper_trading_runtime() -> PaperTradingRuntime:
@@ -50,7 +50,7 @@ def build_paper_trading_runtime() -> PaperTradingRuntime:
     Phase 0: SCOPE-driven assembly
     - Broker selected via BrokerFactory from scope.broker
     - Strategies filtered and instantiated for scope via StrategyRegistry
-    - Storage paths resolved via ScopePathResolver (all under BASE_DIR/<scope>/)
+    - Storage paths resolved via ScopePathResolver (all under PERSISTENCE_ROOT/<scope>/)
     - ML state managed via MLStateManager (idempotent training, model version tracking)
     """
     # Get SCOPE from environment (set at container startup)
@@ -79,7 +79,7 @@ def build_paper_trading_runtime() -> PaperTradingRuntime:
     
     # Build trade ledger and execution logger
     trade_ledger = TradeLedger()
-    exec_logger = ExecutionLogger(str(scope_paths.get_logs_dir()))
+    exec_logger = ExecutionLogger(str(get_scope_path(scope, "logs")))
     
     # Optional monitoring
     monitor = SystemGuard() if RUN_MONITORING else None
@@ -102,7 +102,7 @@ def build_paper_trading_runtime() -> PaperTradingRuntime:
     ml_trainer = None
     try:
         from ml.offline_trainer import OfflineTrainer
-        ml_models_dir = scope_paths.get_models_dir()
+        ml_models_dir = get_scope_path(scope, "models")
         ml_trainer = OfflineTrainer(ml_models_dir, None)  # dataset_builder set later
     except Exception as e:
         logger.debug(f"Could not initialize ML trainer: {e}")

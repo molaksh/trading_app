@@ -11,7 +11,7 @@ Verify that:
 import os
 from pathlib import Path
 
-os.environ['BASE_DIR'] = '/tmp/test_strategy_injection'
+os.environ['PERSISTENCE_ROOT'] = '/tmp/test_strategy_injection'
 os.environ['SCOPE'] = 'paper_alpaca_daytrade_us'
 Path('/tmp/test_strategy_injection').mkdir(exist_ok=True)
 

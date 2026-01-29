@@ -17,7 +17,7 @@ from typing import Optional
 
 from broker.adapter import BrokerAdapter
 from config.scope import Scope, get_scope
-from config.scope_paths import get_scope_paths
+from config.scope_paths import get_scope_path
 
 logger = logging.getLogger(__name__)
 
@@ -49,8 +49,7 @@ def get_broker_adapter(scope: Optional[Scope] = None) -> BrokerAdapter:
     elif broker_name == "nse_simulator":
         from broker.nse_simulator_adapter import NSESimulatedBrokerAdapter
         # Get state directory from scope paths
-        scope_paths = get_scope_paths(scope)
-        state_dir = scope_paths.get_state_dir()
+        state_dir = get_scope_path(scope, "state")
         return NSESimulatedBrokerAdapter(state_dir=state_dir)
     
     elif broker_name == "ibkr":

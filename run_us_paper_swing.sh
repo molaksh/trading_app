@@ -12,6 +12,10 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
+# Host persistence directory (outside container)
+PERSISTENCE_ROOT_HOST="${PERSISTENCE_ROOT_HOST:-$SCRIPT_DIR/logs}"
+mkdir -p "$PERSISTENCE_ROOT_HOST"
+
 echo "=========================================="
 echo "US Alpaca Paper Trading Container"
 echo "=========================================="
@@ -43,11 +47,12 @@ docker build -t paper-alpaca-swing-us .
 echo "Starting container: paper-alpaca-swing-us..."
 docker run -d \
   --name paper-alpaca-swing-us \
+  -v "$PERSISTENCE_ROOT_HOST:/app/persist" \
   -e ENV=paper \
   -e BROKER=alpaca \
   -e MODE=swing \
   -e MARKET=us \
-  -e BASE_DIR=/app/logs \
+  -e PERSISTENCE_ROOT=/app/persist \
   -e MARKET_TIMEZONE=America/New_York \
   -e ENTRY_WINDOW_MINUTES_BEFORE_CLOSE=5 \
   -e SWING_EXIT_DELAY_MINUTES_AFTER_CLOSE=15 \

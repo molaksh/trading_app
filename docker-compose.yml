@@ -68,7 +68,7 @@ services:
       - BROKER=alpaca
       - MODE=swing
       - MARKET=us
-      - BASE_DIR=/app/logs
+      - PERSISTENCE_ROOT=/app/persist
       
       # US market settings
       - MARKET_TIMEZONE=America/New_York
@@ -85,7 +85,7 @@ services:
     
     # Volume mounts (CRITICAL: Isolated US data)
     volumes:
-      - us-data:/app/logs
+      - us-data:/app/persist
     
     # Restart policy
     restart: unless-stopped
@@ -125,7 +125,7 @@ services:
       - BROKER=nse_simulator
       - MODE=swing
       - MARKET=india
-      - BASE_DIR=/app/logs
+      - PERSISTENCE_ROOT=/app/persist
       
       # India market settings
       - MARKET_TIMEZONE=Asia/Kolkata
@@ -137,7 +137,7 @@ services:
     
     # Volume mounts (CRITICAL: Isolated India data)
     volumes:
-      - india-data:/app/logs
+      - india-data:/app/persist
     
     # Restart policy
     restart: unless-stopped
@@ -175,7 +175,7 @@ volumes:
 # 2. SCOPE SYSTEM:
 #    - US SCOPE: paper_alpaca_swing_us
 #    - India SCOPE: paper_nse_simulator_swing_india
-#    - All data organized by SCOPE in BASE_DIR
+#    - All data organized by SCOPE in PERSISTENCE_ROOT
 #
 # 3. SHARED STRATEGIES:
 #    - Swing strategies in core/strategies/equity/swing
