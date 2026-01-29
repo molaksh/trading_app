@@ -67,8 +67,8 @@ class StrategyRegistry:
         
         logger.info("Discovering strategies...")
         
-        # Import all strategy modules
-        from strategies.swing import SwingEquityStrategy
+        # Import all strategy modules from canonical core location
+        from core.strategies.equity.swing import SwingEquityStrategy
         
         # Create instances and extract metadata
         strategies = {
@@ -146,7 +146,7 @@ class StrategyRegistry:
         instances = []
         for strategy_name in strategies:
             if strategy_name == "swing_equity":
-                from strategies.swing import SwingEquityStrategy
+                from core.strategies.equity.swing import SwingEquityStrategy
                 instance = SwingEquityStrategy()
             else:
                 logger.warning(f"Unknown strategy: {strategy_name}")
