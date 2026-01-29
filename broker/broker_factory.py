@@ -6,6 +6,7 @@ No hardcoded broker dependencies in core.
 
 Supported brokers:
   - alpaca: Alpaca Markets (US, paper & live)
+  - nse_simulator: NSE Simulated Broker (India, paper only)
   - ibkr: Interactive Brokers (US/intl, multi-mode)
   - zerodha: Zerodha (India)
   - crypto: Generic crypto exchange
@@ -16,6 +17,7 @@ from typing import Optional
 
 from broker.adapter import BrokerAdapter
 from config.scope import Scope, get_scope
+from config.scope_paths import get_scope_paths
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +45,13 @@ def get_broker_adapter(scope: Optional[Scope] = None) -> BrokerAdapter:
     if broker_name == "alpaca":
         from broker.alpaca_adapter import AlpacaAdapter
         return AlpacaAdapter()
+    
+    elif broker_name == "nse_simulator":
+        from broker.nse_simulator_adapter import NSESimulatedBrokerAdapter
+        # Get state directory from scope paths
+        scope_paths = get_scope_paths(scope)
+        state_dir = scope_paths.get_state_dir()
+        return NSESimulatedBrokerAdapter(state_dir=state_dir)
     
     elif broker_name == "ibkr":
         from broker.ibkr_adapter import IBKRAdapter

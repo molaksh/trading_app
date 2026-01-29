@@ -3,30 +3,32 @@
 # ============================================================================
 #
 # PURPOSE:
-#   Orchestrate trading services with proper log persistence
+#   Orchestrate multi-market paper trading with complete SCOPE isolation
 #
 # SERVICES:
-#   1. swing-trader: Main trading engine (--trade mode)
-#   2. risk-monitor: Emergency exit monitor (--monitor mode)
+#   1. paper-alpaca-swing-us: US market paper trading via Alpaca
+#   2. paper-nse-swing-india: India NSE paper trading via simulator
 #
 # CRITICAL DESIGN:
-#   - Logs persist on host, NOT in containers
-#   - Each service can run independently
-#   - Containers restart automatically (unless stopped)
+#   - Complete data/logs/models/state isolation between markets
+#   - Separate Docker volumes per market (us-data, india-data)
 #   - Environment-driven configuration
+#   - Shared swing strategies from core (no duplication)
+#   - Containers restart automatically unless stopped
 #
 # USAGE:
-#   # Start all services
+#   # Start all markets
 #   docker-compose up -d
 #
-#   # Start only swing trader
-#   docker-compose up -d swing-trader
+#   # Start only US trading
+#   docker-compose up -d paper-alpaca-swing-us
 #
-#   # Start only risk monitor
-#   docker-compose up -d risk-monitor
+#   # Start only India trading
+#   docker-compose up -d paper-nse-swing-india
 #
 #   # View logs
-#   docker-compose logs -f swing-trader
+#   docker-compose logs -f paper-alpaca-swing-us
+#   docker-compose logs -f paper-nse-swing-india
 #
 #   # Stop all
 #   docker-compose down
@@ -37,52 +39,53 @@ version: '3.8'
 
 services:
   # ==========================================================================
-  # SWING TRADER SERVICE
+  # US PAPER TRADING (Alpaca)
   # ==========================================================================
   # 
-  # Runs main trading flow:
-  # - Generate signals (post-market close)
-  # - Submit orders
-  # - Poll fills
-  # - Evaluate swing exits
-  #
-  # Schedule: Run once daily after market close
-  # For now: Manual or cron trigger
+  # SCOPE: paper_alpaca_swing_us
+  # Market: US (NYSE/NASDAQ)
+  # Broker: Alpaca Paper Trading
+  # Strategies: Swing (core/strategies/equity/swing)
   # ==========================================================================
   
-  swing-trader:
+  #
+  # ==========================================================================
+  
+  paper-alpaca-swing-us:
     build:
       context: .
       dockerfile: Dockerfile
     
-    container_name: swing-trader
+    container_name: paper-alpaca-swing-us
     
-    # Run in --trade mode (full trading flow)
-    command: python main.py --trade
+    # Run scheduler with intelligent task timing
+    command: python -m execution.scheduler
     
     # Environment variables
     environment:
-      # Trading configuration
-      - MARKET=us              # Market: india or us
-      - APP_ENV=paper          # Mode: paper or live
-      - LOG_ROOT=/app/logs     # Log directory inside container
+      # SCOPE configuration
+      - ENV=paper
+      - BROKER=alpaca
+      - MODE=swing
+      - MARKET=us
+      - BASE_DIR=/app/logs
+      
+      # US market settings
+      - MARKET_TIMEZONE=America/New_York
+      - ENTRY_WINDOW_MINUTES_BEFORE_CLOSE=5
+      - SWING_EXIT_DELAY_MINUTES_AFTER_CLOSE=15
       
       # Alpaca API credentials (paper trading)
-      # WARNING: Use .env file or Docker secrets in production
-      - APCA_API_BASE_URL=${APCA_API_BASE_URL:-https://paper-api.alpaca.markets}
-      - APCA_API_KEY_ID=${APCA_API_KEY_ID}
-      - APCA_API_SECRET_KEY=${APCA_API_SECRET_KEY}
+      - ALPACA_API_KEY=${ALPACA_API_KEY}
+      - ALPACA_API_SECRET=${ALPACA_API_SECRET}
+      - ALPACA_BASE_URL=${ALPACA_BASE_URL:-https://paper-api.alpaca.markets}
       
       # Python settings
-      - PYTHONUNBUFFERED=1     # Force unbuffered output for real-time logs
+      - PYTHONUNBUFFERED=1
     
-    # Volume mounts (CRITICAL for log persistence)
+    # Volume mounts (CRITICAL: Isolated US data)
     volumes:
-      # Mount host logs directory to container
-      - ./logs:/app/logs
-      
-      # Optional: Mount .env file if needed
-      # - ./.env:/app/.env:ro
+      - us-data:/app/logs
     
     # Restart policy
     restart: unless-stopped
@@ -95,48 +98,46 @@ services:
         max-file: "3"
   
   # ==========================================================================
-  # RISK MONITOR SERVICE
+  # INDIA PAPER TRADING (NSE Simulator)
   # ==========================================================================
   #
-  # Runs emergency exit monitoring:
-  # - Continuous intraday position monitoring
-  # - Catastrophic loss detection (>3% portfolio)
-  # - Extreme adverse moves (4× ATR)
-  # - Volatility shocks
+  # SCOPE: paper_nse_simulator_swing_india
+  # Market: India (NSE)
+  # Broker: NSE Simulator (simulated execution)
+  # Strategies: Swing (core/strategies/equity/swing)
   #
-  # Schedule: Run every 15-30 minutes during market hours
-  # For now: Manual or cron trigger
   # ==========================================================================
   
-  risk-monitor:
+  paper-nse-swing-india:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.india
     
-    container_name: risk-monitor
+    container_name: paper-nse-swing-india
     
-    # Run in --monitor mode (exits only, no signal generation)
-    command: python main.py --monitor
+    # Run scheduler with intelligent task timing
+    command: python -m execution.scheduler
     
     # Environment variables
     environment:
-      # Trading configuration
-      - MARKET=us              # Market: india or us
-      - APP_ENV=paper          # Mode: paper or live
-      - LOG_ROOT=/app/logs     # Log directory inside container
+      # SCOPE configuration
+      - ENV=paper
+      - BROKER=nse_simulator
+      - MODE=swing
+      - MARKET=india
+      - BASE_DIR=/app/logs
       
-      # Alpaca API credentials (paper trading)
-      - APCA_API_BASE_URL=${APCA_API_BASE_URL:-https://paper-api.alpaca.markets}
-      - APCA_API_KEY_ID=${APCA_API_KEY_ID}
-      - APCA_API_SECRET_KEY=${APCA_API_SECRET_KEY}
+      # India market settings
+      - MARKET_TIMEZONE=Asia/Kolkata
+      - ENTRY_WINDOW_MINUTES_BEFORE_CLOSE=20
+      - SWING_EXIT_DELAY_MINUTES_AFTER_CLOSE=15
       
       # Python settings
-      - PYTHONUNBUFFERED=1     # Force unbuffered output for real-time logs
+      - PYTHONUNBUFFERED=1
     
-    # Volume mounts (CRITICAL for log persistence)
+    # Volume mounts (CRITICAL: Isolated India data)
     volumes:
-      # Mount host logs directory to container
-      - ./logs:/app/logs
+      - india-data:/app/logs
     
     # Restart policy
     restart: unless-stopped
@@ -149,74 +150,61 @@ services:
         max-file: "3"
 
 # ============================================================================
-# VOLUMES (Named volumes for future use)
+# VOLUMES
 # ============================================================================
-# Currently using bind mounts (./logs) for simplicity and visibility
-# Can switch to named volumes if needed:
-#
-# volumes:
-#   trading_logs:
-#     driver: local
-#
-# Then in service:
-#   volumes:
-#     - trading_logs:/app/logs
-#
+# Named volumes provide complete isolation between markets
+# - us-data: All US market data/logs/models/state
+# - india-data: All India market data/logs/models/state
 # ============================================================================
 
-# ============================================================================
-# NETWORKS (Optional, for future multi-service architecture)
-# ============================================================================
-# networks:
-#   trading_net:
-#     driver: bridge
-#
-# Then in service:
-#   networks:
-#     - trading_net
-#
-# ============================================================================
+volumes:
+  us-data:
+    driver: local
+  india-data:
+    driver: local
 
 # ============================================================================
 # IMPORTANT NOTES
 # ============================================================================
 #
-# 1. LOG PERSISTENCE:
-#    - ./logs directory on host maps to /app/logs in container
-#    - All execution logs, trade ledgers persist across restarts
-#    - Log structure: logs/{market}/{mode}/execution_log.jsonl
+# 1. MARKET ISOLATION:
+#    - US and India data/logs/models/state are COMPLETELY separated
+#    - Each market has its own Docker volume (us-data, india-data)
+#    - Zero cross-contamination between markets
 #
-# 2. SECRETS MANAGEMENT:
+# 2. SCOPE SYSTEM:
+#    - US SCOPE: paper_alpaca_swing_us
+#    - India SCOPE: paper_nse_simulator_swing_india
+#    - All data organized by SCOPE in BASE_DIR
+#
+# 3. SHARED STRATEGIES:
+#    - Swing strategies in core/strategies/equity/swing
+#    - SAME code used by both US and India
+#    - No duplication, just different broker/data adapters
+#
+# 4. SECRETS MANAGEMENT:
 #    - Use .env file in same directory as docker-compose.yml
 #    - Format:
-#        APCA_API_KEY_ID=your_key_here
-#        APCA_API_SECRET_KEY=your_secret_here
+#        ALPACA_API_KEY=your_key_here
+#        ALPACA_API_SECRET=your_secret_here
 #    - .env file should be in .gitignore
+#    - India doesn't need credentials (simulated broker)
 #
-# 3. SCHEDULING:
-#    - swing-trader: Run once daily after market close
-#    - risk-monitor: Run every 15-30 min during market hours
-#    - Use cron or task scheduler to trigger:
-#        docker-compose up -d swing-trader (runs once, exits)
-#        docker-compose up -d risk-monitor (runs, stays up)
+# 5. RUNNING CONTAINERS:
+#    - Start all: docker-compose up -d
+#    - Start US only: docker-compose up -d paper-alpaca-swing-us
+#    - Start India only: docker-compose up -d paper-nse-swing-india
+#    - View logs: docker-compose logs -f paper-nse-swing-india
+#    - Stop all: docker-compose down
 #
-# 4. MARKETS:
-#    - India: Set MARKET=india
-#    - US: Set MARKET=us
-#    - Logs separate per market
-#
-# 5. MODES:
-#    - paper: Paper trading (safe, current default)
-#    - live: Real money (future, logs excluded from Git)
-#    - observation: Monitor only, no orders
-#
-# 6. MONITORING:
-#    - View logs: docker-compose logs -f swing-trader
-#    - Check status: docker-compose ps
-#    - Stop: docker-compose down
-#
-# 7. REBUILDING:
+# 6. REBUILDING:
 #    - After code changes: docker-compose build
-#    - Or: docker-compose up --build
+#    - Or: docker-compose up --build -d
+#
+# 7. DATA ACCESS:
+#    - View US volume data: docker volume inspect trading_app_us-data
+#    - View India volume data: docker volume inspect trading_app_india-data
+#    - Access container: docker exec -it paper-nse-swing-india /bin/bash
 #
 # ============================================================================
+

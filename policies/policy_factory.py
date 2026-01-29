@@ -25,9 +25,9 @@ from policies.entry_timing_policy import (
 )
 from policies.market_hours_policy import (
     USEquityMarketHours,
-    IndiaEquityMarketHours,
     Crypto24x7MarketHours,
 )
+from policies.market_hours.india_equity_market_hours import IndiaEquityMarketHours
 
 logger = logging.getLogger(__name__)
 
@@ -86,13 +86,15 @@ POLICY_REGISTRY: Dict[Tuple[str, str], Dict[str, type]] = {
 
 # Supported scope declarations (container-driven)
 SUPPORTED_SCOPES = {
-    # Only US Swing is fully implemented
+    # US Swing is fully implemented
     ("swing", "us", "equity"): True,
+    
+    # India Swing is fully implemented
+    ("swing", "india", "equity"): True,
     
     # All other combinations are NOT supported
     ("daytrade", "us", "equity"): False,
     ("options", "us", "option"): False,
-    ("swing", "india", "equity"): False,
     ("daytrade", "india", "equity"): False,
     ("swing", "crypto", "btc"): False,
     ("swing", "crypto", "eth"): False,

@@ -1,0 +1,59 @@
+#!/bin/bash
+#
+# Build and run India NSE paper trading container
+#
+# Container: paper-nse-swing-india
+# Image: paper-nse-swing-india
+# SCOPE: paper_nse_simulator_swing_india
+#
+
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
+
+echo "=========================================="
+echo "India NSE Paper Trading Container"
+echo "=========================================="
+echo ""
+
+# Load environment variables if .env exists
+if [ -f ".env" ]; then
+    echo "Loading environment from .env..."
+    source .env
+fi
+
+# Build Docker image
+echo "Building Docker image: paper-nse-swing-india..."
+docker build -t paper-nse-swing-india .
+
+# Remove old container if exists
+echo "Removing old container (if exists)..."
+docker rm -f paper-nse-swing-india 2>/dev/null || true
+
+# Run container
+echo "Starting container: paper-nse-swing-india..."
+docker run -d \
+  --name paper-nse-swing-india \
+  -e ENV=paper \
+  -e BROKER=nse_simulator \
+  -e MODE=swing \
+  -e MARKET=india \
+  -e BASE_DIR=/app/logs \
+  -e MARKET_TIMEZONE=Asia/Kolkata \
+  -e ENTRY_WINDOW_MINUTES_BEFORE_CLOSE=20 \
+  -e SWING_EXIT_DELAY_MINUTES_AFTER_CLOSE=15 \
+  paper-nse-swing-india python -m execution.scheduler
+
+echo ""
+echo "✅ Container started successfully!"
+echo ""
+echo "View logs:"
+echo "  docker logs -f paper-nse-swing-india"
+echo ""
+echo "Check status:"
+echo "  docker ps | grep paper-nse"
+echo ""
+echo "Stop container:"
+echo "  docker stop paper-nse-swing-india"
+echo ""

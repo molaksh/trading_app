@@ -39,6 +39,7 @@ class Broker(Enum):
     ALPACA = "alpaca"           # Alpaca (US, swing/daytrade)
     IBKR = "ibkr"               # Interactive Brokers (US/intl, multi-mode)
     ZERODHA = "zerodha"         # Zerodha (India)
+    NSE_SIMULATOR = "nse_simulator"  # NSE simulated broker (India paper trading)
     CRYPTO_EXCHANGE = "crypto"  # Generic crypto exchange
 
 
@@ -60,13 +61,18 @@ class Market(Enum):
 
 # Allowed combinations (for validation)
 ALLOWED_SCOPES = [
-    # Paper trading
+    # Paper trading - US
     ("paper", "alpaca", "swing", "us"),
     ("paper", "alpaca", "daytrade", "us"),
-    ("paper", "zerodha", "options", "india"),
-    ("paper", "zerodha", "swing", "india"),
     ("paper", "ibkr", "swing", "us"),
     ("paper", "ibkr", "daytrade", "us"),
+    
+    # Paper trading - India
+    ("paper", "zerodha", "options", "india"),
+    ("paper", "zerodha", "swing", "india"),
+    ("paper", "nse_simulator", "swing", "india"),  # NEW: NSE simulator
+    
+    # Paper trading - Global/Crypto
     ("paper", "crypto", "crypto", "global"),
     
     # Live trading
