@@ -427,12 +427,26 @@ class TradingScheduler:
 
 if __name__ == "__main__":
     import logging.config
+    from pathlib import Path
     
-    # Configure logging
+    # Configure logging (stdout + persistent file)
+    try:
+        scope = get_scope()
+        logs_dir = get_scope_path(scope, "logs")
+        logs_dir.mkdir(parents=True, exist_ok=True)
+        scheduler_log_path = logs_dir / "scheduler.log"
+    except Exception:
+        scheduler_log_path = None
+    
+    handlers = [logging.StreamHandler()]
+    if scheduler_log_path:
+        handlers.append(logging.FileHandler(scheduler_log_path))
+    
     logging.basicConfig(
         level=logging.INFO,
         format='%(asctime)s | %(levelname)-8s | %(name)-20s | %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S'
+        datefmt='%Y-%m-%d %H:%M:%S',
+        handlers=handlers
     )
     
     try:

@@ -12,6 +12,9 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
+# Load docker utilities
+source "$SCRIPT_DIR/scripts/docker_utils.sh"
+
 # Host persistence directory (outside container)
 PERSISTENCE_ROOT_HOST="${PERSISTENCE_ROOT_HOST:-$SCRIPT_DIR/logs}"
 mkdir -p "$PERSISTENCE_ROOT_HOST"
@@ -38,24 +41,13 @@ SCOPE_DIR="$PERSISTENCE_ROOT_HOST/$SCOPE"
 LEDGER_FILE="$SCOPE_DIR/ledger/trades.jsonl"
 
 # Ensure scope directories + ledger file exist on host (hard gate prerequisite)
-mkdir -p "$SCOPE_DIR/logs" "$SCOPE_DIR/ledger" "$SCOPE_DIR/models"
-touch "$LEDGER_FILE"
+setup_scope_directories "$SCOPE_DIR" "$LEDGER_FILE"
 
-# Stop old container if running
-echo "Stopping old container (if running)..."
-docker stop paper-alpaca-swing-us 2>/dev/null || true
+# Stop and remove old container (persists logs automatically)
+stop_and_remove_container "paper-alpaca-swing-us" "$SCOPE_DIR"
 
-# Remove old container if exists
-echo "Removing old container (if exists)..."
-docker rm paper-alpaca-swing-us 2>/dev/null || true
-
-# Remove old image if exists
-echo "Removing old image (if exists)..."
-docker rmi paper-alpaca-swing-us 2>/dev/null || true
-
-# Build Docker image
-echo "Building Docker image: paper-alpaca-swing-us..."
-docker build -t paper-alpaca-swing-us .
+# Rebuild image
+rebuild_image "paper-alpaca-swing-us"
 
 # Run container
 echo "Starting container: paper-alpaca-swing-us..."

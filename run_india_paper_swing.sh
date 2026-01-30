@@ -12,6 +12,9 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
+# Load docker utilities
+source "$SCRIPT_DIR/scripts/docker_utils.sh"
+
 # Host persistence directory (outside container)
 PERSISTENCE_ROOT_HOST="${PERSISTENCE_ROOT_HOST:-$SCRIPT_DIR/logs}"
 mkdir -p "$PERSISTENCE_ROOT_HOST"
@@ -27,23 +30,7 @@ if [ -f ".env" ]; then
     source .env
 fi
 
-# Stop old container if running
-echo "Stopping old container (if running)..."
-docker stop paper-nse-swing-india 2>/dev/null || true
-
-# Remove old container if exists
-echo "Removing old container (if exists)..."
-docker rm paper-nse-swing-india 2>/dev/null || true
-
-# Remove old image if exists
-echo "Removing old image (if exists)..."
-docker rmi paper-nse-swing-india 2>/dev/null || true
-
-# Build Docker image
-echo "Building Docker image: paper-nse-swing-india..."
-docker build -f Dockerfile.india -t paper-nse-swing-india .
-
-# Run container
+# Scope + host paths
 ENV_VALUE="paper"
 BROKER_VALUE="nse_simulator"
 MODE_VALUE="swing"
@@ -54,9 +41,15 @@ SCOPE_DIR="$PERSISTENCE_ROOT_HOST/$SCOPE"
 LEDGER_FILE="$SCOPE_DIR/ledger/trades.jsonl"
 
 # Ensure scope directories + ledger file exist on host (hard gate prerequisite)
-mkdir -p "$SCOPE_DIR/logs" "$SCOPE_DIR/ledger" "$SCOPE_DIR/models"
-touch "$LEDGER_FILE"
+setup_scope_directories "$SCOPE_DIR" "$LEDGER_FILE"
 
+# Stop and remove old container (persists logs automatically)
+stop_and_remove_container "paper-nse-swing-india" "$SCOPE_DIR"
+
+# Rebuild image
+rebuild_image "paper-nse-swing-india" "Dockerfile.india"
+
+# Run container
 echo "Starting container: paper-nse-swing-india..."
 docker run -d \
   --name paper-nse-swing-india \
