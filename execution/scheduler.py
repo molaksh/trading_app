@@ -380,6 +380,11 @@ class TradingScheduler:
         while True:
             now = self._now()
             clock = self._get_clock()
+            
+            # Log scheduler heartbeat
+            market_status = "OPEN" if clock["is_open"] else "CLOSED"
+            next_close_str = clock.get("next_close").strftime("%H:%M") if clock.get("next_close") else "N/A"
+            logger.info(f"Scheduler tick | Market: {market_status} | Time: {now.strftime('%H:%M:%S')} | Next close: {next_close_str}")
 
             self._run_reconciliation(now)
 

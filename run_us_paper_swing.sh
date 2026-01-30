@@ -183,10 +183,12 @@ else
   fail "Ledger not initialized — container invalid"
 fi
 
-# 6) External position backfill verification
-if echo "$logs" | grep -Eiq "EXTERNAL POSITION"; then
-  if echo "$logs" | grep -Eiq "LEDGER WRITE \(BACKFILL\)|LEDGER BACKFILL COMPLETE|LEDGER RECONCILIATION: Backfilling"; then
-    pass "External positions persisted"
+# 6) External position persistence verification
+# Check if external positions exist AND are being tracked properly
+# Either newly backfilled OR already loaded from persistence (showing "Position known")
+if echo "$logs" | grep -Eiq "Found [0-9]+ external position"; then
+  if echo "$logs" | grep -Eiq "LEDGER WRITE \(BACKFILL\)|LEDGER BACKFILL COMPLETE|LEDGER RECONCILIATION: Backfilling|✓ Position known:"; then
+    pass "External positions tracked (loaded from persistence or backfilled)"
   else
     fail "External positions detected but not persisted"
   fi
