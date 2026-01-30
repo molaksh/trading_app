@@ -161,11 +161,21 @@ class TradingScheduler:
         """
         Run offline ML training after market close (once per day).
         
+        CRITICAL: Only runs in PAPER environment. FORBIDDEN in live.
+        
         Phase 0: Idempotent training via MLStateManager
         - Compute dataset fingerprint
         - Skip training if data unchanged (idempotent)
         - Update state and promote model on success
+        
+        Raises:
+            EnvironmentViolationError: If called from live environment
         """
+        # CRITICAL SAFETY CHECK: Block ML training in live containers
+        from runtime.environment_guard import get_environment_guard
+        guard = get_environment_guard()
+        guard.assert_paper_only("Offline ML training cycle")
+        
         if not self._should_run_interval("offline_ml", now, 24*60):  # Once per day
             return
         
@@ -200,8 +210,42 @@ class TradingScheduler:
                 logger.info(f"Promoted model version: {model_version}")
                 
                 self.state.update("offline_ml", now)
+            
+            # Run phase readiness evaluation (recommend-only)
+            self._evaluate_phase_readiness(now)
+            
         except Exception as e:
             logger.warning(f"Offline ML cycle failed: {e}")
+    
+    def _evaluate_phase_readiness(self, now: datetime) -> None:
+        """
+        Evaluate ML phase promotion readiness (recommend-only).
+        
+        Runs after ML training to provide recommendations.
+        NEVER auto-promotes phases.
+        """
+        try:
+            from ml.phase_readiness import PhaseReadinessEvaluator
+            
+            # Only evaluate if we have live data (otherwise not relevant)
+            if not hasattr(self.runtime, 'live_trade_ledger'):
+                logger.debug("No live ledger - skipping phase readiness evaluation")
+                return
+            
+            evaluator = PhaseReadinessEvaluator(
+                paper_ledger=self.runtime.trade_ledger,
+                live_ledger=getattr(self.runtime, 'live_trade_ledger', None)
+            )
+            
+            recommendation = evaluator.evaluate()
+            
+            if recommendation.should_promote:
+                logger.info("")
+                logger.info("🔔 PHASE PROMOTION RECOMMENDATION AVAILABLE")
+                logger.info(f"   Review: logs/{get_scope()}/state/phase_readiness.json")
+                logger.info("")
+        except Exception as e:
+            logger.debug(f"Phase readiness evaluation skipped: {e}")
 
     def _now(self) -> datetime:
         return datetime.now(self.tz)

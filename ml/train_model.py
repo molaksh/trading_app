@@ -141,6 +141,8 @@ def train_model(
 ) -> tuple:
     """
     Train LogisticRegression model with feature standardization.
+    
+    CRITICAL: FORBIDDEN in live environment (hard error).
 
     Args:
         X_train: Training feature matrix
@@ -149,7 +151,14 @@ def train_model(
 
     Returns:
         Tuple of (model, scaler, feature_names)
+        
+    Raises:
+        EnvironmentViolationError: If called from live environment
     """
+    # CRITICAL SAFETY CHECK: Block ML training in live containers
+    from runtime.environment_guard import block_ml_training_in_live
+    block_ml_training_in_live()
+    
     logger.info("\n" + "=" * 80)
     logger.info("MODEL TRAINING")
     logger.info("=" * 80)
@@ -236,6 +245,8 @@ def train_and_evaluate(
 ) -> dict:
     """
     Complete pipeline: load → prepare → split → train → evaluate.
+    
+    CRITICAL: FORBIDDEN in live environment (hard error).
 
     Args:
         dataset_path: Path to ML dataset
@@ -244,7 +255,14 @@ def train_and_evaluate(
 
     Returns:
         Dict with model, scaler, metrics, and test data
+        
+    Raises:
+        EnvironmentViolationError: If called from live environment
     """
+    # CRITICAL SAFETY CHECK: Block ML training in live containers
+    from runtime.environment_guard import block_ml_training_in_live
+    block_ml_training_in_live()
+    
     logger.info("\n" + "=" * 80)
     logger.info("ML MODEL TRAINING PIPELINE")
     logger.info("=" * 80)

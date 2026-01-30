@@ -56,6 +56,7 @@ class OfflineTrainer:
         """Train risk-filter model.
         
         SAFETY: Only runs if dataset has >= 20 closed trades.
+        CRITICAL: FORBIDDEN in live environment (hard error).
         
         Args:
             mae_threshold: MAE threshold for 'bad' label
@@ -64,7 +65,14 @@ class OfflineTrainer:
         
         Returns:
             Model metrics dict or None if training skipped
+            
+        Raises:
+            EnvironmentViolationError: If called from live environment
         """
+        # CRITICAL SAFETY CHECK: Block ML training in live containers
+        from runtime.environment_guard import block_ml_training_in_live
+        block_ml_training_in_live()
+        
         logger.info("=" * 80)
         logger.info("OFFLINE MODEL TRAINING")
         logger.info("=" * 80)

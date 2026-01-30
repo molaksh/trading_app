@@ -107,15 +107,17 @@ class DatasetBuilder:
     - Features frozen at decision time
     - Append-only dataset with checksums
     - No future price leakage
+    - Phase-aware: can combine paper and live ledgers per ML_LEARNING_PHASE
     """
 
-    def __init__(self, dataset_dir: Optional[Path], trade_ledger):
+    def __init__(self, dataset_dir: Optional[Path], trade_ledger, live_trade_ledger=None):
         """
         Initialize dataset builder.
         
         Args:
             dataset_dir: Directory to store dataset files
-            trade_ledger: TradeLedger instance with closed trades
+            trade_ledger: Primary TradeLedger instance (paper ledger)
+            live_trade_ledger: Optional live TradeLedger (for PHASE_2+)
         """
         if dataset_dir is None:
             scope = get_scope()
@@ -123,7 +125,8 @@ class DatasetBuilder:
 
         self.dataset_dir = Path(dataset_dir)
         self.dataset_dir.mkdir(parents=True, exist_ok=True)
-        self.trade_ledger = trade_ledger
+        self.trade_ledger = trade_ledger  # Primary (paper)
+        self.live_trade_ledger = live_trade_ledger  # Secondary (live)
         
         # Immutable dataset path (append-only)
         self.dataset_file = self.dataset_dir / "ml_training_dataset.jsonl"
@@ -153,42 +156,88 @@ class DatasetBuilder:
     def build_from_ledger(self, mae_threshold: float = 0.03) -> Tuple[int, int]:
         """Build dataset from closed trades in ledger.
         
+        Phase-aware data collection:
+        - PHASE_1: Paper ledger only
+        - PHASE_2: Paper primary (70-80%) + live secondary (20-30%, tagged)
+        - PHASE_3: Paper primary + live constraints
+        
         Args:
             mae_threshold: MAE threshold for 'bad' trade classification
         
         Returns:
             Tuple of (rows_added, rows_total)
         """
+        from config.ml_phase import get_ml_phase_config, MLLearningPhase
+        
         logger.info("=" * 80)
         logger.info("DATASET BUILDING")
         logger.info("=" * 80)
         
-        # Get all closed trades from ledger
-        all_trades = self.trade_ledger.get_all_trades()
-        closed_trades = [t for t in all_trades if t.exit_timestamp is not None]
+        phase_config = get_ml_phase_config()
+        current_phase = phase_config.get_phase()
         
-        logger.info(f"Total trades in ledger: {len(all_trades)}")
-        logger.info(f"Closed trades: {len(closed_trades)}")
-        logger.info(f"Open trades: {len(all_trades) - len(closed_trades)}")
+        logger.info(f"ML Learning Phase: {current_phase.value}")
         
+        # Collect paper ledger trades (always primary)
+        paper_trades = self._collect_trades_from_ledger(
+            self.trade_ledger,
+            source_tag="paper",
+            weight=1.0
+        )
+        
+        # Collect live ledger trades (phase-dependent)
+        live_trades = []
+        if current_phase == MLLearningPhase.PHASE_1:
+            logger.info("PHASE_1: Using paper ledger only (live excluded)")
+        elif current_phase == MLLearningPhase.PHASE_2:
+            if self.live_trade_ledger:
+                logger.info("PHASE_2: Using paper (primary) + live (secondary, 30% weight)")
+                live_trades = self._collect_trades_from_ledger(
+                    self.live_trade_ledger,
+                    source_tag="live",
+                    weight=0.3
+                )
+            else:
+                logger.warning("PHASE_2 configured but no live ledger provided")
+        elif current_phase == MLLearningPhase.PHASE_3:
+            if self.live_trade_ledger:
+                logger.info("PHASE_3: Using paper (primary) + live (constraints)")
+                live_trades = self._collect_trades_from_ledger(
+                    self.live_trade_ledger,
+                    source_tag="live",
+                    weight=0.4  # Higher weight for mature system
+                )
+            else:
+                logger.warning("PHASE_3 configured but no live ledger provided")
+        
+        # Combine datasets
+        all_trades_to_process = paper_trades + live_trades
+        
+        logger.info(f"Paper trades: {len(paper_trades)}")
+        logger.info(f"Live trades: {len(live_trades)}")
+        logger.info(f"Total to process: {len(all_trades_to_process)}")
+        
+        # Process new trades
         new_rows = []
-        for trade in closed_trades:
-            # Skip if already processed (prevent duplicates)
-            trade_id = (trade.symbol, trade.entry_timestamp)
+        for trade, source_tag, weight in all_trades_to_process:
+            trade_id = (trade.symbol, trade.entry_timestamp, source_tag)
             if trade_id in self._processed_trade_ids:
                 continue
             
             try:
-                # Reconstruct decision-time context
                 row = self._trade_to_row(trade, mae_threshold)
                 if row:
-                    new_rows.append(row)
+                    # Add metadata for multi-source tracking
+                    row_dict = row.to_dict()
+                    row_dict["source"] = source_tag
+                    row_dict["weight"] = weight
+                    new_rows.append(row_dict)
                     self._processed_trade_ids.add(trade_id)
             except Exception as e:
                 logger.warning(f"Could not process trade {trade.symbol}: {e}")
         
-        # Append to dataset (immutable)
-        rows_added = self._append_rows(new_rows)
+        # Append to dataset
+        rows_added = self._append_row_dicts(new_rows)
         rows_total = len(self._processed_trade_ids)
         
         logger.info(f"Rows added: {rows_added}")
@@ -196,6 +245,29 @@ class DatasetBuilder:
         logger.info("=" * 80)
         
         return rows_added, rows_total
+    
+    def _collect_trades_from_ledger(self, ledger, source_tag: str, weight: float) -> List[Tuple]:
+        """
+        Collect closed trades from a ledger with metadata.
+        
+        Args:
+            ledger: TradeLedger instance
+            source_tag: 'paper' or 'live'
+            weight: Training weight for these trades
+            
+        Returns:
+            List of (trade, source_tag, weight) tuples
+        """
+        if ledger is None:
+            return []
+        
+        try:
+            all_trades = ledger.get_all_trades()
+            closed_trades = [t for t in all_trades if t.exit_timestamp is not None]
+            return [(trade, source_tag, weight) for trade in closed_trades]
+        except Exception as e:
+            logger.warning(f"Could not collect trades from {source_tag} ledger: {e}")
+            return []
 
     def _trade_to_row(self, trade, mae_threshold: float) -> Optional[TradeDataRow]:
         """Convert closed Trade to training row.
@@ -239,7 +311,7 @@ class DatasetBuilder:
         )
 
     def _append_rows(self, rows: List[TradeDataRow]) -> int:
-        """Append rows to immutable dataset file."""
+        """Append TradeDataRow objects to immutable dataset file."""
         if not rows:
             return 0
         
@@ -250,6 +322,22 @@ class DatasetBuilder:
             
             self._update_metadata()
             return len(rows)
+        except Exception as e:
+            logger.error(f"Failed to append rows: {e}")
+            raise
+    
+    def _append_row_dicts(self, row_dicts: List[Dict]) -> int:
+        """Append dictionary rows to immutable dataset file."""
+        if not row_dicts:
+            return 0
+        
+        try:
+            with open(self.dataset_file, "a") as f:
+                for row_dict in row_dicts:
+                    f.write(json.dumps(row_dict) + "\n")
+            
+            self._update_metadata()
+            return len(row_dicts)
         except Exception as e:
             logger.error(f"Failed to append rows: {e}")
             raise
