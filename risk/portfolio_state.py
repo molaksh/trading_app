@@ -106,6 +106,37 @@ class PortfolioState:
         self.trades_closed: List[Dict] = []
         
         logger.info(f"Portfolio initialized with equity: ${initial_equity:,.2f}")
+
+    def sync_account_balances(
+        self,
+        equity: float,
+        cash: float,
+        buying_power: float,
+        cash_only: bool,
+    ) -> None:
+        """
+        Sync portfolio balances from broker snapshot.
+
+        Args:
+            equity: Account equity from broker
+            cash: Account cash from broker
+            buying_power: Account buying power from broker
+            cash_only: If True, use cash as trading equity (no margin)
+        """
+        new_equity = cash if cash_only else equity
+        if new_equity <= 0:
+            logger.warning(
+                "Broker equity/cash is non-positive. "
+                f"equity={equity:.2f} cash={cash:.2f} buying_power={buying_power:.2f}"
+            )
+        self.current_equity = max(0.0, new_equity)
+        self.available_capital = self.current_equity
+        if self.daily_start_date is None:
+            self.daily_start_equity = self.current_equity
+        logger.info(
+            "Portfolio synced from broker: equity=$%.2f cash=$%.2f buying_power=$%.2f cash_only=%s"
+            % (equity, cash, buying_power, cash_only)
+        )
     
     def open_trade(
         self,

@@ -1,10 +1,10 @@
 #!/bin/bash
 #
-# Build and run US paper trading container
+# Build and run US live trading container
 #
-# Container: paper-alpaca-swing-us
-# Image: paper-alpaca-swing-us
-# SCOPE: paper_alpaca_swing_us
+# Container: live-alpaca-swing-us
+# Image: live-alpaca-swing-us
+# SCOPE: live_alpaca_swing_us
 #
 
 set -e
@@ -20,7 +20,7 @@ PERSISTENCE_ROOT_HOST="${PERSISTENCE_ROOT_HOST:-$SCRIPT_DIR/logs}"
 mkdir -p "$PERSISTENCE_ROOT_HOST"
 
 echo "=========================================="
-echo "US Alpaca Paper Trading Container"
+echo "US Alpaca Live Trading Container"
 echo "=========================================="
 echo ""
 
@@ -31,10 +31,12 @@ if [ -f ".env" ]; then
 fi
 
 # Scope + host paths
-ENV_VALUE="paper"
+ENV_VALUE="live"
 BROKER_VALUE="alpaca"
 MODE_VALUE="swing"
 MARKET_VALUE="us"
+APP_ENV_VALUE="${APP_ENV:-$ENV_VALUE}"
+OBSERVATION_ONLY_VALUE="${OBSERVATION_ONLY:-false}"
 
 SCOPE=$(printf "%s_%s_%s_%s" "$ENV_VALUE" "$BROKER_VALUE" "$MODE_VALUE" "$MARKET_VALUE" | tr '[:upper:]' '[:lower:]')
 SCOPE_DIR="$PERSISTENCE_ROOT_HOST/$SCOPE"
@@ -44,41 +46,43 @@ LEDGER_FILE="$SCOPE_DIR/ledger/trades.jsonl"
 setup_scope_directories "$SCOPE_DIR" "$LEDGER_FILE"
 
 # Stop and remove old container (persists logs automatically)
-stop_and_remove_container "paper-alpaca-swing-us" "$SCOPE_DIR"
+stop_and_remove_container "live-alpaca-swing-us" "$SCOPE_DIR"
 
 # Rebuild image
-rebuild_image "paper-alpaca-swing-us"
+rebuild_image "live-alpaca-swing-us"
 
 # Run container
-echo "Starting container: paper-alpaca-swing-us..."
+echo "Starting container: live-alpaca-swing-us..."
 docker run -d \
-  --name paper-alpaca-swing-us \
+  --name live-alpaca-swing-us \
   -v "$PERSISTENCE_ROOT_HOST:/app/persist" \
   -e ENV="$ENV_VALUE" \
   -e BROKER="$BROKER_VALUE" \
   -e MODE="$MODE_VALUE" \
   -e MARKET="$MARKET_VALUE" \
+  -e APP_ENV="$APP_ENV_VALUE" \
+  -e OBSERVATION_ONLY="$OBSERVATION_ONLY_VALUE" \
   -e PERSISTENCE_ROOT=/app/persist \
   -e MARKET_TIMEZONE=America/New_York \
   -e ENTRY_WINDOW_MINUTES_BEFORE_CLOSE=5 \
   -e SWING_EXIT_DELAY_MINUTES_AFTER_CLOSE=15 \
-  -e APCA_API_KEY_ID="${APCA_API_KEY_ID}" \
-  -e APCA_API_SECRET_KEY="${APCA_API_SECRET_KEY}" \
-  -e APCA_API_BASE_URL="${APCA_API_BASE_URL}" \
-  -e CASH_ONLY_TRADING="${CASH_ONLY_TRADING:-false}" \
-  paper-alpaca-swing-us python -m execution.scheduler
+  -e APCA_API_KEY_ID="${APCA_LIVE_API_KEY_ID}" \
+  -e APCA_API_SECRET_KEY="${APCA_LIVE_API_SECRET_KEY}" \
+  -e APCA_API_BASE_URL="${APCA_LIVE_API_BASE_URL}" \
+  -e CASH_ONLY_TRADING="${CASH_ONLY_TRADING:-true}" \
+  live-alpaca-swing-us python -m execution.scheduler
 
 echo ""
 echo "✅ Container started successfully!"
 echo ""
 echo "View logs:"
-echo "  docker logs -f paper-alpaca-swing-us"
+echo "  docker logs -f live-alpaca-swing-us"
 echo ""
 echo "Check status:"
-echo "  docker ps | grep paper-alpaca"
+echo "  docker ps | grep live-alpaca"
 echo ""
 echo "Stop container:"
-echo "  docker stop paper-alpaca-swing-us"
+echo "  docker stop live-alpaca-swing-us"
 echo ""
 
 # -----------------------------------------------------------------------------
@@ -120,9 +124,9 @@ check_absent() {
 }
 
 # 1) Container start confirmation
-status=$(docker inspect -f '{{.State.Status}}' paper-alpaca-swing-us 2>/dev/null || true)
-restarting=$(docker inspect -f '{{.State.Restarting}}' paper-alpaca-swing-us 2>/dev/null || true)
-restart_count=$(docker inspect -f '{{.RestartCount}}' paper-alpaca-swing-us 2>/dev/null || echo 0)
+status=$(docker inspect -f '{{.State.Status}}' live-alpaca-swing-us 2>/dev/null || true)
+restarting=$(docker inspect -f '{{.State.Restarting}}' live-alpaca-swing-us 2>/dev/null || true)
+restart_count=$(docker inspect -f '{{.RestartCount}}' live-alpaca-swing-us 2>/dev/null || echo 0)
 if [ "$status" = "running" ] && [ "$restarting" = "false" ] && [ "$restart_count" = "0" ]; then
   pass "Container running (no restarts)"
 else
@@ -133,7 +137,7 @@ fi
 start_ts=$(date +%s)
 logs=""
 while true; do
-  logs=$(docker logs paper-alpaca-swing-us 2>&1 || true)
+  logs=$(docker logs live-alpaca-swing-us 2>&1 || true)
   if [ -n "$logs" ]; then
     if echo "$logs" | grep -Eiq "Safe Mode:|safe_mode=|SAFE_MODE|Reconciliation status"; then
       break

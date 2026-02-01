@@ -4,6 +4,7 @@ ML-ready format: all parameters centralized and versioned.
 """
 
 import logging
+import os
 
 # ============================================================================
 # PORTFOLIO AND RISK PARAMETERS
@@ -126,6 +127,10 @@ DATASET_FILE_FORMAT = "parquet"  # Use 'parquet' or 'csv'
 # SAFETY: Paper trading only. Set to False to prevent execution.
 RUN_PAPER_TRADING = True         # Set to True to enable paper trading
 PAPER_TRADING_MODE_REQUIRED = True  # Safety: fail if not in paper trading mode
+
+# Live safety: cash-only enforcement (no margin borrowing)
+# PERMANENT SETTING: Always use cash-only mode (no margin/leverage)
+CASH_ONLY_TRADING = os.getenv("CASH_ONLY_TRADING", "true").lower() == "true"
 
 # Paper trading broker
 PAPER_TRADING_BROKER = "alpaca"  # Currently supported: "alpaca"

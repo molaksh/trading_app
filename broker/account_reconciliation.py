@@ -22,6 +22,7 @@ from enum import Enum
 from broker.adapter import BrokerAdapter, Position
 from broker.trade_ledger import TradeLedger
 from risk.risk_manager import RiskManager
+from config.settings import CASH_ONLY_TRADING
 
 logger = logging.getLogger(__name__)
 
@@ -189,6 +190,17 @@ class AccountReconciler:
             }
             
             self._log_account_snapshot()
+
+            # Sync portfolio equity/cash to broker snapshot (cash-only if enabled)
+            try:
+                self.risk_manager.portfolio.sync_account_balances(
+                    equity=self.account_snapshot.get("equity", 0.0),
+                    cash=self.account_snapshot.get("cash", 0.0),
+                    buying_power=self.account_snapshot.get("buying_power", 0.0),
+                    cash_only=CASH_ONLY_TRADING,
+                )
+            except Exception as e:
+                logger.warning(f"Failed to sync portfolio balances: {e}")
             
         except Exception as e:
             msg = f"Failed to fetch account: {e}"

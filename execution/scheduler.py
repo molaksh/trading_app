@@ -11,6 +11,7 @@ Phase 0: SCOPE-driven, uses MLStateManager for idempotent training.
 
 import json
 import logging
+import os
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -98,6 +99,9 @@ class TradingScheduler:
         # Use scope-aware paths
         self.state = SchedulerState(get_scope_path(scope, "state") / "scheduler_state.json")
         self.tick_seconds = max(15, SCHEDULER_TICK_SECONDS)
+        self.observation_only = os.getenv("OBSERVATION_ONLY", "false").lower() == "true"
+        if self.observation_only:
+            logger.warning("OBSERVATION_ONLY enabled: trading cycles will be skipped")
         
         # Cache for market clock (fallback when API fails)
         self._last_good_clock: Optional[Dict[str, Optional[datetime]]] = None
@@ -432,6 +436,11 @@ class TradingScheduler:
 
             self._run_reconciliation(now)
 
+            if self.observation_only:
+                self._run_health_check(now)
+                time.sleep(self.tick_seconds)
+                continue
+
             # Intraday monitoring/polling
             if clock["is_open"]:
                 # PRODUCTION: Execute pending exit intents during execution window
@@ -465,9 +474,12 @@ class TradingScheduler:
                             logger.info("Post-close swing exit cycle.")
                             self._run_swing_exit_cycle(now)
                 
-                # After close: run offline ML training once per day
-                if self.state.last_run_date("offline_ml") != now.date():
-                    self._run_offline_ml_cycle(now)
+                # After close: run offline ML training once per day (paper only)
+                from runtime.environment_guard import TradingEnvironment, get_environment_guard
+                guard = get_environment_guard()
+                if guard.environment == TradingEnvironment.PAPER:
+                    if self.state.last_run_date("offline_ml") != now.date():
+                        self._run_offline_ml_cycle(now)
 
             self._run_health_check(now)
 
