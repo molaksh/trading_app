@@ -65,7 +65,7 @@ docker run -d \
   -e APCA_API_KEY_ID="${APCA_API_KEY_ID}" \
   -e APCA_API_SECRET_KEY="${APCA_API_SECRET_KEY}" \
   -e APCA_API_BASE_URL="${APCA_API_BASE_URL}" \
-  -e CASH_ONLY_TRADING="${CASH_ONLY_TRADING:-false}" \
+  -e CASH_ONLY_TRADING="${CASH_ONLY_TRADING:-true}" \
   paper-alpaca-swing-us python -m execution.scheduler
 
 echo ""
