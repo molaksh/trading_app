@@ -15,7 +15,7 @@ from config.scope import get_scope, Scope
 from config.scope_paths import get_scope_paths, get_scope_path
 from broker.broker_factory import get_broker_adapter
 from broker.adapter import BrokerAdapter  # Abstract base
-from broker.paper_trading_executor import PaperTradingExecutor
+from broker.trading_executor import TradingExecutor
 from broker.execution_logger import ExecutionLogger
 from broker.trade_ledger import TradeLedger
 from broker.account_reconciliation import AccountReconciler
@@ -36,7 +36,7 @@ class PaperTradingRuntime:
     broker: BrokerAdapter
     risk_manager: RiskManager
     trade_ledger: TradeLedger
-    executor: PaperTradingExecutor
+    executor: TradingExecutor
     monitor: Optional[SystemGuard]
     exit_evaluator: ExitEvaluator
     strategies: List[Strategy]  # Scope-filtered strategies
@@ -108,7 +108,7 @@ def build_paper_trading_runtime() -> PaperTradingRuntime:
         logger.debug(f"Could not initialize ML trainer: {e}")
     
     # Build paper trading executor
-    executor = PaperTradingExecutor(
+    executor = TradingExecutor(
         broker=broker,
         risk_manager=risk_manager,
         monitor=monitor,
