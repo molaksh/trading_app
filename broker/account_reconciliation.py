@@ -563,27 +563,31 @@ class AccountReconciler:
         
         alpaca_symbols = {pos.symbol for pos in self.alpaca_positions}
         ledger_symbols = {t.get("symbol") for t in open_trades}
+        ledger_open_position_symbols = set()
+        if hasattr(self.trade_ledger, '_open_positions'):
+            ledger_open_position_symbols = set(self.trade_ledger._open_positions.keys())
+        known_ledger_symbols = ledger_symbols | ledger_open_position_symbols
         
         logger.info(f"Open trades in ledger: {len(open_trades)}")
         logger.info(f"Closed/exited trades in ledger: {len(closed_trades)}")
         logger.info(f"Open positions on Alpaca: {len(self.alpaca_positions)}")
         
         # Check for trades in ledger but not on Alpaca
-        missing_from_alpaca = ledger_symbols - alpaca_symbols
+        missing_from_alpaca = known_ledger_symbols - alpaca_symbols
         if missing_from_alpaca:
             msg = (
-                f"WARNING: Ledger has open trades for {missing_from_alpaca} "
+                f"WARNING: Ledger has open positions for {missing_from_alpaca} "
                 f"but no open Alpaca positions (may have been exited elsewhere)"
             )
             logger.warning(msg)
             self.validation_warnings.append(msg)
         
         # Check for external positions (Alpaca but not in ledger)
-        external_positions = alpaca_symbols - ledger_symbols
+        external_positions = alpaca_symbols - known_ledger_symbols
         if external_positions:
             msg = (
                 f"Found {len(external_positions)} external position(s) in Alpaca "
-                f"not tracked in ledger: {sorted(external_positions)}. "
+                f"not tracked in ledger/open positions: {sorted(external_positions)}. "
                 f"Will block duplicate BUY orders on these symbols only."
             )
             logger.warning(msg)
