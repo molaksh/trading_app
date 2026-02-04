@@ -141,5 +141,5 @@ def reconcile_runtime(runtime: PaperTradingRuntime) -> dict:
     reconciliation_result = reconciler.reconcile_on_startup()
     runtime.executor.safe_mode_enabled = reconciliation_result.get("safe_mode", False)
     runtime.executor.startup_status = reconciliation_result.get("status", "UNKNOWN")
-    runtime.executor.external_symbols = reconciler.external_symbols  # Track symbols to block duplicates
+    runtime.executor.external_symbols = reconciler.unreconciled_broker_symbols  # Track unreconciled symbols to block duplicates
     return reconciliation_result

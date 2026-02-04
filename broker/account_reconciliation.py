@@ -81,8 +81,14 @@ class AccountReconciler:
         self.validation_warnings = []
         self.validation_errors = []
         
-        # External symbol tracking (not in ledger but in Alpaca)
-        self.external_symbols = set()  # Symbols only in Alpaca, block duplicate buys
+        # Unreconciled broker positions (exist in broker but NOT in internal ledger after backfill)
+        # These symbols MUST be blocked from new BUY orders to prevent duplicate exposure
+        self.unreconciled_broker_symbols = set()
+        
+        # Legacy alias for backward compatibility
+        @property
+        def external_symbols(self):
+            return self.unreconciled_broker_symbols
         
         # Snapshots from Alpaca
         self.account_snapshot = None
@@ -582,18 +588,18 @@ class AccountReconciler:
             logger.warning(msg)
             self.validation_warnings.append(msg)
         
-        # Check for external positions (Alpaca but not in ledger)
-        external_positions = alpaca_symbols - known_ledger_symbols
-        if external_positions:
+        # Check for UNRECONCILED positions (Alpaca but not in ledger even after backfill)
+        unreconciled_positions = alpaca_symbols - known_ledger_symbols
+        if unreconciled_positions:
             msg = (
-                f"Found {len(external_positions)} external position(s) in Alpaca "
-                f"not tracked in ledger/open positions: {sorted(external_positions)}. "
+                f"Found {len(unreconciled_positions)} UNRECONCILED position(s) in Alpaca "
+                f"not tracked in ledger/open positions: {sorted(unreconciled_positions)}. "
                 f"Will block duplicate BUY orders on these symbols only."
             )
             logger.warning(msg)
             # Track for symbol-level blocking, NOT global SAFE_MODE
-            self.external_symbols.update(external_positions)
-            logger.info(f"External symbols tracked: {self.external_symbols}")
+            self.unreconciled_broker_symbols.update(unreconciled_positions)
+            logger.info(f"Unreconciled broker symbols (blocking BUYs): {self.unreconciled_broker_symbols}")
         
         # Check for closed trades that somehow have open positions
         closed_with_positions = []
@@ -613,7 +619,7 @@ class AccountReconciler:
             "open_trades": len(open_trades),
             "closed_trades": len(closed_trades),
             "missing_from_alpaca": list(missing_from_alpaca),
-            "external_symbols": list(self.external_symbols),
+            "unreconciled_broker_symbols": list(self.unreconciled_broker_symbols),
             "closed_with_positions": closed_with_positions,
         }
         
@@ -665,13 +671,13 @@ class AccountReconciler:
             logger.warning(f"Entering SAFE_MODE due to: {serious_warnings}")
             return
         
-        # All clear (external symbols tracked separately)
+        # All clear (unreconciled symbols tracked separately for BUY blocking only)
         self.startup_status = StartupStatus.READY
         self.safe_mode = False
-        if self.external_symbols:
+        if self.unreconciled_broker_symbols:
             logger.info(
-                f"Status: READY with {len(self.external_symbols)} external symbols tracked "
-                f"(will block duplicate BUY orders only): {self.external_symbols}"
+                f"Status: READY with {len(self.unreconciled_broker_symbols)} unreconciled broker symbols "
+                f"(blocking BUY orders only): {self.unreconciled_broker_symbols}"
             )
     
     # ========================================================================

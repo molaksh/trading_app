@@ -574,7 +574,7 @@ class LedgerReconciliationHelper:
             f"(qty={position.quantity}, avg={position.avg_entry_price:.2f})"
         )
         
-        # Store metadata for later exit tracking
+        # Store metadata for later exit tracking and scale-in decisions
         # NOTE: This is a partial record - will be completed when position closes
         metadata = {
             "symbol": position.symbol,
@@ -583,7 +583,11 @@ class LedgerReconciliationHelper:
             "entry_price": position.avg_entry_price,
             "entry_quantity": position.quantity,
             "source": "BROKER_RECONCILIATION",
-            "reconciled_at": datetime.now().isoformat()
+            "reconciled_at": datetime.now().isoformat(),
+            # Scale-in tracking fields
+            "entry_count": 1,  # First entry (backfilled)
+            "last_entry_time": entry_timestamp,
+            "last_entry_price": position.avg_entry_price,
         }
         
         ledger._open_positions[position.symbol] = metadata

@@ -142,8 +142,17 @@ PAPER_TRADING_BROKER = "alpaca"  # Currently supported: "alpaca"
 RECONCILIATION_BACKFILL_ENABLED = True   # Backfill ledger from broker positions
 RECONCILIATION_MARK_UNKNOWN_CLOSED = True  # Mark ledger positions not on broker as CLOSED
 
-# Position state and add-on buy logic
+# ============================================================================
+# SCALE-IN / PYRAMIDING CONFIGURATION
+# ============================================================================
+# Multi-day position building (scale-in enabled by default)
+SCALE_IN_ENABLED = True                  # Enable scale-in on existing positions
+MAX_ENTRIES_PER_SYMBOL = 4               # Max entry fills per symbol (e.g., day 1,2,3,4)
+MIN_TIME_BETWEEN_ENTRIES_MINUTES = 1440  # 1-day cooldown between entries (24 hours)
+MIN_ADD_PCT_ABOVE_LAST_ENTRY = 0.0       # Optional: require price X% above last entry (0.0 = no constraint)
 MAX_ALLOCATION_PER_SYMBOL_PCT = 0.05     # Max 5% of portfolio per symbol (notional value)
+
+# Legacy add-on settings (deprecated, use SCALE_IN_* above)
 ADD_ON_BUY_CONFIDENCE_THRESHOLD = 5      # Require confidence 5 for add-on buys
 ADD_ON_BUY_ENABLED = True                # Enable add-on buy logic
 

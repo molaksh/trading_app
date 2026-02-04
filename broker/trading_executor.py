@@ -29,6 +29,141 @@ from strategy.exit_evaluator import ExitEvaluator, ExitSignal
 logger = logging.getLogger(__name__)
 
 
+# ============================================================================
+# BUY ACTION DECISION (Scale-In System)
+# ============================================================================
+
+class BuyAction:
+    """Buy action decision codes."""
+    ENTER_NEW = "ENTER_NEW"              # New position entry
+    SCALE_IN = "SCALE_IN"                # Add to existing internal position
+    SKIP = "SKIP"                        # Skip this signal (cooldown, max entries, etc)
+    BLOCK = "BLOCK"                      # Block due to unreconciled or risk
+
+
+class BuyBlockReason:
+    """Reason codes for blocking/skipping buy signals."""
+    UNRECONCILED_BROKER_POSITION = "UNRECONCILED_BROKER_POSITION"
+    SAFE_MODE_ACTIVE = "SAFE_MODE_ACTIVE"
+    SCALE_IN_DISABLED = "SCALE_IN_DISABLED"
+    MAX_ENTRIES_REACHED = "MAX_ENTRIES_REACHED"
+    ENTRY_COOLDOWN = "ENTRY_COOLDOWN"
+    PRICE_NOT_HIGH_ENOUGH = "PRICE_NOT_HIGH_ENOUGH"
+    INSUFFICIENT_POSITION_STATE = "INSUFFICIENT_POSITION_STATE"
+    RISK_BLOCK = "RISK_BLOCK"
+
+
+def evaluate_buy_action(
+    symbol: str,
+    signal_confidence: int,
+    unreconciled_broker_symbols: set,
+    internal_position: Optional[Dict],
+    current_price: float,
+    now: datetime,
+    config: Dict,
+) -> Tuple[str, Optional[str]]:
+    """
+    Evaluate whether a BUY signal should proceed and how.
+    
+    Decision flow:
+    1. BLOCK if symbol is unreconciled (broker has it but internal ledger does not)
+    2. ENTER_NEW if no internal position exists
+    3. SKIP/SCALE_IN based on scale-in rules if internal position exists
+    
+    Args:
+        symbol: Ticker symbol
+        signal_confidence: Signal confidence (1-5)
+        unreconciled_broker_symbols: Set of symbols in broker but not internal ledger
+        internal_position: Internal ledger position metadata (or None)
+        current_price: Current market price
+        now: Current timestamp
+        config: Scale-in config dict with keys:
+            - SCALE_IN_ENABLED
+            - MAX_ENTRIES_PER_SYMBOL
+            - MIN_TIME_BETWEEN_ENTRIES_MINUTES
+            - MIN_ADD_PCT_ABOVE_LAST_ENTRY
+    
+    Returns:
+        (action, reason_code)
+        - action: BuyAction constant
+        - reason_code: BuyBlockReason constant if action is SKIP/BLOCK, else None
+    """
+    # 1) PREFLIGHT: Block unreconciled symbols (broker has position, internal ledger does not)
+    if symbol in unreconciled_broker_symbols:
+        logger.warning(
+            f"BLOCKING BUY - {symbol} is UNRECONCILED "
+            f"(broker position but not in internal ledger after backfill)"
+        )
+        return BuyAction.BLOCK, BuyBlockReason.UNRECONCILED_BROKER_POSITION
+    
+    # 2) No internal position → ENTER_NEW (classic flow)
+    if internal_position is None:
+        logger.info(f"BUY ACTION: {symbol} → ENTER_NEW (no existing internal position)")
+        return BuyAction.ENTER_NEW, None
+    
+    # 3) Internal position exists → evaluate scale-in eligibility
+    
+    # Check if scale-in is enabled
+    if not config.get("SCALE_IN_ENABLED", True):
+        logger.info(f"BUY ACTION: {symbol} → SKIP (scale-in disabled)")
+        return BuyAction.SKIP, BuyBlockReason.SCALE_IN_DISABLED
+    
+    # Extract position state
+    entry_count = internal_position.get("entry_count", 1)
+    last_entry_time_str = internal_position.get("last_entry_time")
+    last_entry_price = internal_position.get("last_entry_price")
+    
+    # Check if we have required state for scale-in decisions
+    if last_entry_time_str is None or last_entry_price is None:
+        logger.warning(
+            f"BUY ACTION: {symbol} → SKIP (insufficient position state for scale-in)"
+        )
+        return BuyAction.SKIP, BuyBlockReason.INSUFFICIENT_POSITION_STATE
+    
+    # Parse last entry time
+    try:
+        last_entry_time = datetime.fromisoformat(last_entry_time_str)
+    except Exception as e:
+        logger.warning(f"BUY ACTION: {symbol} → SKIP (invalid last_entry_time: {e})")
+        return BuyAction.SKIP, BuyBlockReason.INSUFFICIENT_POSITION_STATE
+    
+    # Check max entries limit
+    max_entries = config.get("MAX_ENTRIES_PER_SYMBOL", 4)
+    if entry_count >= max_entries:
+        logger.info(
+            f"BUY ACTION: {symbol} → SKIP (max entries reached: {entry_count}/{max_entries})"
+        )
+        return BuyAction.SKIP, BuyBlockReason.MAX_ENTRIES_REACHED
+    
+    # Check cooldown period
+    min_time_between_minutes = config.get("MIN_TIME_BETWEEN_ENTRIES_MINUTES", 1440)
+    time_since_last_entry = (now - last_entry_time).total_seconds() / 60
+    if time_since_last_entry < min_time_between_minutes:
+        logger.info(
+            f"BUY ACTION: {symbol} → SKIP (entry cooldown: "
+            f"{time_since_last_entry:.0f}min < {min_time_between_minutes}min)"
+        )
+        return BuyAction.SKIP, BuyBlockReason.ENTRY_COOLDOWN
+    
+    # Check price constraint (optional)
+    min_add_pct = config.get("MIN_ADD_PCT_ABOVE_LAST_ENTRY", 0.0)
+    if min_add_pct > 0:
+        required_price = last_entry_price * (1 + min_add_pct)
+        if current_price < required_price:
+            logger.info(
+                f"BUY ACTION: {symbol} → SKIP (price constraint: "
+                f"${current_price:.2f} < ${required_price:.2f})"
+            )
+            return BuyAction.SKIP, BuyBlockReason.PRICE_NOT_HIGH_ENOUGH
+    
+    # All checks passed → SCALE_IN approved
+    logger.info(
+        f"BUY ACTION: {symbol} → SCALE_IN (entry {entry_count + 1}/{max_entries}, "
+        f"cooldown OK, price OK)"
+    )
+    return BuyAction.SCALE_IN, None
+
+
 class TradingExecutor:
     """
     Orchestrates trading flow.
@@ -154,71 +289,57 @@ class TradingExecutor:
             )
             return False, None
         
-        # PRODUCTION FIX: Position state model for add-on buy logic
+        # EVALUATE BUY ACTION (scale-in system)
         from config.settings import (
-            ADD_ON_BUY_ENABLED,
+            SCALE_IN_ENABLED,
+            MAX_ENTRIES_PER_SYMBOL,
+            MIN_TIME_BETWEEN_ENTRIES_MINUTES,
+            MIN_ADD_PCT_ABOVE_LAST_ENTRY,
             MAX_ALLOCATION_PER_SYMBOL_PCT,
-            ADD_ON_BUY_CONFIDENCE_THRESHOLD
         )
         
-        # Check if we have an existing position for this symbol
+        # Get current market price for scale-in price checks
         try:
-            existing_position = self.broker.get_position(symbol)
+            current_price = self.broker.get_last_trade_price(symbol)
         except Exception as e:
-            existing_position = None
-            logger.warning(f"Could not check existing position for {symbol}: {e}")
+            logger.warning(f"Could not get current price for {symbol}: {e}, using 0.0")
+            current_price = 0.0
         
-        # Calculate current allocation % if position exists
-        if existing_position and abs(existing_position.quantity) > 0:
-            # Check if symbol is external (not tracked in our system)
-            if symbol in self.external_symbols:
-                # Position exists ONLY on broker, not in our ledger
-                logger.warning(
-                    f"EXTERNAL SYMBOL - NO ADD-ON: {symbol} is held externally "
-                    f"(Alpaca position but not in ledger). Cannot add to external position."
-                )
-                return False, None
-            
-            # Position is known (in our ledger) - check add-on eligibility
-            if not ADD_ON_BUY_ENABLED:
-                logger.info(
-                    f"Skipping {symbol} — existing position qty={existing_position.quantity} "
-                    f"(add-on buys disabled)"
-                )
-                return False, None
-            
-            # Calculate current allocation
-            account_value = self.risk_manager.portfolio.current_equity
-            position_value = abs(existing_position.quantity) * existing_position.current_price
-            current_allocation_pct = position_value / account_value if account_value > 0 else 0.0
-            
-            # Check if we're at/over max allocation
-            if current_allocation_pct >= MAX_ALLOCATION_PER_SYMBOL_PCT:
-                logger.warning(
-                    f"AT MAX ALLOCATION: {symbol} current allocation "
-                    f"{current_allocation_pct:.2%} >= max {MAX_ALLOCATION_PER_SYMBOL_PCT:.2%}. "
-                    f"Skipping add-on buy to prevent over-concentration."
-                )
-                return False, None
-            
-            # Check if confidence meets add-on threshold
-            if confidence < ADD_ON_BUY_CONFIDENCE_THRESHOLD:
-                logger.warning(
-                    f"CONFIDENCE TOO LOW FOR ADD-ON: {symbol} confidence={confidence} "
-                    f"< threshold={ADD_ON_BUY_CONFIDENCE_THRESHOLD}. "
-                    f"Add-on buys require higher confidence to justify increased exposure."
-                )
-                return False, None
-            
-            # Add-on buy approved - calculate remaining allocation room
-            remaining_allocation = MAX_ALLOCATION_PER_SYMBOL_PCT - current_allocation_pct
-            logger.info(
-                f"ADD-ON BUY APPROVED: {symbol} current={current_allocation_pct:.2%}, "
-                f"max={MAX_ALLOCATION_PER_SYMBOL_PCT:.2%}, remaining={remaining_allocation:.2%}, "
-                f"confidence={confidence}>={ADD_ON_BUY_CONFIDENCE_THRESHOLD}"
-            )
-            # Continue to risk manager evaluation (will respect allocation limits)
-
+        # Get internal position from ledger (not broker)
+        internal_position = None
+        if hasattr(self.trade_ledger, '_open_positions') and symbol in self.trade_ledger._open_positions:
+            internal_position = self.trade_ledger._open_positions[symbol]
+        
+        # Evaluate buy action
+        buy_action, block_reason = evaluate_buy_action(
+            symbol=symbol,
+            signal_confidence=confidence,
+            unreconciled_broker_symbols=self.external_symbols,
+            internal_position=internal_position,
+            current_price=current_price,
+            now=datetime.now(),
+            config={
+                "SCALE_IN_ENABLED": SCALE_IN_ENABLED,
+                "MAX_ENTRIES_PER_SYMBOL": MAX_ENTRIES_PER_SYMBOL,
+                "MIN_TIME_BETWEEN_ENTRIES_MINUTES": MIN_TIME_BETWEEN_ENTRIES_MINUTES,
+                "MIN_ADD_PCT_ABOVE_LAST_ENTRY": MIN_ADD_PCT_ABOVE_LAST_ENTRY,
+            }
+        )
+        
+        # Handle decision
+        if buy_action == BuyAction.BLOCK:
+            logger.warning(f"BUY BLOCKED: {symbol} | reason={block_reason}")
+            return False, None
+        
+        if buy_action == BuyAction.SKIP:
+            logger.info(f"BUY SKIPPED: {symbol} | reason={block_reason}")
+            return False, None
+        
+        # Proceed with ENTER_NEW or SCALE_IN
+        if buy_action == BuyAction.SCALE_IN:
+            logger.info(f"Proceeding with SCALE_IN for {symbol}")
+        elif buy_action == BuyAction.ENTER_NEW:
+            logger.info(f"Proceeding with ENTER_NEW for {symbol}")
         
         # Step 1: Log signal
         try:
