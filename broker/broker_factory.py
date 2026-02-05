@@ -65,9 +65,28 @@ def get_broker_adapter(scope: Optional[Scope] = None) -> BrokerAdapter:
         return CryptoAdapter(paper_mode=(scope.env == "paper"))
     
     elif broker_name == "kraken":
-        # Kraken is a specific crypto exchange implementation
-        from broker.crypto_adapter import CryptoAdapter
-        return CryptoAdapter(paper_mode=(scope.env == "paper"))
+        # Kraken is a specific crypto exchange implementation (Phase 1)
+        import os
+        from broker.kraken_adapter import KrakenAdapter
+        
+        paper_mode = (scope.env == "paper")
+        dry_run = os.getenv("DRY_RUN", "true").lower() == "true"
+        enable_live_orders = os.getenv("ENABLE_LIVE_ORDERS", "false").lower() == "true"
+        
+        # Run preflight checks for live mode
+        if not paper_mode and not dry_run:
+            from broker.kraken_preflight import run_preflight_checks
+            try:
+                run_preflight_checks(dry_run=False)
+            except Exception as e:
+                logger.error(f"Kraken preflight checks failed: {e}")
+                raise
+        
+        return KrakenAdapter(
+            paper_mode=paper_mode,
+            dry_run=dry_run,
+            enable_live_orders=enable_live_orders
+        )
     
     else:
         raise ValueError(

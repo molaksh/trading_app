@@ -65,6 +65,20 @@ def build_paper_trading_runtime() -> PaperTradingRuntime:
     broker = get_broker_adapter(scope)
     logger.info(f"Broker: {broker.__class__.__name__}")
     
+    # Run Kraken preflight checks for live crypto trading
+    if scope.broker.lower() == "kraken" and scope.env.lower() == "live":
+        try:
+            import os
+            dry_run = os.getenv("DRY_RUN", "true").lower() == "true"
+            if not dry_run:
+                from broker.kraken_preflight import run_preflight_checks
+                logger.info("Running Kraken preflight checks...")
+                checks = run_preflight_checks(dry_run=False)
+                logger.info(f"Preflight checks passed: {checks}")
+        except Exception as e:
+            logger.error(f"Kraken preflight check failed: {e}")
+            raise
+    
     # Load scope-filtered strategies
     strategies = instantiate_strategies_for_scope(scope)
     strategy_names = [s.name for s in strategies]

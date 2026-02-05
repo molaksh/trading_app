@@ -17,7 +17,7 @@ UNIVERSE_MIN_VOLUME_USD = 1000000
 UNIVERSE_MAX_SPREAD_BPS = 50
 
 # ============================================================================
-# KRAKEN LIVE CONNECTIVITY
+# KRAKEN API CONFIGURATION - PHASE 1
 # ============================================================================
 # API credentials from environment variables
 KRAKEN_API_KEY = "${KRAKEN_API_KEY}"
@@ -27,6 +27,60 @@ KRAKEN_API_TIER = "starter"  # starter, intermediate, pro
 # Rate limiting per tier
 KRAKEN_RATE_LIMIT_BURST = 15
 KRAKEN_RATE_LIMIT_WINDOW = 1  # seconds
+
+# REST API settings
+KRAKEN_REST_BASE_URL = "https://api.kraken.com"
+HTTP_TIMEOUT_SEC = 10
+HTTP_MAX_RETRIES = 3
+HTTP_BACKOFF_FACTOR = 0.5
+
+# WebSocket configuration (Phase 1.2 optional)
+ENABLE_WS = false
+WS_TIMEOUT_SEC = 5
+
+# =============================================================================
+# PHASE 1 SAFETY FLAGS (LIVE MODE)
+# =============================================================================
+
+# DRY_RUN: If true, orders are logged but NOT submitted to Kraken
+# Default: true (safest - always use initially)
+# Change ONLY with explicit code review + deployment approval
+DRY_RUN = true
+
+# ENABLE_LIVE_ORDERS: If true, allow real orders to Kraken
+# REQUIRES: DRY_RUN=false, KRAKEN_API_KEY, KRAKEN_API_SECRET
+# Default: false (safest)
+# Change ONLY with explicit code review + full deployment checklist
+ENABLE_LIVE_ORDERS = false
+
+# Symbol allowlist: only allow trading these pairs
+# Prevents accidental trades on unintended pairs
+SYMBOL_ALLOWLIST = ["BTC", "ETH", "SOL"]
+
+# Maximum notional value per order (USD)
+# Prevents accidental large orders
+MAX_NOTIONAL_PER_ORDER = 500.0
+
+# =============================================================================
+# KRAKEN ORDER CONSTRAINTS
+# =============================================================================
+
+# Minimum order sizes (base currency units)
+BTC_MIN_ORDER_SIZE = 0.00001
+ETH_MIN_ORDER_SIZE = 0.0001
+SOL_MIN_ORDER_SIZE = 0.01
+
+# Price precision (decimal places)
+BTC_PRICE_DECIMALS = 2
+ETH_PRICE_DECIMALS = 2
+SOL_PRICE_DECIMALS = 4
+
+# Idempotency: client_order_id for duplicate prevention (Phase 1.2)
+ENABLE_IDEMPOTENCY = true
+
+# ============================================================================
+# KRAKEN LIVE CONNECTIVITY (PHASE 1 UNCHANGED)
+# ============================================================================
 
 # ============================================================================
 # TRADING SCHEDULE & DOWNTIME
