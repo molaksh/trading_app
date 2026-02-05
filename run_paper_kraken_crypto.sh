@@ -34,15 +34,26 @@ mkdir -p data/datasets/crypto/kraken_global/{training,validation,live}
 mkdir -p data/ledger/crypto/kraken_global
 mkdir -p data/persist/crypto/kraken_global
 
+# Check if running in background mode
+BACKGROUND_MODE=${1:-""}
+if [ "$BACKGROUND_MODE" == "-d" ] || [ "$BACKGROUND_MODE" == "--detach" ]; then
+    DOCKER_FLAGS="-d"
+    echo "Running in BACKGROUND mode..."
+else
+    DOCKER_FLAGS="-it"
+    echo "Running in INTERACTIVE mode..."
+fi
+
 # Run container
 docker run \
     --name "$CONTAINER_NAME" \
     --rm \
-    -it \
+    $DOCKER_FLAGS \
     -e SCOPE="paper_kraken_crypto_global" \
     -e CONFIG="$CONFIG" \
     -e LOG_LEVEL="INFO" \
     -e PERSISTENCE_ROOT="/app/persist" \
+    -e CASH_ONLY_TRADING="true" \
     -e KRKN_LIVE_API_KEY_ID="${KRKN_LIVE_API_KEY_ID}" \
     -e KRKN_LIVE_API_SECRET_KEY="${KRKN_LIVE_API_SECRET_KEY}" \
     -e APCA_API_BASE_URL="${APCA_API_BASE_URL}" \
@@ -55,6 +66,14 @@ docker run \
     "$DOCKER_IMAGE" \
     python main.py
 
-echo "=========================================="
-echo "Paper trading container stopped"
-echo "=========================================="
+if [ "$BACKGROUND_MODE" == "-d" ] || [ "$BACKGROUND_MODE" == "--detach" ]; then
+    echo "=========================================="
+    echo "Paper trading container started in background"
+    echo "  Container: $CONTAINER_NAME"
+    echo "  Logs: docker logs -f $CONTAINER_NAME"
+    echo "=========================================="
+else
+    echo "=========================================="
+    echo "Paper trading container stopped"
+    echo "=========================================="
+fi

@@ -75,22 +75,39 @@ class StrategyRegistry:
             "swing_equity": SwingEquityStrategy(),
         }
         
-        # Try to import crypto strategies if available
+        # Import crypto strategy registry (6 canonical strategies)
         try:
-            from core.strategies.crypto import CryptoMomentumStrategy, CryptoTrendStrategy
-            strategies["crypto_momentum"] = CryptoMomentumStrategy()
-            strategies["crypto_trend"] = CryptoTrendStrategy()
+            from core.strategies.crypto import CryptoStrategyRegistry
+            
+            # Initialize and get all crypto strategies
+            CryptoStrategyRegistry.validate_registration()
+            crypto_registry = CryptoStrategyRegistry.get_all_strategies()
+            
+            # Convert crypto strategy metadata to StrategyMetadata format
+            # For now, create wrapper metadata for crypto strategies
+            for crypto_id, crypto_meta in crypto_registry.items():
+                strategies[crypto_id] = _create_crypto_strategy_wrapper(crypto_id, crypto_meta)
+            
+            logger.info(f"Discovered {len(crypto_registry)} canonical crypto strategies")
         except ImportError:
             logger.warning("Crypto strategies not available")
+        except AssertionError as e:
+            logger.error(f"Crypto strategy registration validation failed: {e}")
         
-        # Extract metadata
+        # Extract metadata for all strategies
         for strategy_name, strategy in strategies.items():
-            metadata = strategy.get_metadata()
-            cls._registry[strategy_name] = metadata
+            if isinstance(strategy, StrategyMetadata):
+                # Already metadata (crypto strategies)
+                cls._registry[strategy_name] = strategy
+            else:
+                # Extract metadata from strategy instance
+                metadata = strategy.get_metadata()
+                cls._registry[strategy_name] = metadata
+            
             logger.info(
                 f"  Discovered {strategy_name}: "
-                f"markets={metadata.supported_markets}, "
-                f"modes={metadata.supported_modes}"
+                f"markets={cls._registry[strategy_name].supported_markets}, "
+                f"modes={cls._registry[strategy_name].supported_modes}"
             )
         
         cls._initialized = True
@@ -156,12 +173,38 @@ class StrategyRegistry:
             if strategy_name == "swing_equity":
                 from core.strategies.equity.swing import SwingEquityStrategy
                 instance = SwingEquityStrategy()
+            # Canonical crypto strategies
+            elif strategy_name == "long_term_trend_follower":
+                from crypto.strategies.long_term_trend_follower import LongTermTrendFollower
+                instance = LongTermTrendFollower()
+            elif strategy_name == "volatility_scaled_swing":
+                from crypto.strategies.volatility_scaled_swing import VolatilityScaledSwing
+                instance = VolatilityScaledSwing()
+            elif strategy_name == "mean_reversion":
+                from crypto.strategies.mean_reversion import MeanReversion
+                instance = MeanReversion()
+            elif strategy_name == "defensive_hedge_short":
+                from crypto.strategies.defensive_hedge_short import DefensiveHedgeShort
+                instance = DefensiveHedgeShort()
+            elif strategy_name == "cash_stable_allocator":
+                from crypto.strategies.cash_stable_allocator import CashStableAllocator
+                instance = CashStableAllocator()
+            elif strategy_name == "recovery_reentry":
+                from crypto.strategies.recovery_reentry import RecoveryReentry
+                instance = RecoveryReentry()
+            # Deprecated wrappers (for backwards compatibility only)
             elif strategy_name == "crypto_momentum":
-                from core.strategies.crypto import CryptoMomentumStrategy
-                instance = CryptoMomentumStrategy()
+                logger.warning(
+                    f"Deprecated wrapper 'crypto_momentum' requested. "
+                    f"Use 'long_term_trend_follower' or 'volatility_scaled_swing' instead."
+                )
+                continue
             elif strategy_name == "crypto_trend":
-                from core.strategies.crypto import CryptoTrendStrategy
-                instance = CryptoTrendStrategy()
+                logger.warning(
+                    f"Deprecated wrapper 'crypto_trend' requested. "
+                    f"Use 'long_term_trend_follower' instead."
+                )
+                continue
             else:
                 logger.warning(f"Unknown strategy: {strategy_name}")
                 continue
@@ -197,6 +240,29 @@ class StrategyRegistry:
             )
         
         return True
+
+
+def _create_crypto_strategy_wrapper(
+    crypto_id: str,
+    crypto_meta: Any
+) -> StrategyMetadata:
+    """
+    Convert CryptoStrategyMetadata to StrategyMetadata.
+    
+    Args:
+        crypto_id: Strategy ID (e.g., "long_term_trend_follower")
+        crypto_meta: CryptoStrategyMetadata instance
+    
+    Returns:
+        StrategyMetadata for use in main registry
+    """
+    return StrategyMetadata(
+        name=crypto_id,
+        version=crypto_meta.version,
+        supported_markets=["global"],  # All crypto strategies are global market
+        supported_modes=["crypto"],     # All crypto strategies operate in crypto mode
+        instrument_type="crypto",
+    )
 
 
 def get_strategies_for_scope(scope: Scope = None) -> Dict[str, StrategyMetadata]:
