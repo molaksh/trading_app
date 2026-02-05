@@ -1,8 +1,156 @@
-"""
-Trading Screener - ML-Ready Algorithmic Trading Prototype
-=========================================================
+# Trading Platform - Algorithmic Trading System
+## ML-Ready, Multi-Asset, Multi-Strategy Framework
 
-## SWING TRADING ARCHITECTURE (Updated Jan 2026)
+> **Status**: Phase 0 complete (crypto/Kraken strategies hardened and verified)  
+> **Next**: Phase 1 (broker adapter integration + live trading)  
+> **Caution**: Paper trading only; broker adapter stub is not functional
+
+---
+
+## 🚀 Quick Start
+
+### Running Phase 0 (Current - Crypto/Kraken)
+
+```bash
+# Paper trading with 6 canonical crypto strategies
+python -m core.crypto.main --mode paper --scope kraken_crypto_global
+
+# Verify hardening (all 24 tests should pass)
+pytest tests/crypto/ -v
+```
+
+**Limitations**:
+- Broker adapter is a stub (dry-run mode only)
+- No live order submission yet
+- No position reconciliation
+- Use for validation/testing only
+
+**Documentation**:
+- [Phase 0 Hardening Report](docs/crypto/kraken/phase0/KRAKEN_PHASE0_HARDENING_REPORT.md) - Complete architecture & verification
+- [Hardening Pass Summary](docs/crypto/kraken/phase0/HARDENING_PASS_SUMMARY.md) - Requirements checklist
+- [Crypto Quickstart](docs/crypto/QUICKSTART.md) - How to run crypto strategies
+- [Testing Guide](docs/crypto/TESTING_GUIDE.md) - Test suite overview
+
+---
+
+## 📋 Phase 0 vs Phase 1 Roadmap
+
+### Phase 0: Architecture & Strategy Hardening ✅ COMPLETE
+
+- ✅ 6 canonical crypto strategies registered as first-class units
+- ✅ Regime-based gating (RISK_ON, NEUTRAL, RISK_OFF, PANIC)
+- ✅ 9-stage pipeline with dependency guards
+- ✅ Artifact isolation (crypto ≠ swing roots)
+- ✅ Zero wrapper strategy usage (all archived in legacy/)
+- ✅ Comprehensive test suite (24/24 passing)
+- ✅ Hardening report & verification complete
+
+**Key Constraint**: `CASH_ONLY_TRADING=true` enforced globally (prevents live orders)
+
+### Phase 1: Broker Adapter Integration 🔄 IN DEVELOPMENT
+
+- [ ] Kraken REST API client implementation
+- [ ] Paper trading simulator with order management
+- [ ] Live order submission (after full validation)
+- [ ] Position reconciliation & P&L tracking
+- [ ] Advanced risk management (hedging, drawdown limits)
+- [ ] ML pipeline (regime prediction, signal scoring)
+- [ ] Production monitoring & alerting
+
+**Timeline**: Q1-Q2 2026
+
+### Phase 2: ML & Advanced Features (Future)
+
+- [ ] Regime prediction model
+- [ ] Signal strength scoring
+- [ ] Portfolio optimization
+- [ ] Multi-asset strategies
+- [ ] Backtesting framework
+
+---
+
+## 🪙 CRYPTO STRATEGY ARCHITECTURE (Phase 0)
+
+### Six Canonical Strategies
+
+All strategies are registered as first-class units in `CryptoStrategyRegistry`. No wrappers or adapters in production.
+
+```
+core/strategies/crypto/
+├── registry.py                    (Strategy discovery & filtering)
+├── trend_follower.py              (Trend Following - 35% allocation)
+├── volatility_swing.py            (Volatility Scaling - 30% allocation)
+├── mean_reversion.py              (Mean Reversion - 30% allocation)
+├── defensive_hedge.py             (Defensive Hedging - 25% allocation)
+├── stable_allocator.py            (Cash Safety - 20% allocation)
+└── recovery_reentry.py            (Panic Recovery - 25% allocation)
+└── legacy/                        (Archived wrappers - NOT imported)
+    ├── crypto_momentum.py
+    ├── crypto_trend.py
+    └── README.md                  (Migration guide)
+```
+
+### Regime-Based Gating
+
+Each strategy activates only in specific market regimes:
+
+| Regime | Active Strategies | Purpose |
+|--------|------------------|---------|
+| RISK_ON | TrendFollower, VolatilitySwing | Uptrend capture |
+| NEUTRAL | TrendFollower, VolatilitySwing, MeanReversion, Recovery | Balanced trading |
+| RISK_OFF | MeanReversion, DefensiveHedge | Drawdown mitigation |
+| PANIC | DefensiveHedge, CashStable, Recovery | Capital preservation |
+
+**Max 2 concurrent strategies per cycle** (enforced by selector)
+
+### 9-Stage Pipeline Architecture
+
+```
+1. Market Data Ingestion   → Fetch OHLCV for BTC/ETH/...
+2. Feature Builder         → Compute technical indicators
+3. Regime Engine           → Detect current market regime
+4. Strategy Selector       → Choose 0-2 active strategies
+5. Strategy Signals        → Generate LONG/SHORT/FLAT signals
+6. Global Risk Manager     → Validate position limits, drawdown
+7. Execution Engine        → Create limit/market orders
+8. Broker Adapter          → (Phase 1) Submit to Kraken
+9. Reconciliation & Log    → Record fills, P&L, outcomes
+```
+
+**Key Properties**:
+- All stages independent (no circular imports)
+- RegimeEngine isolated (strategies cannot import it)
+- Execution reuses swing framework patterns
+- Broker adapter deferred to Phase 1
+
+### Testing & Validation
+
+**Hardening Tests** (Phase 0):
+- 9 strategy registration tests
+- 4 wrapper elimination tests
+- 8 pipeline order tests
+- 4 artifact isolation tests
+
+**Total**: 24/24 tests passing ✅
+
+Run tests:
+```bash
+pytest tests/crypto/ -v
+pytest tests/crypto/test_strategy_registration.py -v    # Registry tests
+pytest tests/crypto/test_pipeline_order.py -v           # Pipeline tests
+pytest tests/crypto/test_artifact_isolation.py -v       # Isolation tests
+```
+
+### Important Notes
+
+- ⚠️ **No live trading yet** - Broker adapter is stub/dry-run
+- ⚠️ **Paper trading only** - `CASH_ONLY_TRADING=true` enforced
+- ✅ **Architecture validated** - All dependencies & isolation verified
+- ✅ **Ready for Phase 1** - Foundation stable, broker integration can begin
+
+---
+
+## 🏗️ SWING TRADING ARCHITECTURE (Updated Jan 2026)
 
 The project now includes a modular swing trading strategy framework:
 
@@ -253,14 +401,52 @@ v2 Roadmap:
 □ Live trading integration (with paper trading first!)
 
 
-DISCLAIMER
-==========
+---
 
-This is a prototype for education and research.
-NOT for live trading without extensive validation.
-Past performance ≠ future results.
-Always backtest, validate, and paper trade first.
+## 📚 Documentation Map
 
-Created: 2026-01-24
-Version: 1.0 (Screening only, no trading)
+| Document | Purpose | Audience |
+|----------|---------|----------|
+| [Phase 0 Hardening Report](docs/crypto/kraken/phase0/KRAKEN_PHASE0_HARDENING_REPORT.md) | Complete architecture & verification | Engineers, reviewers |
+| [Hardening Pass Summary](docs/crypto/kraken/phase0/HARDENING_PASS_SUMMARY.md) | Requirements checklist & results | QA, stakeholders |
+| [Crypto Quickstart](docs/crypto/QUICKSTART.md) | How to run Phase 0 | Developers |
+| [Testing Guide](docs/crypto/TESTING_GUIDE.md) | Test suite overview | QA engineers |
+| [Legacy README](core/strategies/crypto/legacy/README.md) | Wrapper migration guide | Developers |
+| [Archive](docs/archive/) | Old reports & internal tracking | Historical reference |
+
+---
+
+## ⚠️ DISCLAIMER & STATUS
+
+**This is a research & development platform. NOT for production live trading.**
+
+**Current Status**:
+- Phase 0: ✅ Complete (hardened strategy architecture, paper trading only)
+- Phase 1: 🔄 In development (broker adapter stub, NOT functional)
+- Enforcement: `CASH_ONLY_TRADING=true` (prevents live orders)
+
+**Broker Adapter Status**:
+- ❌ NOT functional for live orders until Phase 1 complete
+- Stub mode: Dry-run order simulation only
+- Kraken REST API integration deferred to Phase 1
+
+**Safety Requirements**:
+1. All strategies paper-trade in dry-run mode by default
+2. Zero live orders without explicit Phase 1 approval
+3. Comprehensive testing required before each release
+4. Risk limits enforced at multiple pipeline stages
+5. Always validate extensively before production deployment
+
+**Risk Disclaimer**:
+- Past performance ≠ future results
+- No guarantee of profitability
+- Use at own risk with proper risk management
+- Not suitable for inexperienced traders
+
+---
+
+**Last Updated**: February 5, 2026  
+**Version**: 1.1 (Phase 0 complete, Phase 1 in development)  
+**Branch**: feature/crypto-kraken-global  
+**Status**: Research/Development (Not for production use without full Phase 1 validation)
 """
