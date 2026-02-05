@@ -1,10 +1,17 @@
 #!/bin/bash
 #
-# Build and run crypto paper trading container
+# Build and run crypto paper trading container (24/7 daemon)
 #
 # Container: paper-kraken-crypto-global
 # Image: paper-kraken-crypto-global
 # SCOPE: paper_kraken_crypto_global
+#
+# This now runs as a DAEMON (continuous 24/7) instead of batch.
+# - Runs python crypto_main.py (scheduler loop, not python main.py)
+# - Persists state so tasks don't rerun after restart
+# - Has daily downtime window for ML training (03:00-05:00 UTC by default)
+# - To stop: docker stop paper-kraken-crypto-global
+# - To view logs: docker logs -f paper-kraken-crypto-global
 #
 
 set -e
@@ -20,7 +27,10 @@ PERSISTENCE_ROOT_HOST="${PERSISTENCE_ROOT_HOST:-$SCRIPT_DIR/logs}"
 mkdir -p "$PERSISTENCE_ROOT_HOST"
 
 echo "=========================================="
-echo "Crypto Paper Trading Container (Kraken)"
+echo "Crypto Paper Trading Daemon (Kraken)"
+echo "=========================================="
+echo "Mode: 24/7 continuous (not batch)"
+echo "Entry: python crypto_main.py"
 echo "=========================================="
 echo ""
 
@@ -49,8 +59,8 @@ stop_and_remove_container "paper-kraken-crypto-global" "$SCOPE_DIR"
 # Rebuild image
 rebuild_image "paper-kraken-crypto-global"
 
-# Run container
-echo "Starting container: paper-kraken-crypto-global..."
+# Run container (DAEMON MODE: continues running)
+echo "Starting container: paper-kraken-crypto-global (daemon)..."
 docker run -d \
   --name paper-kraken-crypto-global \
   -v "$PERSISTENCE_ROOT_HOST:/app/persist" \
@@ -64,9 +74,12 @@ docker run -d \
   -e CASH_ONLY_TRADING=true \
   -e KRAKEN_API_KEY="${KRAKEN_API_KEY:-stub}" \
   -e KRAKEN_API_SECRET="${KRAKEN_API_SECRET:-stub}" \
+  -e CRYPTO_DOWNTIME_START_UTC="${CRYPTO_DOWNTIME_START_UTC:-03:00}" \
+  -e CRYPTO_DOWNTIME_END_UTC="${CRYPTO_DOWNTIME_END_UTC:-05:00}" \
+  -e CRYPTO_SCHEDULER_TICK_SECONDS="${CRYPTO_SCHEDULER_TICK_SECONDS:-60}" \
   -e PYTHONUNBUFFERED=1 \
   paper-kraken-crypto-global \
-  python main.py
+  python crypto_main.py
 
 echo ""
 echo "Container ID: $(docker ps -q -f name=paper-kraken-crypto-global)"
@@ -78,11 +91,14 @@ echo "Post-start verification"
 echo "=========================================="
 
 if docker ps -q -f name=paper-kraken-crypto-global | grep -q .; then
-    echo "✔ Container running"
+    echo "✔ Container running (daemon mode)"
     echo "✔ Logs: docker logs -f paper-kraken-crypto-global"
+    echo "✔ Stop: docker stop paper-kraken-crypto-global"
     echo "✔ Status: docker ps | grep paper-kraken"
-else
-    echo "✗ Container failed to start"
+    echo ""
+    echo "Scheduler state:"
+    echo "  Location: $SCOPE_DIR/state/crypto_scheduler_state.json"
+    echo "  Downtime: ${CRYPTO_DOWNTIME_START_UTC:-03:00}-${CRYPTO_DOWNTIME_END_UTC:-05:00} UTC"
     docker logs paper-kraken-crypto-global || true
     exit 1
 fi

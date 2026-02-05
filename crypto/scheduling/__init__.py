@@ -1,5 +1,12 @@
 """
-Crypto-specific downtime scheduler.
+Crypto-specific downtime scheduler and daemon.
+
+Exports:
+- DowntimeScheduler: State machine for 24/7 trading with daily ML downtime
+- TradingState: Trading vs downtime state enum
+- CryptoScheduler: Daemon process that runs crypto tasks continuously
+- CryptoSchedulerState: Persistent state management (crypto-only, no swing contamination)
+- CryptoSchedulerTask: Task definition for the scheduler
 
 24/7 trading with enforced daily downtime window for ML training.
 - Default: 03:00-05:00 UTC
@@ -10,7 +17,6 @@ import logging
 from datetime import datetime, time, timedelta
 from enum import Enum
 from typing import Optional, Tuple
-import pytz
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +52,6 @@ class DowntimeScheduler:
         """
         self.downtime_start = self._parse_time(downtime_start_utc)
         self.downtime_end = self._parse_time(downtime_end_utc)
-        self.tz = pytz.timezone(timezone)
         
         if self.downtime_start >= self.downtime_end:
             raise ValueError(
@@ -78,8 +83,10 @@ class DowntimeScheduler:
         Returns:
             TradingState (TRADING, DOWNTIME, or TRANSITION)
         """
+        from datetime import timezone as tz
+        
         if now is None:
-            now = datetime.now(pytz.UTC)
+            now = datetime.now(tz.utc)
         
         current_time = now.time()
         
@@ -106,12 +113,13 @@ class DowntimeScheduler:
         Returns:
             Timedelta until downtime
         """
+        from datetime import timezone as tz
+        
         if now is None:
-            now = datetime.now(pytz.UTC)
+            now = datetime.now(tz.utc)
         
         # Today's downtime start
-        downtime_today = datetime.combine(now.date(), self.downtime_start)
-        downtime_today = pytz.UTC.localize(downtime_today)
+        downtime_today = datetime.combine(now.date(), self.downtime_start, tzinfo=tz.utc)
         
         if now < downtime_today:
             # Downtime hasn't started yet today
@@ -131,12 +139,13 @@ class DowntimeScheduler:
         Returns:
             Timedelta until trading resumes
         """
+        from datetime import timezone as tz
+        
         if now is None:
-            now = datetime.now(pytz.UTC)
+            now = datetime.now(tz.utc)
         
         # Today's downtime end
-        downtime_end_today = datetime.combine(now.date(), self.downtime_end)
-        downtime_end_today = pytz.UTC.localize(downtime_end_today)
+        downtime_end_today = datetime.combine(now.date(), self.downtime_end, tzinfo=tz.utc)
         
         if now < downtime_end_today:
             return downtime_end_today - now
@@ -160,13 +169,14 @@ class DowntimeScheduler:
         Returns:
             Tuple of (valid: bool, message: str)
         """
+        from datetime import timezone as tz
+        
         if now is None:
-            now = datetime.now(pytz.UTC)
+            now = datetime.now(tz.utc)
         
-        downtime_end = datetime.combine(training_start.date(), self.downtime_end)
-        downtime_end = pytz.UTC.localize(downtime_end)
+        downtime_end = datetime.combine(training_start.date(), self.downtime_end, tzinfo=tz.utc)
         
-        if training_start < datetime.combine(training_start.date(), self.downtime_start):
+        if training_start < datetime.combine(training_start.date(), self.downtime_start, tzinfo=tz.utc):
             downtime_end = downtime_end - timedelta(days=1)
         
         if training_end > downtime_end:
@@ -181,3 +191,24 @@ def create_scheduler(downtime_start: str = "03:00",
                     downtime_end: str = "05:00") -> DowntimeScheduler:
     """Factory function to create downtime scheduler."""
     return DowntimeScheduler(downtime_start, downtime_end)
+
+
+# Import scheduler daemon and state after TradingState is defined
+try:
+    from crypto.scheduling.state import CryptoSchedulerState
+except ImportError as e:
+    logger.debug(f"Could not import CryptoSchedulerState: {e}")
+
+try:
+    from execution.crypto_scheduler import CryptoScheduler, CryptoSchedulerTask
+except ImportError as e:
+    logger.debug(f"Could not import crypto_scheduler: {e}")
+
+__all__ = [
+    "DowntimeScheduler",
+    "TradingState",
+    "CryptoScheduler",
+    "CryptoSchedulerState",
+    "CryptoSchedulerTask",
+    "create_scheduler",
+]

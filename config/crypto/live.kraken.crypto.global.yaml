@@ -9,6 +9,11 @@ EXCHANGE = "kraken"
 SCOPE = "live_kraken_crypto_global"
 ENVIRONMENT = "live"
 
+# Market data provider (crypto-only)
+MARKET_DATA_PROVIDER = "KRAKEN"
+KRAKEN_OHLC_INTERVAL = "1d"
+ENABLE_WS_MARKETDATA = false
+
 # Universe symbols (canonical format)
 CRYPTO_UNIVERSE = ["BTC", "ETH", "SOL"]
 

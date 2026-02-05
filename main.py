@@ -58,8 +58,7 @@ from execution.runtime import (
     build_paper_trading_runtime,
     reconcile_runtime,
 )
-from universe.symbols import SYMBOLS
-from data.price_loader import load_price_data
+from crypto.scope_guard import validate_crypto_universe_symbols
 from features.feature_engine import compute_features
 from scoring.rule_scorer import score_symbol
 
@@ -99,6 +98,37 @@ def _setup_logging():
 logger = _setup_logging()
 
 
+def _is_crypto_scope(scope) -> bool:
+    return scope.mode.lower() == "crypto" or scope.broker.lower() == "kraken"
+
+
+def _get_symbols_for_scope(scope):
+    if _is_crypto_scope(scope):
+        from config.crypto.loader import load_crypto_config
+        from crypto.universe import CryptoUniverse
+
+        crypto_config = load_crypto_config(scope)
+        symbols = crypto_config.get("CRYPTO_UNIVERSE", ["BTC", "ETH", "SOL"])
+        canonical = validate_crypto_universe_symbols(symbols)
+        universe = CryptoUniverse(symbols=canonical)
+        logger.info("crypto_universe symbols=%s", universe.all_canonical_symbols())
+        return universe.all_canonical_symbols()
+
+    from universe.symbols import SYMBOLS
+    return SYMBOLS
+
+
+def _load_price_data_for_scope(scope, symbol: str, lookback_days: int):
+    if _is_crypto_scope(scope):
+        from data.crypto_price_loader import load_crypto_price_data
+
+        return load_crypto_price_data(symbol, lookback_days)
+
+    from data.price_loader import load_price_data
+
+    return load_price_data(symbol, lookback_days)
+
+
 def main():
     """
     Main screener pipeline:
@@ -116,16 +146,16 @@ def main():
     results = []
     failed_symbols = []
     skipped_symbols = []
+
+    symbols = _get_symbols_for_scope(scope)
+    logger.info(f"Scanning {len(symbols)} symbols...")
     
     # Step 1 & 2: Load price data and compute features for each symbol
-    logger.info(f"Scanning {len(SYMBOLS)} symbols...")
-    
-    for i, symbol in enumerate(SYMBOLS):
-        logger.info(f"[{i+1:2d}/{len(SYMBOLS)}] Processing {symbol}")
-        
+    for i, symbol in enumerate(symbols):
+        logger.info(f"[{i+1:2d}/{len(symbols)}] Processing {symbol}")
         try:
             # Load data
-            df = load_price_data(symbol, LOOKBACK_DAYS)
+            df = _load_price_data_for_scope(scope, symbol, LOOKBACK_DAYS)
             if df is None or len(df) == 0:
                 logger.warning(f"  {symbol}: Skipping (no data)")
                 skipped_symbols.append((symbol, "no_data"))
@@ -222,10 +252,10 @@ def main():
         )
     
     # Summary
-    logger.info("\n" + "=" * PRINT_WIDTH)
+    logger.info("=" * PRINT_WIDTH)
     logger.info("SUMMARY")
     logger.info("=" * PRINT_WIDTH)
-    logger.info(f"Total symbols scanned: {len(SYMBOLS)}")
+    logger.info(f"Total symbols scanned: {len(symbols)}")
     logger.info(f"Successfully scored: {len(results_df)}")
     logger.info(f"Skipped: {len(skipped_symbols)}")
     logger.info(f"Failed: {len(failed_symbols)}")

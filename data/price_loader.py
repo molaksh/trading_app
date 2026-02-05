@@ -108,6 +108,12 @@ def load_price_data(symbol: str, lookback_days: int) -> Optional[pd.DataFrame]:
     """
     scope = get_scope()
 
+    # Fail fast for crypto scopes (crypto must use Kraken data provider)
+    if scope.mode.lower() == "crypto" or scope.broker.lower() == "kraken":
+        raise ValueError(
+            "CRYPTO_SCOPE_EQUITY_PRICE_LOADER_DISALLOWED: use Kraken market data provider"
+        )
+
     # India swing (equity): NSE provider only (no yfinance)
     if scope.market.lower() == "india" and scope.mode.lower() == "swing":
         try:

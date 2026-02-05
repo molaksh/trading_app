@@ -1,5 +1,5 @@
 # Crypto Kraken Global - Paper Trading Configuration
-# Scope: paper_alpaca_swing_us
+# Scope: paper_kraken_crypto_global
 # Use case: Paper simulation with ML training during downtime
 
 # ============================================================================
@@ -8,6 +8,11 @@
 EXCHANGE = "kraken"
 SCOPE = "paper_kraken_crypto_global"
 ENVIRONMENT = "paper"
+
+# Market data provider (crypto-only)
+MARKET_DATA_PROVIDER = "KRAKEN"
+KRAKEN_OHLC_INTERVAL = "1d"
+ENABLE_WS_MARKETDATA = false
 
 # Universe symbols (canonical format)
 CRYPTO_UNIVERSE = ["BTC", "ETH", "SOL"]

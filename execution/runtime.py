@@ -19,12 +19,14 @@ from broker.trading_executor import TradingExecutor
 from broker.execution_logger import ExecutionLogger
 from broker.trade_ledger import TradeLedger
 from broker.account_reconciliation import AccountReconciler
+from broker.crypto_reconciliation import CryptoAccountReconciler
 from risk.portfolio_state import PortfolioState
 from risk.risk_manager import RiskManager
 from monitoring.system_guard import SystemGuard
 from strategy.exit_evaluator import ExitEvaluator
 from strategies.registry import instantiate_strategies_for_scope
 from strategies.base import Strategy
+from crypto.scope_guard import enforce_crypto_scope_guard
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +66,9 @@ def build_paper_trading_runtime() -> PaperTradingRuntime:
     # Select broker via factory (no hardcoded Alpaca)
     broker = get_broker_adapter(scope)
     logger.info(f"Broker: {broker.__class__.__name__}")
+
+    # Crypto scope guardrails (fail fast on contamination)
+    enforce_crypto_scope_guard(scope, broker, scope_paths)
     
     # Run Kraken preflight checks for live crypto trading
     if scope.broker.lower() == "kraken" and scope.env.lower() == "live":
@@ -151,7 +156,10 @@ def reconcile_runtime(runtime: PaperTradingRuntime) -> dict:
     
     Phase 0: Uses scope-aware broker from runtime.
     """
-    reconciler = AccountReconciler(runtime.broker, runtime.trade_ledger, runtime.risk_manager)
+    if runtime.scope.mode.lower() == "crypto" or runtime.scope.broker.lower() == "kraken":
+        reconciler = CryptoAccountReconciler(runtime.broker, runtime.trade_ledger, runtime.risk_manager)
+    else:
+        reconciler = AccountReconciler(runtime.broker, runtime.trade_ledger, runtime.risk_manager)
     reconciliation_result = reconciler.reconcile_on_startup()
     runtime.executor.safe_mode_enabled = reconciliation_result.get("safe_mode", False)
     runtime.executor.startup_status = reconciliation_result.get("status", "UNKNOWN")
