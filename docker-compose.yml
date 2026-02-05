@@ -8,6 +8,7 @@
 # SERVICES:
 #   1. paper-alpaca-swing-us: US market paper trading via Alpaca
 #   2. paper-nse-swing-india: India NSE paper trading via simulator
+#   3. paper-kraken-crypto-global: Crypto paper trading via Kraken (Phase 0: stub)
 #
 # CRITICAL DESIGN:
 #   - Complete data/logs/models/state isolation between markets
@@ -56,6 +57,7 @@ services:
       context: .
       dockerfile: Dockerfile
     
+    image: paper-alpaca-swing-us
     container_name: paper-alpaca-swing-us
     
     # Run scheduler with intelligent task timing
@@ -111,8 +113,9 @@ services:
   paper-nse-swing-india:
     build:
       context: .
-      dockerfile: Dockerfile.india
+      dockerfile: Dockerfile
     
+    image: paper-nse-swing-india
     container_name: paper-nse-swing-india
     
     # Run scheduler with intelligent task timing
@@ -149,12 +152,70 @@ services:
         max-size: "10m"
         max-file: "3"
 
+  # ==========================================================================
+  # CRYPTO PAPER TRADING (Kraken)
+  # ==========================================================================
+  #
+  # SCOPE: paper_kraken_crypto_global
+  # Market: Global (24/7 crypto)
+  # Broker: Kraken (Phase 1 - currently stub/dry-run)
+  # Strategies: 6 canonical crypto strategies (regime-based)
+  #
+  # ==========================================================================
+  
+  paper-kraken-crypto-global:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    
+    image: paper-kraken-crypto-global
+    container_name: paper-kraken-crypto-global
+    
+    # Run crypto scheduler with 24/7 operation
+    command: python main.py
+    
+    # Environment variables
+    environment:
+      # SCOPE configuration
+      - SCOPE=paper_kraken_crypto_global
+      - ENV=paper
+      - BROKER=kraken
+      - MODE=crypto
+      - MARKET=global
+      - PERSISTENCE_ROOT=/app/persist
+      
+      # Crypto market settings (24/7 operation)
+      - MARKET_TIMEZONE=UTC
+      - CASH_ONLY_TRADING=true
+      
+      # Kraken API credentials (Phase 1 - not functional yet)
+      - KRAKEN_API_KEY=${KRAKEN_API_KEY:-stub}
+      - KRAKEN_API_SECRET=${KRAKEN_API_SECRET:-stub}
+      
+      # Python settings
+      - PYTHONUNBUFFERED=1
+    
+    # Volume mounts (CRITICAL: Isolated crypto data)
+    volumes:
+      - crypto-data:/app/persist
+    
+    # Restart policy
+    restart: unless-stopped
+    
+    # Logging configuration
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
 # ============================================================================
 # VOLUMES
 # ============================================================================
 # Named volumes provide complete isolation between markets
 # - us-data: All US market data/logs/models/state
 # - india-data: All India market data/logs/models/state
+# - crypto-data: All crypto market data/logs/models/state
 # ============================================================================
 
 volumes:
@@ -162,39 +223,47 @@ volumes:
     driver: local
   india-data:
     driver: local
+  crypto-data:
+    driver: local
 
 # ============================================================================
 # IMPORTANT NOTES
 # ============================================================================
 #
 # 1. MARKET ISOLATION:
-#    - US and India data/logs/models/state are COMPLETELY separated
-#    - Each market has its own Docker volume (us-data, india-data)
+#    - US, India, and Crypto data/logs/models/state are COMPLETELY separated
+#    - Each market has its own Docker volume (us-data, india-data, crypto-data)
 #    - Zero cross-contamination between markets
 #
 # 2. SCOPE SYSTEM:
 #    - US SCOPE: paper_alpaca_swing_us
 #    - India SCOPE: paper_nse_simulator_swing_india
+#    - Crypto SCOPE: paper_kraken_crypto_global
 #    - All data organized by SCOPE in PERSISTENCE_ROOT
 #
 # 3. SHARED STRATEGIES:
-#    - Swing strategies in core/strategies/equity/swing
-#    - SAME code used by both US and India
-#    - No duplication, just different broker/data adapters
+#    - Swing strategies in core/strategies/equity/swing (US & India)
+#    - Crypto strategies in core/strategies/crypto (Kraken)
+#    - SAME code base, different broker/data adapters
+#    - No duplication between markets
 #
 # 4. SECRETS MANAGEMENT:
 #    - Use .env file in same directory as docker-compose.yml
 #    - Format:
 #        ALPACA_API_KEY=your_key_here
 #        ALPACA_API_SECRET=your_secret_here
+#        KRAKEN_API_KEY=your_key_here
+#        KRAKEN_API_SECRET=your_secret_here
 #    - .env file should be in .gitignore
 #    - India doesn't need credentials (simulated broker)
+#    - Kraken credentials optional for Phase 0 (stub adapter)
 #
 # 5. RUNNING CONTAINERS:
 #    - Start all: docker-compose up -d
 #    - Start US only: docker-compose up -d paper-alpaca-swing-us
 #    - Start India only: docker-compose up -d paper-nse-swing-india
-#    - View logs: docker-compose logs -f paper-nse-swing-india
+#    - Start Crypto only: docker-compose up -d paper-kraken-crypto-global
+#    - View logs: docker-compose logs -f paper-kraken-crypto-global
 #    - Stop all: docker-compose down
 #
 # 6. REBUILDING:
@@ -204,7 +273,14 @@ volumes:
 # 7. DATA ACCESS:
 #    - View US volume data: docker volume inspect trading_app_us-data
 #    - View India volume data: docker volume inspect trading_app_india-data
-#    - Access container: docker exec -it paper-nse-swing-india /bin/bash
+#    - View Crypto volume data: docker volume inspect trading_app_crypto-data
+#    - Access container: docker exec -it paper-kraken-crypto-global /bin/bash
+#
+# 8. PHASE 0 vs PHASE 1:
+#    - Phase 0 (CURRENT): Crypto strategies hardened, broker adapter is stub
+#    - Phase 1 (IN DEV): Kraken REST API integration for live orders
+#    - CASH_ONLY_TRADING=true enforced globally (prevents accidental live orders)
+#    - See docs/crypto/kraken/phase0/ for complete architecture details
 #
 # ============================================================================
 

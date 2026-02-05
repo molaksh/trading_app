@@ -174,23 +174,23 @@ class StrategyRegistry:
                 instance = SwingEquityStrategy()
             # Canonical crypto strategies
             elif strategy_name == "long_term_trend_follower":
-                from crypto.strategies.long_term_trend_follower import LongTermTrendFollower
-                instance = LongTermTrendFollower()
+                from crypto.strategies.long_term_trend_follower import LongTermTrendFollowerStrategy
+                instance = LongTermTrendFollowerStrategy()
             elif strategy_name == "volatility_scaled_swing":
-                from crypto.strategies.volatility_scaled_swing import VolatilityScaledSwing
-                instance = VolatilityScaledSwing()
+                from crypto.strategies.volatility_scaled_swing import VolatilityScaledSwingStrategy
+                instance = VolatilityScaledSwingStrategy()
             elif strategy_name == "mean_reversion":
-                from crypto.strategies.mean_reversion import MeanReversion
-                instance = MeanReversion()
+                from crypto.strategies.mean_reversion import MeanReversionStrategy
+                instance = MeanReversionStrategy()
             elif strategy_name == "defensive_hedge_short":
-                from crypto.strategies.defensive_hedge_short import DefensiveHedgeShort
-                instance = DefensiveHedgeShort()
+                from crypto.strategies.defensive_hedge_short import DefensiveHedgeShortStrategy
+                instance = DefensiveHedgeShortStrategy()
             elif strategy_name == "cash_stable_allocator":
-                from crypto.strategies.cash_stable_allocator import CashStableAllocator
-                instance = CashStableAllocator()
+                from crypto.strategies.cash_stable_allocator import CashStableAllocatorStrategy
+                instance = CashStableAllocatorStrategy()
             elif strategy_name == "recovery_reentry":
-                from crypto.strategies.recovery_reentry import RecoveryReentry
-                instance = RecoveryReentry()
+                from crypto.strategies.recovery_reentry import RecoveryReentryStrategy
+                instance = RecoveryReentryStrategy()
             # Deprecated wrappers (for backwards compatibility only)
             elif strategy_name == "crypto_momentum":
                 logger.warning(

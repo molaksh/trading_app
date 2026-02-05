@@ -1,79 +1,88 @@
 #!/bin/bash
-# Run paper trading container for crypto (Kraken) global scope
-# This container tests trading strategies with simulated trades
+#
+# Build and run crypto paper trading container
+#
+# Container: paper-kraken-crypto-global
+# Image: paper-kraken-crypto-global
+# SCOPE: paper_kraken_crypto_global
+#
 
 set -e
 
-DOCKER_IMAGE="trading_app:latest"
-CONTAINER_NAME="trading_app_paper_kraken_crypto"
-CONFIG="config/crypto/paper.kraken.crypto.global.yaml"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
 
-# Check if image exists
-if ! docker image inspect $DOCKER_IMAGE > /dev/null 2>&1; then
-    echo "Error: Docker image '$DOCKER_IMAGE' not found. Build it first with:"
-    echo "  docker build -t trading_app:latest ."
-    exit 1
-fi
+# Load docker utilities
+source "$SCRIPT_DIR/scripts/docker_utils.sh"
+
+# Host persistence directory (outside container)
+PERSISTENCE_ROOT_HOST="${PERSISTENCE_ROOT_HOST:-$SCRIPT_DIR/logs}"
+mkdir -p "$PERSISTENCE_ROOT_HOST"
 
 echo "=========================================="
-echo "Starting Paper Trading Container"
-echo "  Scope: paper_kraken_crypto_global"
-echo "  Broker: Kraken (Simulated)"
-echo "  Config: $CONFIG"
+echo "Crypto Paper Trading Container (Kraken)"
 echo "=========================================="
+echo ""
 
-# Load environment variables from .env
-if [ -f .env ]; then
-    export $(grep -v '^#' .env | xargs)
+# Load environment variables if .env exists
+if [ -f ".env" ]; then
+    echo "Loading environment from .env..."
+    source .env
 fi
 
-# Create data directories if needed
-mkdir -p data/artifacts/crypto/kraken_global/{models,candidates,validations,shadow}
-mkdir -p data/logs/crypto/kraken_global/{observations,trades,approvals,registry}
-mkdir -p data/datasets/crypto/kraken_global/{training,validation,live}
-mkdir -p data/ledger/crypto/kraken_global
-mkdir -p data/persist/crypto/kraken_global
+# Scope + host paths
+ENV_VALUE="paper"
+BROKER_VALUE="kraken"
+MODE_VALUE="crypto"
+MARKET_VALUE="global"
 
-# Check if running in background mode
-BACKGROUND_MODE=${1:-""}
-if [ "$BACKGROUND_MODE" == "-d" ] || [ "$BACKGROUND_MODE" == "--detach" ]; then
-    DOCKER_FLAGS="-d"
-    echo "Running in BACKGROUND mode..."
-else
-    DOCKER_FLAGS="-it"
-    echo "Running in INTERACTIVE mode..."
-fi
+SCOPE=$(printf "%s_%s_%s_%s" "$ENV_VALUE" "$BROKER_VALUE" "$MODE_VALUE" "$MARKET_VALUE" | tr '[:upper:]' '[:lower:]')
+SCOPE_DIR="$PERSISTENCE_ROOT_HOST/$SCOPE"
+LEDGER_FILE="$SCOPE_DIR/ledger/trades.jsonl"
+
+# Ensure scope directories + ledger file exist on host (hard gate prerequisite)
+setup_scope_directories "$SCOPE_DIR" "$LEDGER_FILE"
+
+# Stop and remove old container (persists logs automatically)
+stop_and_remove_container "paper-kraken-crypto-global" "$SCOPE_DIR"
+
+# Rebuild image
+rebuild_image "paper-kraken-crypto-global"
 
 # Run container
-docker run \
-    --name "$CONTAINER_NAME" \
-    --rm \
-    $DOCKER_FLAGS \
-    -e SCOPE="paper_kraken_crypto_global" \
-    -e CONFIG="$CONFIG" \
-    -e LOG_LEVEL="INFO" \
-    -e PERSISTENCE_ROOT="/app/persist" \
-    -e CASH_ONLY_TRADING="true" \
-    -e KRKN_LIVE_API_KEY_ID="${KRKN_LIVE_API_KEY_ID}" \
-    -e KRKN_LIVE_API_SECRET_KEY="${KRKN_LIVE_API_SECRET_KEY}" \
-    -e APCA_API_BASE_URL="${APCA_API_BASE_URL}" \
-    -e APCA_API_KEY_ID="${APCA_API_KEY_ID}" \
-    -e APCA_API_SECRET_KEY="${APCA_API_SECRET_KEY}" \
-    -v "$(pwd)/config:/app/config:ro" \
-    -v "$(pwd)/data:/data" \
-    -v "$(pwd)/data/persist:/app/persist" \
-    -v "$(pwd)/logs:/app/logs" \
-    "$DOCKER_IMAGE" \
-    python main.py
+echo "Starting container: paper-kraken-crypto-global..."
+docker run -d \
+  --name paper-kraken-crypto-global \
+  -v "$PERSISTENCE_ROOT_HOST:/app/persist" \
+  -e ENV="$ENV_VALUE" \
+  -e BROKER="$BROKER_VALUE" \
+  -e MODE="$MODE_VALUE" \
+  -e MARKET="$MARKET_VALUE" \
+  -e SCOPE="$SCOPE" \
+  -e PERSISTENCE_ROOT=/app/persist \
+  -e MARKET_TIMEZONE=UTC \
+  -e CASH_ONLY_TRADING=true \
+  -e KRAKEN_API_KEY="${KRAKEN_API_KEY:-stub}" \
+  -e KRAKEN_API_SECRET="${KRAKEN_API_SECRET:-stub}" \
+  -e PYTHONUNBUFFERED=1 \
+  paper-kraken-crypto-global \
+  python main.py
 
-if [ "$BACKGROUND_MODE" == "-d" ] || [ "$BACKGROUND_MODE" == "--detach" ]; then
-    echo "=========================================="
-    echo "Paper trading container started in background"
-    echo "  Container: $CONTAINER_NAME"
-    echo "  Logs: docker logs -f $CONTAINER_NAME"
-    echo "=========================================="
+echo ""
+echo "Container ID: $(docker ps -q -f name=paper-kraken-crypto-global)"
+echo ""
+
+# Verify container is running
+echo "=========================================="
+echo "Post-start verification"
+echo "=========================================="
+
+if docker ps -q -f name=paper-kraken-crypto-global | grep -q .; then
+    echo "✔ Container running"
+    echo "✔ Logs: docker logs -f paper-kraken-crypto-global"
+    echo "✔ Status: docker ps | grep paper-kraken"
 else
-    echo "=========================================="
-    echo "Paper trading container stopped"
-    echo "=========================================="
+    echo "✗ Container failed to start"
+    docker logs paper-kraken-crypto-global || true
+    exit 1
 fi
