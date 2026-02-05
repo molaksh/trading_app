@@ -75,6 +75,14 @@ class StrategyRegistry:
             "swing_equity": SwingEquityStrategy(),
         }
         
+        # Try to import crypto strategies if available
+        try:
+            from core.strategies.crypto import CryptoMomentumStrategy, CryptoTrendStrategy
+            strategies["crypto_momentum"] = CryptoMomentumStrategy()
+            strategies["crypto_trend"] = CryptoTrendStrategy()
+        except ImportError:
+            logger.warning("Crypto strategies not available")
+        
         # Extract metadata
         for strategy_name, strategy in strategies.items():
             metadata = strategy.get_metadata()
@@ -148,6 +156,12 @@ class StrategyRegistry:
             if strategy_name == "swing_equity":
                 from core.strategies.equity.swing import SwingEquityStrategy
                 instance = SwingEquityStrategy()
+            elif strategy_name == "crypto_momentum":
+                from core.strategies.crypto import CryptoMomentumStrategy
+                instance = CryptoMomentumStrategy()
+            elif strategy_name == "crypto_trend":
+                from core.strategies.crypto import CryptoTrendStrategy
+                instance = CryptoTrendStrategy()
             else:
                 logger.warning(f"Unknown strategy: {strategy_name}")
                 continue

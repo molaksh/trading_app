@@ -1,0 +1,132 @@
+# Crypto Kraken Global - Live Trading Configuration
+# Scope: live_kraken_crypto_global
+# Use case: Live trading with validated ML, downtime for evaluation/training
+
+# ============================================================================
+# EXCHANGE & UNIVERSE
+# ============================================================================
+EXCHANGE = "kraken"
+SCOPE = "live_kraken_crypto_global"
+ENVIRONMENT = "live"
+
+# Universe symbols (canonical format)
+CRYPTO_UNIVERSE = ["BTC", "ETH", "SOL"]
+
+# Universe filters
+UNIVERSE_MIN_VOLUME_USD = 1000000
+UNIVERSE_MAX_SPREAD_BPS = 50
+
+# ============================================================================
+# KRAKEN LIVE CONNECTIVITY
+# ============================================================================
+# API credentials from environment variables
+KRAKEN_API_KEY = "${KRAKEN_API_KEY}"
+KRAKEN_API_SECRET = "${KRAKEN_API_SECRET}"
+KRAKEN_API_TIER = "starter"  # starter, intermediate, pro
+
+# Rate limiting per tier
+KRAKEN_RATE_LIMIT_BURST = 15
+KRAKEN_RATE_LIMIT_WINDOW = 1  # seconds
+
+# ============================================================================
+# TRADING SCHEDULE & DOWNTIME
+# ============================================================================
+TRADING_ENABLED = True
+
+# Downtime window (UTC) - same as paper for consistency
+DOWNTIME_START_UTC = "03:00"  # 3 AM UTC
+DOWNTIME_END_UTC = "05:00"    # 5 AM UTC
+
+# Max time training/validation can take
+MAX_TRAINING_TIME_MINUTES = 100
+
+# Trading loop interval (seconds)
+TRADING_LOOP_INTERVAL = 300  # 5 minutes
+
+# ============================================================================
+# STRATEGY CONFIGURATION
+# ============================================================================
+MAX_CONCURRENT_STRATEGIES = 2
+DEFAULT_STRATEGY_ALLOCATION = 0.5
+
+# ============================================================================
+# ML PIPELINE
+# ============================================================================
+# Live reads ONLY from approved_model.json (never candidates)
+ML_TRAINING_ENABLED = False  # Live doesn't train
+ML_INFERENCE_ONLY = True  # Read-only approved model
+ML_VALIDATION_ENABLED = True  # Validate approved model during downtime
+ML_SHADOW_MODE_ENABLED = True  # Optional: evaluate candidates in shadow mode
+
+# ============================================================================
+# MODEL LIFECYCLE & APPROVAL
+# ============================================================================
+# Must load ONLY approved_model.json
+APPROVED_MODEL_PATH = "/data/artifacts/crypto/kraken_global/models/approved_model.json"
+
+# Verification requirements
+VERIFY_MODEL_INTEGRITY = True  # Check SHA256
+VERIFY_MODEL_SCHEMA = True  # Check feature compatibility
+FALLBACK_TO_RULES_ONLY = True  # If approved model fails, use rules-only (safe)
+
+# ============================================================================
+# RISK MANAGEMENT
+# ============================================================================
+# Same as paper for consistency
+RISK_PER_TRADE = 0.02  # 2%
+MAX_RISK_PER_SYMBOL = 0.05  # 5%
+MAX_PORTFOLIO_HEAT = 0.08  # 8%
+
+MAX_TRADES_PER_DAY = 20
+MAX_CONSECUTIVE_LOSSES = 3
+DAILY_LOSS_LIMIT = 0.02  # -2%
+
+CONFIDENCE_RISK_MULTIPLIER = {
+    1: 0.5,
+    2: 0.75,
+    3: 1.0,
+    4: 1.25,
+    5: 1.5,
+}
+
+# ============================================================================
+# POSITION MANAGEMENT
+# ============================================================================
+# Max positions per symbol (for scale-in)
+MAX_ENTRIES_PER_SYMBOL = 4
+MIN_TIME_BETWEEN_ENTRIES_MINUTES = 1440  # 24 hours
+MIN_ADD_PCT_ABOVE_LAST_ENTRY = 0.0  # No price floor
+
+# Take profit targets
+TAKE_PROFIT_PCT = 0.10  # 10% profit target
+STOP_LOSS_PCT = 0.03  # 3% stop loss
+
+# ============================================================================
+# SAFETY & GUARDRAILS
+# ============================================================================
+# Safe mode when reconciliation issues detected
+SAFE_MODE_ENABLED_ON_ERROR = True
+
+# Block new entries if conditions uncertain
+BLOCK_ENTRIES_ON_UNCERTAINTY = False
+
+# ============================================================================
+# ARTIFACT STORAGE (ISOLATED FROM SWING)
+# ============================================================================
+CRYPTO_ARTIFACT_ROOT = "/data/artifacts/crypto/kraken_global"
+CRYPTO_LOG_ROOT = "/data/logs/crypto/kraken_global"
+CRYPTO_DATASET_ROOT = "/data/datasets/crypto/kraken_global"
+CRYPTO_LEDGER_ROOT = "/data/ledger/crypto/kraken_global"
+
+# ============================================================================
+# LOGGING
+# ============================================================================
+LOG_LEVEL = "INFO"
+LOG_FORMAT = "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s"
+
+# ============================================================================
+# MONITORING & ALERTS
+# ============================================================================
+MONITORING_ENABLED = True
+ALERT_ON_MODEL_LOAD_FAILURE = True
+ALERT_ON_EXECUTION_ERROR = True

@@ -74,6 +74,14 @@ POLICY_REGISTRY: Dict[Tuple[str, str], Dict[str, type]] = {
         "market_hours": IndiaEquityMarketHours,
     },
     
+    # Crypto (IMPLEMENTED)
+    ("crypto", "global"): {
+        "hold": SwingHoldPolicy,  # Crypto uses swing-like holding logic
+        "exit": SwingExitPolicy,  # Crypto uses swing-like exit signals
+        "entry_timing": ContinuousEntryTimingPolicy,  # 24/7 entry for crypto
+        "market_hours": Crypto24x7MarketHours,  # 24/7 market for crypto
+    },
+    
     # Crypto Swing (NOT IMPLEMENTED)
     ("swing", "crypto"): {
         "hold": SwingHoldPolicy,  # Swing hold policy may be reusable
@@ -91,6 +99,9 @@ SUPPORTED_SCOPES = {
     
     # India Swing is fully implemented
     ("swing", "india", "equity"): True,
+    
+    # Crypto Global is fully implemented
+    ("crypto", "global", "crypto"): True,
     
     # All other combinations are NOT supported
     ("daytrade", "us", "equity"): False,

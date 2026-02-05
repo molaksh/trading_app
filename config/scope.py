@@ -40,8 +40,7 @@ class Broker(Enum):
     IBKR = "ibkr"               # Interactive Brokers (US/intl, multi-mode)
     ZERODHA = "zerodha"         # Zerodha (India)
     NSE_SIMULATOR = "nse_simulator"  # NSE simulated broker (India paper trading)
-    CRYPTO_EXCHANGE = "crypto"  # Generic crypto exchange
-
+    CRYPTO_EXCHANGE = "crypto"  # Generic crypto exchange    KRAKEN = "kraken"           # Kraken (crypto exchange)
 
 class Mode(Enum):
     """Trading mode (strategy type)."""
@@ -74,6 +73,7 @@ ALLOWED_SCOPES = [
     
     # Paper trading - Global/Crypto
     ("paper", "crypto", "crypto", "global"),
+    ("paper", "kraken", "crypto", "global"),  # Kraken paper trading
     
     # Live trading
     ("live", "alpaca", "swing", "us"),
@@ -81,6 +81,7 @@ ALLOWED_SCOPES = [
     ("live", "ibkr", "day_trade", "us"),  # Handle both formats
     ("live", "zerodha", "options", "india"),
     ("live", "crypto", "crypto", "global"),
+    ("live", "kraken", "crypto", "global"),  # Kraken live trading
 ]
 
 

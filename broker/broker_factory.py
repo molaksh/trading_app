@@ -64,8 +64,13 @@ def get_broker_adapter(scope: Optional[Scope] = None) -> BrokerAdapter:
         from broker.crypto_adapter import CryptoAdapter
         return CryptoAdapter(paper_mode=(scope.env == "paper"))
     
+    elif broker_name == "kraken":
+        # Kraken is a specific crypto exchange implementation
+        from broker.crypto_adapter import CryptoAdapter
+        return CryptoAdapter(paper_mode=(scope.env == "paper"))
+    
     else:
         raise ValueError(
             f"Unsupported broker: {broker_name}. "
-            f"Supported: alpaca, ibkr, zerodha, crypto"
+            f"Supported: alpaca, ibkr, zerodha, crypto, kraken"
         )

@@ -424,7 +424,10 @@ def run_paper_trading(mode='trade', runtime: Optional[PaperTradingRuntime] = Non
     logger.info(f"Monitoring Alerts: {summary['execution_logger']['alerts']}")
     
     logger.info("=" * PRINT_WIDTH)
-    env_label = "Paper trading" if runtime.env == "paper" else "Live trading"
+    env_value = getattr(runtime, "env", None)
+    if env_value is None and hasattr(runtime, "scope"):
+        env_value = runtime.scope.env
+    env_label = "Paper trading" if str(env_value).lower() == "paper" else "Live trading"
     logger.info(f"✓ {env_label} execution complete")
     logger.info("=" * PRINT_WIDTH)
     
