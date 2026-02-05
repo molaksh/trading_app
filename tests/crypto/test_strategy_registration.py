@@ -229,5 +229,50 @@ class TestCryptoStrategyMainRegistry:
         )
 
 
+class TestWrapperElimination:
+    """Test that wrapper strategies are completely eliminated."""
+    
+    def test_wrappers_not_importable_from_core_crypto(self):
+        """MANDATORY: Wrappers must not be importable from core.strategies.crypto."""
+        with pytest.raises(ImportError):
+            from core.strategies.crypto import CryptoMomentumStrategy  # noqa: F401
+        
+        with pytest.raises(ImportError):
+            from core.strategies.crypto import CryptoTrendStrategy  # noqa: F401
+    
+    def test_wrappers_not_in_discovered_strategies(self):
+        """MANDATORY: Wrapper names must not appear in discovered strategies."""
+        all_strategies = StrategyRegistry.discover_strategies()
+        strategy_ids = set(all_strategies.keys())
+        
+        forbidden_names = {"crypto_momentum", "crypto_trend"}
+        overlap = strategy_ids & forbidden_names
+        
+        assert len(overlap) == 0, (
+            f"VIOLATION: Wrapper strategies found in discovery: {overlap}"
+        )
+    
+    def test_legacy_wrappers_isolated(self):
+        """Wrappers moved to legacy/ should not be in main import path."""
+        # Legacy wrappers should be importable only from legacy path
+        from core.strategies.crypto.legacy import crypto_momentum  # noqa: F401
+        from core.strategies.crypto.legacy import crypto_trend  # noqa: F401
+        
+        # But should NOT be in registry
+        all_strategies = StrategyRegistry.discover_strategies()
+        assert "crypto_momentum" not in all_strategies
+        assert "crypto_trend" not in all_strategies
+    
+    def test_no_wrapper_helper_in_public_api(self):
+        """Metadata converter should not be named 'wrapper'."""
+        from strategies import registry
+        
+        # Should have _crypto_metadata_from_registry, not wrapper
+        assert hasattr(registry, "_crypto_metadata_from_registry")
+        
+        # Old wrapper name should not exist
+        assert not hasattr(registry, "_create_crypto_strategy_wrapper")
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

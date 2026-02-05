@@ -84,9 +84,8 @@ class StrategyRegistry:
             crypto_registry = CryptoStrategyRegistry.get_all_strategies()
             
             # Convert crypto strategy metadata to StrategyMetadata format
-            # For now, create wrapper metadata for crypto strategies
             for crypto_id, crypto_meta in crypto_registry.items():
-                strategies[crypto_id] = _create_crypto_strategy_wrapper(crypto_id, crypto_meta)
+                strategies[crypto_id] = _crypto_metadata_from_registry(crypto_id, crypto_meta)
             
             logger.info(f"Discovered {len(crypto_registry)} canonical crypto strategies")
         except ImportError:
@@ -242,19 +241,22 @@ class StrategyRegistry:
         return True
 
 
-def _create_crypto_strategy_wrapper(
+def _crypto_metadata_from_registry(
     crypto_id: str,
     crypto_meta: Any
 ) -> StrategyMetadata:
     """
-    Convert CryptoStrategyMetadata to StrategyMetadata.
+    Convert CryptoStrategyMetadata to StrategyMetadata (metadata only, no wrapper).
+    
+    This function bridges the CryptoStrategyRegistry metadata to the main
+    StrategyRegistry format. It does NOT create a strategy wrapper object.
     
     Args:
         crypto_id: Strategy ID (e.g., "long_term_trend_follower")
         crypto_meta: CryptoStrategyMetadata instance
     
     Returns:
-        StrategyMetadata for use in main registry
+        StrategyMetadata for use in main registry (metadata only)
     """
     return StrategyMetadata(
         name=crypto_id,
