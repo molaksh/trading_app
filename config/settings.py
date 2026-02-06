@@ -138,6 +138,11 @@ PAPER_TRADING_BROKER = "alpaca"  # Currently supported: "alpaca"
 # ============================================================================
 # ACCOUNT RECONCILIATION (Production Hardening)
 # ============================================================================
+# Reconciliation Engine Selection (Feature Flag)
+# - "legacy": Uses old backfill logic (entry_timestamp=None fallback to datetime.now)
+# - "alpaca_v2": Uses AlpacaReconciliationEngine (broker fills as source of truth)
+RECONCILIATION_ENGINE = os.getenv("RECONCILIATION_ENGINE", "alpaca_v2")
+
 # Broker-as-source-of-truth settings
 RECONCILIATION_BACKFILL_ENABLED = True   # Backfill ledger from broker positions
 RECONCILIATION_MARK_UNKNOWN_CLOSED = True  # Mark ledger positions not on broker as CLOSED

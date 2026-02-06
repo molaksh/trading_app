@@ -189,3 +189,36 @@ LOG_FORMAT = "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s"
 MONITORING_ENABLED = True
 ALERT_ON_MODEL_LOAD_FAILURE = True
 ALERT_ON_EXECUTION_ERROR = True
+
+# ============================================================================
+# REGIME DETECTION (4H CANDLES ONLY)
+# ============================================================================
+# Regime engine uses 4H candles; strategies use 5M candles
+REGIME_CANDLE_INTERVAL = "4h"
+EXECUTION_CANDLE_INTERVAL = "5m"
+
+# Lookback bars (counts, not days)
+EXECUTION_LOOKBACK_BARS = 500
+REGIME_LOOKBACK_BARS = 200
+
+# Volatility thresholds (annualized %)
+REGIME_VOL_LOW = 30.0
+REGIME_VOL_HIGH = 60.0
+REGIME_VOL_EXTREME = 100.0
+
+# Trend thresholds (SMA slope % per period)
+REGIME_TREND_POS = 0.5
+REGIME_TREND_NEG = -0.5
+REGIME_TREND_STRONG_NEG = -2.0
+
+# Drawdown thresholds (%)
+REGIME_DRAWDOWN_MILD = -5.0
+REGIME_DRAWDOWN_MODERATE = -15.0
+REGIME_DRAWDOWN_SEVERE = -30.0
+
+# Hysteresis (consecutive confirmations needed for regime change)
+REGIME_HYSTERESIS_COUNT = 2
+
+# Strategy selector limits (configurable per regime)
+STRATEGY_MAX_POSITION_COUNT = 5
+STRATEGY_MAX_RISK_PER_TRADE = 0.02

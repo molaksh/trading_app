@@ -320,6 +320,13 @@ def run_paper_trading(mode='trade', runtime: Optional[PaperTradingRuntime] = Non
     risk_manager = runtime.risk_manager
     trade_ledger = runtime.trade_ledger
     executor = runtime.executor
+    scope = runtime.scope
+    run_id = None
+    if _is_crypto_scope(scope):
+        from crypto.pipeline.logging import log_pipeline_stage
+        import uuid
+
+        run_id = str(uuid.uuid4())
     
     # ========================================================================
     # STARTUP RECONCILIATION (MANDATORY)
@@ -327,6 +334,18 @@ def run_paper_trading(mode='trade', runtime: Optional[PaperTradingRuntime] = Non
     reconciliation_result = reconcile_runtime(runtime)
     startup_status = reconciliation_result["status"]
     safe_mode = reconciliation_result["safe_mode"]
+
+    if _is_crypto_scope(scope):
+        log_pipeline_stage(
+            stage="RECONCILIATION_SUMMARY",
+            scope=scope.scope_id,
+            run_id=run_id,
+            symbols=_get_symbols_for_scope(scope),
+            extra={
+                "status": reconciliation_result.get("status"),
+                "safe_mode": reconciliation_result.get("safe_mode"),
+            },
+        )
     
     # Check if we can proceed with trading
     if startup_status == "FAILED":
@@ -346,7 +365,12 @@ def run_paper_trading(mode='trade', runtime: Optional[PaperTradingRuntime] = Non
             results = pd.DataFrame()
         else:
             logger.info("\n🔵 TRADE MODE: Generating signals and submitting orders...")
-            results = main()
+            if _is_crypto_scope(scope):
+                from crypto.pipeline import run_crypto_pipeline
+
+                results = run_crypto_pipeline(runtime=runtime, run_id=run_id)
+            else:
+                results = main()
         
         if results.empty:
             logger.warning("No signals generated. Proceeding to exit evaluation only.")
@@ -367,13 +391,39 @@ def run_paper_trading(mode='trade', runtime: Optional[PaperTradingRuntime] = Non
             for idx, signal in signals.iterrows():
                 symbol = signal['symbol']
                 confidence = signal['confidence']
-                
+
+                if _is_crypto_scope(scope):
+                    regime_value = None
+                    if hasattr(runtime, "crypto_state") and runtime.crypto_state:
+                        history = runtime.crypto_state.get("regime_history", [])
+                        regime_value = history[-1] if history else None
+                    log_pipeline_stage(
+                        stage="RISK_DECISION",
+                        scope=scope.scope_id,
+                        run_id=run_id,
+                        symbols=[symbol],
+                        extra={"confidence": int(confidence), "regime": regime_value},
+                    )
+
                 success, order_id = executor.execute_signal(
                     symbol=symbol,
                     confidence=int(confidence),
                     signal_date=pd.Timestamp.now(),
                     features=signal.to_dict(),
                 )
+
+                if _is_crypto_scope(scope):
+                    regime_value = None
+                    if hasattr(runtime, "crypto_state") and runtime.crypto_state:
+                        history = runtime.crypto_state.get("regime_history", [])
+                        regime_value = history[-1] if history else None
+                    log_pipeline_stage(
+                        stage="EXECUTION_DECISION",
+                        scope=scope.scope_id,
+                        run_id=run_id,
+                        symbols=[symbol],
+                        extra={"success": success, "order_id": order_id, "regime": regime_value},
+                    )
                 
                 if success:
                     filled_count += 1
@@ -460,6 +510,19 @@ def run_paper_trading(mode='trade', runtime: Optional[PaperTradingRuntime] = Non
     env_label = "Paper trading" if str(env_value).lower() == "paper" else "Live trading"
     logger.info(f"✓ {env_label} execution complete")
     logger.info("=" * PRINT_WIDTH)
+
+    if _is_crypto_scope(scope):
+        log_pipeline_stage(
+            stage="CYCLE_SUMMARY",
+            scope=scope.scope_id,
+            run_id=run_id,
+            symbols=_get_symbols_for_scope(scope),
+            extra={
+                "signals_processed": filled_count + rejected_count,
+                "orders_submitted": filled_count,
+                "rejections": rejected_count,
+            },
+        )
     
     return runtime
 

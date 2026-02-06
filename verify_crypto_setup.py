@@ -24,7 +24,7 @@ def check_module_imports():
         ('crypto.universe', 'CryptoUniverse'),
         ('crypto.scheduling', 'DowntimeScheduler'),
         ('crypto.regime', 'CryptoRegimeEngine'),
-        ('crypto.strategies', 'StrategySelector'),
+        ('crypto.strategies', 'CryptoStrategySelector'),
         ('crypto.ml_pipeline', 'MLPipeline'),
         ('broker.kraken', 'KrakenAdapter'),
         ('broker.kraken.paper', 'PaperKrakenSimulator'),

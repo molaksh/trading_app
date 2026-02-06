@@ -22,7 +22,7 @@ from crypto.artifacts import CryptoArtifactStore
 from crypto.universe import CryptoUniverse
 from crypto.scheduling import DowntimeScheduler
 from crypto.regime import CryptoRegimeEngine
-from crypto.strategies import StrategySelector
+from crypto.strategies import CryptoStrategySelector
 from broker.kraken.paper import PaperKrakenSimulator
 from crypto.ml_pipeline import MLPipeline
 
@@ -90,7 +90,12 @@ class TestIntegrationTradingCycle:
         universe = CryptoUniverse()
         scheduler = DowntimeScheduler()
         regime_engine = CryptoRegimeEngine()
-        strategy_selector = StrategySelector(max_concurrent=2)
+        strategy_selector = CryptoStrategySelector(
+            max_concurrent=2,
+            max_position_count=5,
+            max_risk_per_trade=0.02,
+            allocation_cap_pct=0.5,
+        )
         
         return {
             'simulator': simulator,
@@ -167,7 +172,12 @@ class TestIntegrationRegimeAndStrategy:
         """Test that strategies are selected based on regime."""
         from crypto.regime import MarketRegime
         
-        selector = StrategySelector(max_concurrent=2)
+        selector = CryptoStrategySelector(
+            max_concurrent=2,
+            max_position_count=5,
+            max_risk_per_trade=0.02,
+            allocation_cap_pct=0.5,
+        )
         
         # During RISK_ON, should prefer growth strategies
         available_capital = 10000

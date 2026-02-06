@@ -159,7 +159,14 @@ def reconcile_runtime(runtime: PaperTradingRuntime) -> dict:
     if runtime.scope.mode.lower() == "crypto" or runtime.scope.broker.lower() == "kraken":
         reconciler = CryptoAccountReconciler(runtime.broker, runtime.trade_ledger, runtime.risk_manager)
     else:
-        reconciler = AccountReconciler(runtime.broker, runtime.trade_ledger, runtime.risk_manager)
+        # Get state directory for AlpacaReconciliationEngine (required for alpaca_v2)
+        state_dir = runtime.scope_paths.get_state_dir()
+        reconciler = AccountReconciler(
+            runtime.broker,
+            runtime.trade_ledger,
+            runtime.risk_manager,
+            state_dir=state_dir
+        )
     reconciliation_result = reconciler.reconcile_on_startup()
     runtime.executor.safe_mode_enabled = reconciliation_result.get("safe_mode", False)
     runtime.executor.startup_status = reconciliation_result.get("status", "UNKNOWN")

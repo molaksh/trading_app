@@ -18,11 +18,12 @@ import logging
 from typing import Optional, Dict, List, Tuple
 from datetime import datetime
 from enum import Enum
+from pathlib import Path
 
 from broker.adapter import BrokerAdapter, Position
 from broker.trade_ledger import TradeLedger
 from risk.risk_manager import RiskManager
-from config.settings import CASH_ONLY_TRADING
+from config.settings import CASH_ONLY_TRADING, RECONCILIATION_ENGINE
 
 logger = logging.getLogger(__name__)
 
@@ -62,6 +63,7 @@ class AccountReconciler:
         broker: BrokerAdapter,
         trade_ledger: TradeLedger,
         risk_manager: RiskManager,
+        state_dir: Optional[Path] = None,
     ):
         """
         Initialize reconciler.
@@ -70,6 +72,7 @@ class AccountReconciler:
             broker: BrokerAdapter (Alpaca)
             trade_ledger: Local trade ledger
             risk_manager: Risk manager instance
+            state_dir: Directory for reconciliation state (required for alpaca_v2 engine)
         """
         self.broker = broker
         self.trade_ledger = trade_ledger
@@ -80,6 +83,25 @@ class AccountReconciler:
         self.safe_mode = False
         self.validation_warnings = []
         self.validation_errors = []
+        
+        # Initialize AlpacaReconciliationEngine if using alpaca_v2
+        self.alpaca_engine = None
+        if RECONCILIATION_ENGINE == "alpaca_v2":
+            if state_dir is None:
+                raise ValueError(
+                    "state_dir required when RECONCILIATION_ENGINE=alpaca_v2"
+                )
+            
+            # Lazy import to avoid circular dependency
+            from broker.alpaca_reconciliation import AlpacaReconciliationEngine
+            
+            self.alpaca_engine = AlpacaReconciliationEngine(
+                broker_adapter=broker,
+                state_dir=state_dir
+            )
+            logger.info(f"Reconciliation Engine: alpaca_v2 (state_dir={state_dir})")
+        else:
+            logger.info(f"Reconciliation Engine: legacy")
         
         # Unreconciled broker positions (exist in broker but NOT in internal ledger after backfill)
         # These symbols MUST be blocked from new BUY orders to prevent duplicate exposure
@@ -116,6 +138,10 @@ class AccountReconciler:
         self._log_section("STARTUP RECONCILIATION BEGINNING")
         
         try:
+            # STEP 0: Run AlpacaReconciliationEngine if using alpaca_v2
+            if RECONCILIATION_ENGINE == "alpaca_v2":
+                self._run_alpaca_v2_reconciliation()
+            
             # STEP 1: Fetch account snapshot
             self._fetch_account_snapshot()
             
@@ -154,6 +180,55 @@ class AccountReconciler:
             "warnings": self.validation_warnings,
             "errors": self.validation_errors,
         }
+    
+    # ========================================================================
+    # STEP 0: AlpacaReconciliationEngine (alpaca_v2 only)
+    # ========================================================================
+    
+    def _run_alpaca_v2_reconciliation(self) -> None:
+        """
+        Run AlpacaReconciliationEngine to rebuild local state from broker fills.
+        
+        This is the new reconciliation path that:
+        - Uses broker fill timestamps (no datetime.now() fallback)
+        - Rebuilds open_positions.json idempotently from fills
+        - Persists state atomically
+        - Maintains an incremental cursor
+        
+        Raises on failure to prevent trading with stale state.
+        """
+        logger.info("=" * 80)
+        logger.info("ALPACA V2 RECONCILIATION (Broker Fills as Source of Truth)")
+        logger.info("=" * 80)
+        
+        if not self.alpaca_engine:
+            raise RuntimeError(
+                "AlpacaReconciliationEngine not initialized. "
+                "Check RECONCILIATION_ENGINE setting and state_dir."
+            )
+        
+        try:
+            result = self.alpaca_engine.reconcile_from_broker()
+            
+            if result["status"] != "OK":
+                error_msg = result.get("error", "Unknown error")
+                raise RuntimeError(f"Alpaca v2 reconciliation failed: {error_msg}")
+            
+            fills_processed = result.get("fills_processed", 0)
+            positions = result.get("positions", {})
+            
+            logger.info(f"✓ Alpaca v2 reconciliation complete")
+            logger.info(f"  Fills processed: {fills_processed}")
+            logger.info(f"  Open positions: {len(positions)}")
+            for symbol, qty in positions.items():
+                logger.info(f"    {symbol}: {qty} shares")
+            
+            logger.info("=" * 80)
+            
+        except Exception as e:
+            logger.error(f"CRITICAL: Alpaca v2 reconciliation failed: {e}", exc_info=True)
+            self.validation_errors.append(f"Alpaca v2 reconciliation failed: {e}")
+            raise  # Fail startup - do not trade with stale state
     
     # ========================================================================
     # STEP 1: Fetch Account Snapshot

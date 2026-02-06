@@ -559,10 +559,28 @@ class LedgerReconciliationHelper:
             ledger: Trade ledger instance
             position: OpenPosition from broker
             entry_timestamp: When position was opened (if known), else uses current time
+        
+        Raises:
+            ValueError: If entry_timestamp is None and RECONCILIATION_ENGINE is alpaca_v2
         """
         from datetime import datetime
+        from config.settings import RECONCILIATION_ENGINE
         
         if entry_timestamp is None:
+            # HARDENING: Prevent datetime.now() fallback when using alpaca_v2 engine
+            if RECONCILIATION_ENGINE == "alpaca_v2":
+                raise ValueError(
+                    f"Cannot backfill position {position.symbol} with entry_timestamp=None "
+                    f"when RECONCILIATION_ENGINE=alpaca_v2. Use AlpacaReconciliationEngine "
+                    f"to rebuild from broker fills with actual timestamps."
+                )
+            
+            # Legacy path: allow fallback with warning
+            logger.warning(
+                f"TIMESTAMP FALLBACK: Backfilling {position.symbol} with datetime.now() "
+                f"because entry_timestamp=None. This may cause date drift bugs. "
+                f"Consider using RECONCILIATION_ENGINE=alpaca_v2."
+            )
             entry_timestamp = datetime.now().isoformat()
         
         # Create a synthetic order ID for the external entry
