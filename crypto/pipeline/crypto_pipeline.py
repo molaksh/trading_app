@@ -79,7 +79,7 @@ def run_crypto_pipeline(
 
     log_pipeline_stage(
         stage="DATA_LOADED",
-        scope=scope.scope_id,
+        scope=str(scope),
         run_id=run_id,
         symbols=symbols,
         extra={
@@ -106,7 +106,7 @@ def run_crypto_pipeline(
 
     log_pipeline_stage(
         stage="FEATURES_BUILT",
-        scope=scope.scope_id,
+        scope=str(scope),
         run_id=run_id,
         symbols=symbols,
         extra={
@@ -155,7 +155,7 @@ def run_crypto_pipeline(
 
     log_pipeline_stage(
         stage="REGIME_EVALUATION",
-        scope=scope.scope_id,
+        scope=str(scope),
         run_id=run_id,
         symbols=symbols,
         extra={
@@ -175,7 +175,7 @@ def run_crypto_pipeline(
     if regime_signal.regime_changed:
         log_pipeline_stage(
             stage="REGIME_TRANSITION",
-            scope=scope.scope_id,
+            scope=str(scope),
             run_id=run_id,
             symbols=symbols,
             extra={
@@ -195,7 +195,7 @@ def run_crypto_pipeline(
     eligible = selector.get_eligible_strategies(regime_signal.regime)
     log_pipeline_stage(
         stage="STRATEGIES_ELIGIBLE",
-        scope=scope.scope_id,
+        scope=str(scope),
         run_id=run_id,
         symbols=symbols,
         extra={
@@ -209,7 +209,7 @@ def run_crypto_pipeline(
 
     log_pipeline_stage(
         stage="STRATEGIES_SELECTED",
-        scope=scope.scope_id,
+        scope=str(scope),
         run_id=run_id,
         symbols=symbols,
         extra={
@@ -263,7 +263,7 @@ def run_crypto_pipeline(
 
     log_pipeline_stage(
         stage="SIGNALS_GENERATED",
-        scope=scope.scope_id,
+        scope=str(scope),
         run_id=run_id,
         symbols=symbols,
         extra={

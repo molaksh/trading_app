@@ -140,7 +140,7 @@ def test_pipeline_logs_emitted_all_stages(monkeypatch, caplog):
     # Emit remaining stages to mirror full pipeline (risk/execution/reconciliation/cycle)
     from crypto.pipeline.logging import log_pipeline_stage
     for stage in ["RISK_DECISION", "EXECUTION_DECISION", "RECONCILIATION_SUMMARY", "CYCLE_SUMMARY"]:
-        log_pipeline_stage(stage, runtime.scope.scope_id, "test_run", ["BTC", "ETH"], {})
+        log_pipeline_stage(stage, str(runtime.scope), "test_run", ["BTC", "ETH"], {})
 
     stages = [
         "DATA_LOADED",

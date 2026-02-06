@@ -338,7 +338,7 @@ def run_paper_trading(mode='trade', runtime: Optional[PaperTradingRuntime] = Non
     if _is_crypto_scope(scope):
         log_pipeline_stage(
             stage="RECONCILIATION_SUMMARY",
-            scope=scope.scope_id,
+            scope=str(scope),
             run_id=run_id,
             symbols=_get_symbols_for_scope(scope),
             extra={
@@ -399,7 +399,7 @@ def run_paper_trading(mode='trade', runtime: Optional[PaperTradingRuntime] = Non
                         regime_value = history[-1] if history else None
                     log_pipeline_stage(
                         stage="RISK_DECISION",
-                        scope=scope.scope_id,
+                        scope=str(scope),
                         run_id=run_id,
                         symbols=[symbol],
                         extra={"confidence": int(confidence), "regime": regime_value},
@@ -419,7 +419,7 @@ def run_paper_trading(mode='trade', runtime: Optional[PaperTradingRuntime] = Non
                         regime_value = history[-1] if history else None
                     log_pipeline_stage(
                         stage="EXECUTION_DECISION",
-                        scope=scope.scope_id,
+                        scope=str(scope),
                         run_id=run_id,
                         symbols=[symbol],
                         extra={"success": success, "order_id": order_id, "regime": regime_value},
@@ -514,7 +514,7 @@ def run_paper_trading(mode='trade', runtime: Optional[PaperTradingRuntime] = Non
     if _is_crypto_scope(scope):
         log_pipeline_stage(
             stage="CYCLE_SUMMARY",
-            scope=scope.scope_id,
+            scope=str(scope),
             run_id=run_id,
             symbols=_get_symbols_for_scope(scope),
             extra={
