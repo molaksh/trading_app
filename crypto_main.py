@@ -101,6 +101,14 @@ def _task_ml_training(runtime=None):
     """
     Run ML training cycle (paper only, during downtime).
     
+    CRITICAL SAFETY: ML training is gated by trade eligibility.
+    Only executes when:
+    1. Environment is PAPER (not live trading)
+    2. At least one closed trade exists in ledger
+    3. ML orchestrator is available and implemented
+    
+    If any gate fails, logs the reason and returns cleanly (no work, no fake completion logs).
+    
     Called once per day during downtime window.
     Live trading: blocked by environment guard.
     """
@@ -112,6 +120,7 @@ def _task_ml_training(runtime=None):
         from runtime.environment_guard import get_environment_guard, TradingEnvironment
         guard = get_environment_guard()
         
+        # GATE 1: Paper-only
         if guard.environment != TradingEnvironment.PAPER:
             logger.warning("ML training disabled in live mode")
             return runtime
@@ -119,15 +128,56 @@ def _task_ml_training(runtime=None):
         if runtime is None:
             runtime = build_paper_trading_runtime()
         
-        # TODO: Implement ML training orchestration
-        # For now, log placeholder
-        logger.info("ML training pipeline: running feature extraction...")
-        # ml_orchestrator = runtime._get_ml_orchestrator()
-        # model_version = ml_orchestrator.run_offline_ml_cycle()
+        # GATE 2: Trade eligibility check
+        trades = runtime.trade_ledger.get_all_trades()
+        if not trades:
+            logger.info(
+                f"event=ML_TRAINING_SKIPPED | reason=no_trades_available | "
+                f"trade_count=0 | status=NORMAL"
+            )
+            return runtime
+        
+        # GATE 3: ML orchestrator availability
+        try:
+            ml_orchestrator = runtime._get_ml_orchestrator()
+            if not ml_orchestrator:
+                logger.info(
+                    f"event=ML_TRAINING_SKIPPED | reason=ml_orchestrator_unavailable | "
+                    f"trade_count={len(trades)} | status=NOT_IMPLEMENTED"
+                )
+                return runtime
+        except (AttributeError, NotImplementedError):
+            logger.info(
+                f"event=ML_TRAINING_SKIPPED | reason=ml_orchestrator_not_implemented | "
+                f"trade_count={len(trades)} | status=NOT_IMPLEMENTED"
+            )
+            return runtime
+        
+        # All gates passed — log start and execute
+        logger.info(
+            f"event=ML_TRAINING_START | trade_count={len(trades)} | "
+            f"status=RUNNING"
+        )
+        
+        model_info = ml_orchestrator.run_offline_ml_cycle()
+        
+        if model_info and model_info.get("model_version"):
+            logger.info(
+                f"event=ML_TRAINING_COMPLETED | model_version={model_info['model_version']} | "
+                f"trade_count={len(trades)} | status=SUCCESS"
+            )
+        else:
+            logger.info(
+                f"event=ML_TRAINING_COMPLETED | model_version=None | "
+                f"trade_count={len(trades)} | status=NO_IMPROVEMENT"
+            )
         
         return runtime
     except Exception as e:
-        logger.error(f"ML training failed: {e}", exc_info=True)
+        logger.error(
+            f"event=ML_TRAINING_FAILED | reason=exception | error={str(e)} | status=ERROR",
+            exc_info=True
+        )
         return runtime
 
 
