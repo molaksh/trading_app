@@ -34,9 +34,9 @@ class TestCryptoUniverse:
         kraken_pair = universe.get_kraken_pair('ETH')
         assert kraken_pair == 'XETHZUSD'
         
-        # SOL should map to SOLZUSD
+        # SOL should map to SOLUSD
         kraken_pair = universe.get_kraken_pair('SOL')
-        assert kraken_pair == 'SOLZUSD'
+        assert kraken_pair == 'SOLUSD'
     
     def test_canonical_from_kraken_pair(self, universe):
         """Test reverse lookup: Kraken pair to canonical."""
@@ -46,7 +46,7 @@ class TestCryptoUniverse:
         canonical = universe.get_canonical_symbol('XETHZUSD')
         assert canonical == 'ETH'
         
-        canonical = universe.get_canonical_symbol('SOLZUSD')
+        canonical = universe.get_canonical_symbol('SOLUSD')
         assert canonical == 'SOL'
     
     def test_all_kraken_pairs(self, universe):
@@ -55,7 +55,7 @@ class TestCryptoUniverse:
         
         assert 'XXBTZUSD' in pairs
         assert 'XETHZUSD' in pairs
-        assert 'SOLZUSD' in pairs
+        assert 'SOLUSD' in pairs
         
         # Should be same length as canonical
         assert len(pairs) == len(universe.all_canonical_symbols())

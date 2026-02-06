@@ -32,7 +32,7 @@ class CryptoUniverse:
     KRAKEN_MAPPING = {
         'BTC': 'XXBTZUSD',
         'ETH': 'XETHZUSD',
-        'SOL': 'SOLZUSD',
+        'SOL': 'SOLUSD',
         'XRP': 'XRPZUSD',
         'ADA': 'ADAZUSD',
         'DOT': 'DOTZUSD',
