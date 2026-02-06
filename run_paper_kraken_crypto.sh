@@ -70,12 +70,13 @@ docker run -d \
   -e MARKET="$MARKET_VALUE" \
   -e SCOPE="$SCOPE" \
   -e PERSISTENCE_ROOT=/app/persist \
-  -e MARKET_TIMEZONE=UTC \
+  -e MARKET_TIMEZONE=America/New_York \
+  -e TZ=America/New_York \
   -e CASH_ONLY_TRADING=true \
   -e KRAKEN_API_KEY="${KRAKEN_API_KEY:-stub}" \
   -e KRAKEN_API_SECRET="${KRAKEN_API_SECRET:-stub}" \
-  -e CRYPTO_DOWNTIME_START_UTC="${CRYPTO_DOWNTIME_START_UTC:-03:00}" \
-  -e CRYPTO_DOWNTIME_END_UTC="${CRYPTO_DOWNTIME_END_UTC:-05:00}" \
+  -e CRYPTO_DOWNTIME_START_UTC="${CRYPTO_DOWNTIME_START_UTC:-08:00}" \
+  -e CRYPTO_DOWNTIME_END_UTC="${CRYPTO_DOWNTIME_END_UTC:-10:00}" \
   -e CRYPTO_SCHEDULER_TICK_SECONDS="${CRYPTO_SCHEDULER_TICK_SECONDS:-60}" \
   -e PYTHONUNBUFFERED=1 \
   paper-kraken-crypto-global \
@@ -98,7 +99,7 @@ if docker ps -q -f name=paper-kraken-crypto-global | grep -q .; then
     echo ""
     echo "Scheduler state:"
     echo "  Location: $SCOPE_DIR/state/crypto_scheduler_state.json"
-    echo "  Downtime: ${CRYPTO_DOWNTIME_START_UTC:-03:00}-${CRYPTO_DOWNTIME_END_UTC:-05:00} UTC"
+    echo "  Downtime: 3-5 AM ET (08:00-10:00 UTC)"
     docker logs paper-kraken-crypto-global || true
     exit 1
 fi

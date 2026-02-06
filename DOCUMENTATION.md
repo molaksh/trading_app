@@ -21,6 +21,49 @@
 
 ## �🔔 Latest Updates (Newest First)
 
+### 2026-02-05 — CRITICAL FIX: ML Orchestration Gating & Truthful Logging
+
+**Status**: ✅ MERGED (Commit `23f7dc7`)  
+**Severity**: CRITICAL - Truthfulness  
+
+#### Problem
+
+ML training logs "completed" unconditionally, even with 0 trades.
+
+#### Solution
+
+Three-gate eligibility system with truthful event logging:
+
+| Gate | Check | Action |
+|------|-------|--------|
+| Gate 1 | Paper-only | Live mode: blocked |
+| Gate 2 | Trade data | 0 trades: SKIP + log |
+| Gate 3 | Orchestrator | Not implemented: SKIP + cite |
+
+#### Logging Events
+
+- `ML_TRAINING_SKIPPED | reason=no_trades_available` — Current state (0 trades)
+- `ML_TRAINING_SKIPPED | reason=ml_orchestrator_not_implemented` — ML not ready
+- `ML_TRAINING_START` → `ML_TRAINING_COMPLETED | model_version=...` — When ML ready
+
+**CRITICAL**: COMPLETED only logged when artifacts actually written.
+
+#### Changes
+
+- `crypto_main.py`: Three-gate system + structured logging (lines 100-175)
+- `tests/crypto/test_crypto_ml_orchestration.py`: 6 comprehensive tests
+- Removed dead code and TODO comments
+
+#### Guarantees
+
+✅ Never logs COMPLETED without work  
+✅ Matches swing scheduler.py pattern  
+✅ Paper-only enforcement  
+✅ Graceful degradation  
+✅ 100% backward compatible  
+
+---
+
 ### 2026-02-05 — Crypto Regime Engine ACTIVE (5m Execution / 4h Regime)
 
 **Scope**: Crypto-only (paper_kraken_crypto_global, live_kraken_crypto_global)  
