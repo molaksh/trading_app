@@ -17,7 +17,7 @@ import os
 import signal
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Optional, Dict, Callable, Tuple
 
@@ -39,6 +39,8 @@ class CryptoSchedulerTask:
         func: Callable,
         interval_minutes: Optional[int] = None,
         daily: bool = False,
+        run_at_utc: Optional[str] = None,
+        run_window_minutes: int = 5,
         allowed_state: TradingState = TradingState.TRADING,
     ):
         """
@@ -49,12 +51,16 @@ class CryptoSchedulerTask:
             func: Callable that executes the task
             interval_minutes: Run every N minutes (None = run always, if allowed)
             daily: If True, run once per day (overrides interval_minutes)
+            run_at_utc: Optional HH:MM UTC time to run daily tasks within a window
+            run_window_minutes: Allowed minutes after run_at_utc to execute
             allowed_state: TradingState.TRADING or DOWNTIME (or use allow_both)
         """
         self.name = name
         self.func = func
         self.interval_minutes = interval_minutes
         self.daily = daily
+        self.run_at_utc = run_at_utc
+        self.run_window_minutes = max(1, int(run_window_minutes))
         self.allowed_state = allowed_state
     
     def should_run(
@@ -79,6 +85,22 @@ class CryptoSchedulerTask:
         if self.daily:
             if not state_mgr.should_run_daily(self.name, now):
                 return False, f"already_ran_today"
+            if self.run_at_utc:
+                try:
+                    hour_str, minute_str = self.run_at_utc.split(":")
+                    target = now.replace(
+                        hour=int(hour_str),
+                        minute=int(minute_str),
+                        second=0,
+                        microsecond=0,
+                    )
+                    window_end = target + timedelta(minutes=self.run_window_minutes)
+                    if now < target:
+                        return False, "before_run_window"
+                    if now > window_end:
+                        return False, "after_run_window"
+                except Exception:
+                    return False, "invalid_run_at_utc"
         elif self.interval_minutes is not None:
             if not state_mgr.should_run_interval(self.name, now, self.interval_minutes):
                 return False, f"interval_not_met"

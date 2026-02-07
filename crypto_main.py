@@ -22,7 +22,7 @@ import logging
 import sys
 import argparse
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
 from config.settings import LOG_LEVEL, LOG_FORMAT, LOG_DATE_FORMAT
@@ -34,6 +34,7 @@ from config.crypto_scheduler_settings import (
     CRYPTO_TRADING_TICK_INTERVAL_MINUTES,
     CRYPTO_RUN_STARTUP_RECONCILIATION,
     STATUS_SNAPSHOT_INTERVAL_MINUTES,
+    AI_VALIDATE_SCHEDULER,
 )
 from execution.crypto_scheduler import CryptoScheduler, CryptoSchedulerTask
 from execution.runtime import build_paper_trading_runtime, reconcile_runtime
@@ -41,6 +42,7 @@ from main import run_paper_trading
 from crypto.scheduling import TradingState
 from runtime.environment_guard import get_environment_guard
 from runtime.observability import get_observability
+from runtime.ai_advisor import get_ai_runner
 from broker.kraken_client import KrakenClient, KrakenConfig, KrakenAPIError
 from broker.trade_ledger import TradeLedger
 from config.crypto.loader import load_crypto_config
@@ -83,6 +85,21 @@ def _parse_bool(value: str) -> bool:
     if value is None:
         return False
     return value.strip().lower() in {"1", "true", "yes"}
+
+
+def _offset_time_utc(hhmm: str, minutes: int) -> str:
+    try:
+        hour_str, minute_str = hhmm.split(":")
+        base = datetime.now(timezone.utc).replace(
+            hour=int(hour_str),
+            minute=int(minute_str),
+            second=0,
+            microsecond=0,
+        )
+        adjusted = base + timedelta(minutes=minutes)
+        return adjusted.strftime("%H:%M")
+    except Exception:
+        return hhmm
 
 
 def verify_live_startup_or_exit() -> None:
@@ -451,6 +468,11 @@ def run_daemon():
         verify_live_startup_or_exit()
     else:
         logger.info(f"Paper environment ({guard.environment.value}) - startup verification skipped")
+
+    if AI_VALIDATE_SCHEDULER:
+        get_ai_runner().validate_scheduler_decision(trigger="validation")
+        logger.info("AI_SCHEDULER_VALIDATION_COMPLETE")
+        sys.exit(0)
     
     # Initialize scheduler
     scheduler = CryptoScheduler(
@@ -472,6 +494,8 @@ def run_daemon():
 
     if guard.is_live():
         observability.emit_live_status_snapshot(trigger="startup")
+
+    get_ai_runner().trigger_ranking_from_market_data(trigger="startup")
     
     # Register tasks
     # Each task closure captures runtime and updates it after execution
@@ -493,6 +517,9 @@ def run_daemon():
 
     def make_status_snapshot():
         observability.emit_live_status_snapshot(trigger="interval")
+
+    def make_ai_daily_ranking():
+        get_ai_runner().trigger_ranking_from_market_data(trigger="daily")
     
     scheduler.register_task(CryptoSchedulerTask(
         name="trading_tick",
@@ -527,6 +554,16 @@ def run_daemon():
         func=make_status_snapshot,
         interval_minutes=max(1, STATUS_SNAPSHOT_INTERVAL_MINUTES),
         # No state restriction: can run anytime
+    ))
+
+    ai_daily_run_time = _offset_time_utc(CRYPTO_DOWNTIME_END_UTC, minutes=-5)
+    scheduler.register_task(CryptoSchedulerTask(
+        name="ai_daily_ranking",
+        func=make_ai_daily_ranking,
+        daily=True,
+        run_at_utc=ai_daily_run_time,
+        run_window_minutes=5,
+        allowed_state=TradingState.DOWNTIME,
     ))
     
     # Run daemon loop

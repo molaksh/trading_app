@@ -36,10 +36,10 @@ class CryptoUniverse:
         'XRP': 'XRPZUSD',
         'ADA': 'ADAZUSD',
         'DOT': 'DOTZUSD',
-        'LINK': 'LINKZUSD',
+        'LINK': 'LINKUSD',
         'DOGE': 'XDOGEZUSD',
         'MATIC': 'MATICZUSD',
-        'AVAX': 'AVAXZUSD',
+        'AVAX': 'AVAXUSD',
     }
     
     def __init__(self, symbols: Optional[List[str]] = None, 

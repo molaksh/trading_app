@@ -18,7 +18,7 @@ ENABLE_OHLC_CACHE = true
 MAX_OHLC_STALENESS_SECONDS = 0
 
 # Universe symbols (canonical format)
-CRYPTO_UNIVERSE = ["BTC", "ETH", "SOL"]
+CRYPTO_UNIVERSE = ["BTC", "ETH", "SOL", "LINK", "AVAX"]
 
 # Universe filters
 UNIVERSE_MIN_VOLUME_USD = 1000000
@@ -63,7 +63,7 @@ ENABLE_LIVE_ORDERS = false
 
 # Symbol allowlist: only allow trading these pairs
 # Prevents accidental trades on unintended pairs
-SYMBOL_ALLOWLIST = ["BTC", "ETH", "SOL"]
+SYMBOL_ALLOWLIST = ["BTC", "ETH", "SOL", "LINK", "AVAX"]
 
 # Maximum notional value per order (USD)
 # Prevents accidental large orders
@@ -77,11 +77,15 @@ MAX_NOTIONAL_PER_ORDER = 500.0
 BTC_MIN_ORDER_SIZE = 0.00001
 ETH_MIN_ORDER_SIZE = 0.0001
 SOL_MIN_ORDER_SIZE = 0.01
+LINK_MIN_ORDER_SIZE = 0.1
+AVAX_MIN_ORDER_SIZE = 0.1
 
 # Price precision (decimal places)
 BTC_PRICE_DECIMALS = 2
 ETH_PRICE_DECIMALS = 2
 SOL_PRICE_DECIMALS = 4
+LINK_PRICE_DECIMALS = 4
+AVAX_PRICE_DECIMALS = 4
 
 # Idempotency: client_order_id for duplicate prevention (Phase 1.2)
 ENABLE_IDEMPOTENCY = true

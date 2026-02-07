@@ -1,6 +1,6 @@
 # Repository Documentation (Single Source of Truth)
 
-*Last updated: 2026-02-05*
+*Last updated: 2026-02-07*
 
 ---
 
@@ -20,6 +20,142 @@
 ---
 
 ## �🔔 Latest Updates (Newest First)
+
+### 2026-02-07 — AI Advisor Scheduling + Full Call Logging
+
+**Status**: ✅ UPDATED
+**Severity**: MEDIUM — Observability + deterministic scheduling window
+
+#### Scheduling Change
+
+AI daily ranking now runs **5 minutes before crypto downtime ends** in a
+**5‑minute window**, instead of “any time daily.”
+
+- Downtime window defaults to **03:00–05:00 ET** (08:00–10:00 UTC)
+- AI daily call window: **04:55–05:00 ET** (09:55–10:00 UTC)
+
+#### Logging Enhancements
+
+AI advisor now logs the **request**, **API call**, **raw response**, and
+**reasoning**. It also writes a JSONL audit trail:
+
+- Log lines:
+   - `AI_ADVISOR_API_CALL`
+   - `AI_ADVISOR_REQUEST`
+   - `AI_ADVISOR_RESPONSE`
+   - `AI_ADVISOR_REASONING`
+- JSONL file:
+   - `<scope>/logs/ai_advisor_calls.jsonl`
+
+Each JSONL record includes:
+- timestamp
+- trigger (startup/daily)
+- model + response id
+- ranked symbols + reasoning
+- raw response payload
+
+#### Files Changed
+
+- `execution/crypto_scheduler.py` (daily task window support)
+- `crypto_main.py` (AI call scheduled 5 minutes before downtime end)
+- `runtime/ai_advisor.py` (API/response/reasoning logging + JSONL audit)
+- `config/crypto_scheduler_settings.py` (default downtime aligned to 03:00–05:00 ET)
+
+### 2026-02-06 — Phase A: AI Advisor (Read-Only Universe Ranking)
+
+**Status**: ✅ MERGED
+**Severity**: MEDIUM — Advisory-only ranking (no trading authority)
+
+#### Purpose
+
+Introduces an AI advisor to **rank** a fixed 5‑symbol crypto universe for scan order only.
+The AI has **no authority** to trade, change parameters, or alter the universe.
+
+#### Fixed Universe (Mandatory)
+
+AI ranking is limited to:
+
+- BTC
+- ETH
+- SOL
+- LINK
+- AVAX
+
+If the configured universe does not match exactly, the pipeline fails fast.
+
+#### Call Frequency Rules (Mandatory)
+
+- **Exactly once at container startup**
+- **Once per UTC day** (default 24h interval)
+- **Never per tick, per symbol, or per scan**
+
+This prevents accidental loops, controls cost, and keeps AI usage intentional.
+
+#### Behavior
+
+- AI output **reorders scan priority only**
+- No symbols are added/removed
+- Failures **never block trading** (fallback to default order)
+- Call frequency is capped per day and per interval
+
+#### Failure Behavior Guarantees
+
+- Exceptions are caught and logged
+- No retries that can loop
+- No TradePermission changes
+- Trading continues with last known ranking or default order
+
+#### Logging
+
+- `AI_ADVISOR_RANKING_TRIGGERED`
+- `AI_ADVISOR_RANKING_SKIPPED`
+- `AI_ADVISOR_RANKING_SUCCESS`
+- `AI_ADVISOR_RANKING_FAILED`
+
+#### Configuration
+
+- `AI_ADVISOR_ENABLED` (default: false)
+- `AI_MAX_CALLS_PER_DAY` (default: 1)
+- `AI_RANKING_INTERVAL_HOURS` (default: 24)
+- `OPENAI_API_KEY` (required when enabled)
+- `OPENAI_MODEL` (optional override; default: gpt-4o-mini)
+- `OPENAI_API_BASE_URL` (optional override)
+
+#### Cost & Safety Rationale
+
+- AI calls are **expensive and non‑deterministic**; limiting frequency controls cost.
+- Startup + daily cadence avoids runaway loops and keeps behavior observable.
+- Health is tracked **without external API pings**.
+
+#### Validation Utilities (Non‑Production)
+
+**A) Scheduler Skip Validation (No API Call)**
+
+Run with `AI_VALIDATE_SCHEDULER=true`. This executes the scheduler decision once,
+logs a single `AI_ADVISOR_RANKING_SKIPPED` reason, and exits without calling OpenAI.
+
+Expected log lines:
+
+- `AI_ADVISOR_RANKING_TRIGGERED | trigger=validation ...`
+- `AI_ADVISOR_RANKING_SKIPPED | ... reason=disabled|interval_limit|max_calls_reached|validation_mode_no_call`
+
+**B) Failure Simulation (OPENAI_API_KEY unset)**
+
+Start the live container with `OPENAI_API_KEY` unset (or empty). Expected:
+
+- `AI_ADVISOR_RANKING_FAILED | ... error=missing_api_key`
+- Trading continues normally
+- Scan order falls back to cached/default
+- TradePermission unchanged
+
+#### Files Changed
+
+- `runtime/ai_advisor.py` (new)
+- `prompts/universe_ranking_phase_a.txt` (new)
+- `crypto/pipeline/crypto_pipeline.py`
+- `config/crypto_scheduler_settings.py`
+- `runtime/observability.py`
+- `config/crypto/*.yaml`
 
 ### 2026-02-06 — Operational Observability (Live Crypto)
 
@@ -52,6 +188,11 @@ ACTIVE_BLOCK_STATE: NONE
 BLOCK_REASON: NONE
 MARKET_DATA_STATUS: FRESH
 RECONCILIATION_STATUS: OK
+AI_ENABLED: YES
+AI_CALLS_TODAY: 0
+AI_LAST_CALL_TIME: NONE
+AI_LAST_SUCCESS_TIME: NONE
+AI_LAST_ERROR: NONE
 OPEN_POSITIONS: 0
 DAILY_PNL: 0.00
 LAST_TRADE_TIMESTAMP: NONE
@@ -82,7 +223,12 @@ Example record:
    "data_issues": 3,
    "reconciliation_issues": 0,
    "risk_blocks": 2,
-   "manual_halt_used": false
+   "manual_halt_used": false,
+   "ai_calls_today": 0,
+   "ai_last_call_time": null,
+   "ai_last_success_time": null,
+   "ai_last_error": null,
+   "ai_last_ranking": null
 }
 ```
 
@@ -1504,7 +1650,7 @@ KRAKEN:
     DRY_RUN: true                      # Block all orders by default
     ENABLE_LIVE_ORDERS: false          # Require explicit approval
     MAX_NOTIONAL_PER_ORDER: 500.0      # Prevent large orders
-    SYMBOL_ALLOWLIST: [BTC, ETH, SOL]  # Only safe symbols
+   SYMBOL_ALLOWLIST: [BTC, ETH, SOL, LINK, AVAX]  # Only safe symbols
 ```
 
 #### Test Results

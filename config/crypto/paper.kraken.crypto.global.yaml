@@ -18,7 +18,7 @@ ENABLE_OHLC_CACHE = true
 MAX_OHLC_STALENESS_SECONDS = "auto"
 
 # Universe symbols (canonical format)
-CRYPTO_UNIVERSE = ["BTC", "ETH", "SOL"]
+CRYPTO_UNIVERSE = ["BTC", "ETH", "SOL", "LINK", "AVAX"]
 
 # Universe filters
 UNIVERSE_MIN_VOLUME_USD = 1000000

@@ -14,13 +14,14 @@ import os
 from dataclasses import dataclass, field
 from datetime import datetime, timezone, date
 from pathlib import Path
-from typing import Dict, Optional, Set
+from typing import Dict, Optional, Set, Any
 
 from config.scope import get_scope
 from config.scope_paths import get_scope_path
 from config.crypto_scheduler_settings import (
     STATUS_SNAPSHOT_INTERVAL_MINUTES,
     DAILY_SUMMARY_OUTPUT_PATH,
+    AI_ADVISOR_ENABLED,
 )
 from runtime.trade_permission import get_trade_permission, set_trade_permission_hook
 
@@ -37,6 +38,11 @@ class ObservabilityCounters:
     reconciliation_issues: int = 0
     risk_blocks: int = 0
     manual_halt_used: bool = False
+    ai_calls_today: int = 0
+    ai_last_call_time: Optional[str] = None
+    ai_last_success_time: Optional[str] = None
+    ai_last_error: Optional[str] = None
+    ai_last_ranking: Optional[Dict[str, Any]] = None
 
 
 class RuntimeObservability:
@@ -80,6 +86,21 @@ class RuntimeObservability:
 
     def mark_market_data_fresh(self) -> None:
         self._market_data_status = "FRESH"
+
+    def record_ai_attempt(self, calls_today: int, call_time: datetime) -> None:
+        self._counters.ai_calls_today = calls_today
+        self._counters.ai_last_call_time = call_time.isoformat()
+
+    def record_ai_success(self, success_time: datetime, ranked_symbols: list, reasoning: str) -> None:
+        self._counters.ai_last_success_time = success_time.isoformat()
+        self._counters.ai_last_error = None
+        self._counters.ai_last_ranking = {
+            "ranked_symbols": ranked_symbols,
+            "reasoning": reasoning,
+        }
+
+    def record_ai_error(self, error: str) -> None:
+        self._counters.ai_last_error = error
 
     def on_block_change(self, state: str, reason: str, action: str) -> None:
         if action == "block":
@@ -183,6 +204,11 @@ class RuntimeObservability:
         logger.info(f"BLOCK_REASON: {block_reason}")
         logger.info(f"MARKET_DATA_STATUS: {self._market_data_status}")
         logger.info(f"RECONCILIATION_STATUS: {reconciliation_status}")
+        logger.info(f"AI_ENABLED: {'YES' if AI_ADVISOR_ENABLED else 'NO'}")
+        logger.info(f"AI_CALLS_TODAY: {self._counters.ai_calls_today}")
+        logger.info(f"AI_LAST_CALL_TIME: {self._counters.ai_last_call_time or 'NONE'}")
+        logger.info(f"AI_LAST_SUCCESS_TIME: {self._counters.ai_last_success_time or 'NONE'}")
+        logger.info(f"AI_LAST_ERROR: {self._counters.ai_last_error or 'NONE'}")
         logger.info(f"OPEN_POSITIONS: {open_positions}")
         logger.info(f"DAILY_PNL: {realized + unrealized:.2f}")
         logger.info(f"LAST_TRADE_TIMESTAMP: {last_trade_ts}")
@@ -247,6 +273,11 @@ class RuntimeObservability:
             "reconciliation_issues": self._counters.reconciliation_issues,
             "risk_blocks": self._counters.risk_blocks,
             "manual_halt_used": self._counters.manual_halt_used,
+            "ai_calls_today": self._counters.ai_calls_today,
+            "ai_last_call_time": self._counters.ai_last_call_time,
+            "ai_last_success_time": self._counters.ai_last_success_time,
+            "ai_last_error": self._counters.ai_last_error,
+            "ai_last_ranking": self._counters.ai_last_ranking,
         }
 
         try:

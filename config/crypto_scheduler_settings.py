@@ -7,8 +7,9 @@ Environment-driven so containers can tune cadence without code edits.
 import os
 
 # Downtime window (UTC) for ML training/validation
-CRYPTO_DOWNTIME_START_UTC = os.getenv("CRYPTO_DOWNTIME_START_UTC", "03:00")
-CRYPTO_DOWNTIME_END_UTC = os.getenv("CRYPTO_DOWNTIME_END_UTC", "05:00")
+# 03:00-05:00 ET (EST) == 08:00-10:00 UTC
+CRYPTO_DOWNTIME_START_UTC = os.getenv("CRYPTO_DOWNTIME_START_UTC", "08:00")
+CRYPTO_DOWNTIME_END_UTC = os.getenv("CRYPTO_DOWNTIME_END_UTC", "10:00")
 
 # Trading loop tick cadence (seconds)
 # How often to check if trading_tick should run
@@ -28,6 +29,12 @@ CRYPTO_RECONCILIATION_INTERVAL_MINUTES = int(os.getenv("CRYPTO_RECONCILIATION_IN
 # Observability
 STATUS_SNAPSHOT_INTERVAL_MINUTES = int(os.getenv("STATUS_SNAPSHOT_INTERVAL_MINUTES", "15"))
 DAILY_SUMMARY_OUTPUT_PATH = os.getenv("DAILY_SUMMARY_OUTPUT_PATH", "")
+
+# AI Advisor (Phase A)
+AI_ADVISOR_ENABLED = os.getenv("AI_ADVISOR_ENABLED", "false").lower() == "true"
+AI_MAX_CALLS_PER_DAY = int(os.getenv("AI_MAX_CALLS_PER_DAY", "1"))
+AI_RANKING_INTERVAL_HOURS = int(os.getenv("AI_RANKING_INTERVAL_HOURS", "24"))
+AI_VALIDATE_SCHEDULER = os.getenv("AI_VALIDATE_SCHEDULER", "false").lower() == "true"
 
 # Startup behaviors
 CRYPTO_RUN_STARTUP_RECONCILIATION = os.getenv("CRYPTO_RUN_STARTUP_RECONCILIATION", "true").lower() == "true"

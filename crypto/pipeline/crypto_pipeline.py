@@ -20,6 +20,7 @@ import pandas as pd
 
 from config.crypto.loader import load_crypto_config
 from runtime.trade_permission import get_trade_permission
+from runtime.ai_advisor import get_ai_runner
 from crypto.features import build_execution_features, build_regime_features
 from crypto.pipeline.logging import log_pipeline_stage
 from crypto.regime import CryptoRegimeEngine, RegimeThresholds, MarketRegime
@@ -29,6 +30,8 @@ from crypto.scope_guard import validate_crypto_universe_symbols
 from data.crypto_price_loader import load_crypto_price_data_two_timeframes
 
 logger = logging.getLogger(__name__)
+
+_FIXED_AI_UNIVERSE = ["BTC", "ETH", "SOL", "LINK", "AVAX"]
 
 
 def run_crypto_pipeline(
@@ -44,6 +47,11 @@ def run_crypto_pipeline(
     scope = runtime.scope
     crypto_config = load_crypto_config(scope)
     symbols = validate_crypto_universe_symbols(crypto_config.get("CRYPTO_UNIVERSE", ["BTC", "ETH", "SOL"]))
+    if set(symbols) != set(_FIXED_AI_UNIVERSE):
+        raise ValueError(
+            "CRYPTO_UNIVERSE_FIXED_REQUIRED: expected=%s got=%s"
+            % (sorted(_FIXED_AI_UNIVERSE), sorted(symbols))
+        )
 
     if run_id is None:
         run_id = str(uuid.uuid4())
@@ -133,6 +141,8 @@ def run_crypto_pipeline(
             "regime_feature_symbol": anchor_symbol,
         },
     )
+
+    ordered_symbols = get_ai_runner().get_ranked_symbols(symbols)
 
     # Stage 3: REGIME ENGINE
     thresholds = RegimeThresholds(
@@ -245,7 +255,7 @@ def run_crypto_pipeline(
         if strategy is None:
             continue
 
-        for symbol in symbols:
+        for symbol in ordered_symbols:
             if symbol not in execution_features:
                 continue
 
@@ -284,10 +294,11 @@ def run_crypto_pipeline(
         stage="SIGNALS_GENERATED",
         scope=str(scope),
         run_id=run_id,
-        symbols=symbols,
+        symbols=ordered_symbols,
         extra={
             "regime": regime_signal.regime.value,
             "signal_count": len(signals),
+            "scan_order": ordered_symbols,
         },
     )
 

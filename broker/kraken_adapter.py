@@ -45,6 +45,8 @@ class KrakenAdapter(BrokerAdapter):
         "BTC/USD": "XBTUSD",
         "ETH/USD": "ETHUSD",
         "SOL/USD": "SOLUSD",
+        "LINK/USD": "LINKUSD",
+        "AVAX/USD": "AVAXUSD",
         "BTC/USDT": "XBTUSDT",
         "ETH/USDT": "ETHUSD T",
         "SOL/USDT": "SOLUSDT",
@@ -57,6 +59,8 @@ class KrakenAdapter(BrokerAdapter):
         "BTC/USD": 0.00001,
         "ETH/USD": 0.0001,
         "SOL/USD": 0.01,
+        "LINK/USD": 0.1,
+        "AVAX/USD": 0.1,
     }
     
     def __init__(
