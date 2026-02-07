@@ -14,6 +14,7 @@ It enforces RiskManager approval before every order.
 """
 
 import logging
+import os
 from typing import Optional, Dict, Tuple, List
 from datetime import datetime, date
 import pandas as pd
@@ -24,6 +25,7 @@ from broker.trade_ledger import TradeLedger, create_trade_from_fills
 from risk.risk_manager import RiskManager
 from risk.portfolio_state import PortfolioState
 from monitoring.system_guard import SystemGuard
+from runtime.trade_permission import get_trade_permission
 from strategy.exit_evaluator import ExitEvaluator, ExitSignal
 
 logger = logging.getLogger(__name__)
@@ -215,6 +217,7 @@ class TradingExecutor:
         self.trade_ledger = trade_ledger or TradeLedger()
         self.ml_trainer = ml_trainer
         self.ml_risk_threshold = ml_risk_threshold
+        self.trade_permission = get_trade_permission()
         
         # PRODUCTION: Two-phase exit system
         from broker.exit_intent_tracker import ExitIntentTracker
@@ -249,6 +252,25 @@ class TradingExecutor:
         logger.info(f"  Trade Ledger: Enabled ({len(self.trade_ledger.trades)} existing trades)")
         logger.info(f"  ML Risk Filter: {'Enabled' if ml_trainer else 'Disabled'}")
 
+    def _apply_manual_halt(self) -> None:
+        manual_halt = os.getenv("MANUAL_HALT", "false").strip().lower() in {"1", "true", "yes"}
+        if manual_halt:
+            self.trade_permission.set_block("MANUAL_HALT", "operator halt enabled")
+        else:
+            self.trade_permission.clear_block("MANUAL_HALT", "operator halt disabled")
+
+    def _maybe_block_on_risk(self, reason: str) -> None:
+        reason_lower = reason.lower()
+        triggers = [
+            "daily loss limit",
+            "max trades per day",
+            "consecutive loss limit",
+            "portfolio heat limit",
+            "per-symbol risk exposure limit",
+        ]
+        if any(trigger in reason_lower for trigger in triggers):
+            self.trade_permission.set_block("RISK_LIMIT_BLOCKED", reason)
+
     def execute_signal(
         self,
         symbol: str,
@@ -280,6 +302,18 @@ class TradingExecutor:
         logger.info("=" * 80)
         logger.info(f"EXECUTING SIGNAL: {symbol} (confidence={confidence})")
         logger.info("=" * 80)
+
+        # Manual halt (operator controlled)
+        self._apply_manual_halt()
+
+        # Runtime trade permission gate (no-trade states)
+        if not self.trade_permission.trade_allowed():
+            block = self.trade_permission.get_primary_block()
+            if block is not None:
+                logger.error(
+                    f"TRADE_SKIPPED_{block.state} | reason={block.reason} | ts={block.timestamp}"
+                )
+            return False, None
         
         # SAFE MODE CHECK: Block new entries if safe mode is active
         if self.safe_mode_enabled and self.startup_status != "READY":
@@ -412,6 +446,7 @@ class TradingExecutor:
         
         if not decision.approved:
             logger.warning(f"Risk check failed: {decision.reason}")
+            self._maybe_block_on_risk(decision.reason)
             return False, None
         
         # Step 4: Submit order to broker
@@ -1042,6 +1077,7 @@ class TradingExecutor:
         return {
             "execution_logger": self.exec_logger.get_summary(),
             "account_status": self.get_account_status(),
+            "trade_permission": self.trade_permission.snapshot(),
         }
     
     def _finalize_trade(

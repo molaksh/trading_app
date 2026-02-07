@@ -191,7 +191,6 @@ class KrakenMarketDataProvider:
                     canonical_symbol,
                     self.config.interval,
                 )
-                raise RuntimeError("MARKET_DATA_BLOCKED: live OHLC fetch failed")
             return None
 
         if payload.get("error"):
@@ -202,7 +201,6 @@ class KrakenMarketDataProvider:
                     canonical_symbol,
                     self.config.interval,
                 )
-                raise RuntimeError("MARKET_DATA_BLOCKED: live OHLC api_error")
             return None
 
         result = payload.get("result", {})
@@ -220,7 +218,6 @@ class KrakenMarketDataProvider:
                     canonical_symbol,
                     self.config.interval,
                 )
-                raise RuntimeError("MARKET_DATA_BLOCKED: live OHLC missing_ohlc_key")
             return None
 
         rows = result.get(ohlc_key, [])
@@ -232,7 +229,6 @@ class KrakenMarketDataProvider:
                     canonical_symbol,
                     self.config.interval,
                 )
-                raise RuntimeError("MARKET_DATA_BLOCKED: live OHLC empty_response")
             return None
 
         # Kraken OHLC row: [time, open, high, low, close, vwap, volume, count]
@@ -261,7 +257,6 @@ class KrakenMarketDataProvider:
                     canonical_symbol,
                     self.config.interval,
                 )
-                raise RuntimeError("MARKET_DATA_BLOCKED: live OHLC empty_dataframe")
             return None
 
         df = df.set_index("Date").sort_index()

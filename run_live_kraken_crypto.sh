@@ -69,6 +69,12 @@ PAPER_TRADING="${PAPER_TRADING:-false}"
 CRYPTO_DOWNTIME_START_UTC="${CRYPTO_DOWNTIME_START_UTC:-08:00}"
 CRYPTO_DOWNTIME_END_UTC="${CRYPTO_DOWNTIME_END_UTC:-10:00}"
 
+# Enforce canonical env vars used by the container
+ENV="${ENV:-$ENV_VALUE}"
+BROKER="${BROKER:-$BROKER_VALUE}"
+MODE="${MODE:-$MODE_VALUE}"
+MARKET="${MARKET:-$MARKET_VALUE}"
+
 fail_startup() {
     echo "=========================================="
     echo "ERROR: LIVE STARTUP PRE-FLIGHT FAILED"

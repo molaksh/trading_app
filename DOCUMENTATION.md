@@ -21,6 +21,84 @@
 
 ## �🔔 Latest Updates (Newest First)
 
+### 2026-02-06 — Runtime NO-TRADE States (Live Kraken Crypto)
+
+**Status**: ✅ MERGED
+**Severity**: CRITICAL — Runtime trade safety (fail-closed without crashes)
+
+#### Purpose
+
+Live trading must continue running **without placing orders** when safety policy blocks it.
+This introduces explicit runtime NO-TRADE states that veto trading by policy (not exceptions).
+
+#### Block States (Canonical)
+
+1. **MARKET_DATA_BLOCKED**
+   - OHLC stale or unavailable
+   - Partial/inconsistent market data
+
+2. **RECONCILIATION_BLOCKED**
+   - Broker open positions mismatch ledger
+
+3. **RISK_LIMIT_BLOCKED**
+   - Daily loss limit hit
+   - Max trades/day hit
+   - Portfolio heat exceeded
+   - Per-symbol exposure exceeded
+
+4. **MANUAL_HALT**
+   - Operator kill switch (`MANUAL_HALT=true`)
+
+#### Behavior
+
+- **Scheduler keeps running** (monitoring + reconciliation continue)
+- **Trading decisions are vetoed** with explicit logs
+- **No restarts required**
+- **No silent skips**
+
+#### Logging (Required)
+
+- Enter block: `TRADING_BLOCKED_<STATE>`
+- Skip trade: `TRADE_SKIPPED_<STATE>`
+- Clear block: `TRADING_UNBLOCKED_<STATE>`
+
+Each log includes **state**, **reason**, and **timestamp**.
+
+#### Startup Failure vs Runtime Block
+
+- **Startup failure**: container exits immediately
+- **Runtime block**: container stays up, trading is vetoed
+
+#### Status Snapshot
+
+Runtime snapshot is emitted each tick:
+
+```
+ENV: LIVE
+BROKER: KRAKEN
+TRADING_ALLOWED: YES | NO
+BLOCK_STATE: <STATE or NONE>
+BLOCK_REASON: <reason or NONE>
+LAST_BLOCK_CHANGE: <timestamp>
+```
+
+#### Clearing Blocks Safely
+
+- **Manual halt** cleared only by operator (`MANUAL_HALT=false`)
+- **Market data** cleared only after fresh OHLC verified
+- **Reconciliation** cleared only after broker/ledger re-verified
+- **Risk limits** cleared only when limits reset by policy
+
+#### Files Changed
+
+- `runtime/trade_permission.py` (new)
+- `broker/trading_executor.py` (trade gate + risk block)
+- `data/crypto_price_loader.py` (market data block + clear)
+- `crypto/pipeline/crypto_pipeline.py` (block on partial data)
+- `execution/runtime.py` (reconciliation block)
+
+---
+
 ### 2026-02-06 — CRITICAL: Live Kraken Crypto Startup Safety Gate (Fail-Closed)
 
 **Status**: ✅ MERGED

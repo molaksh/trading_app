@@ -11,6 +11,7 @@ from config.scope import get_scope
 from config.crypto.loader import load_crypto_config
 from core.data.providers.kraken_provider import KrakenMarketDataProvider, KrakenOHLCConfig
 from crypto.scope_guard import validate_crypto_universe_symbols
+from runtime.trade_permission import get_trade_permission
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +19,7 @@ logger = logging.getLogger(__name__)
 def load_crypto_price_data(symbol: str, lookback_days: int) -> Optional[pd.DataFrame]:
     scope = get_scope()
     crypto_config = load_crypto_config(scope)
+    permission = get_trade_permission()
 
     provider_name = str(crypto_config.get("MARKET_DATA_PROVIDER", "")).upper()
     if provider_name != "KRAKEN":
@@ -44,7 +46,19 @@ def load_crypto_price_data(symbol: str, lookback_days: int) -> Optional[pd.DataF
     )
 
     provider = KrakenMarketDataProvider(scope=scope, config=config)
-    return provider.fetch_ohlcv(symbol, lookback_days)
+    df = provider.fetch_ohlcv(symbol, lookback_days)
+    if scope.env.lower() == "live":
+        if df is None or df.empty:
+            permission.set_block(
+                "MARKET_DATA_BLOCKED",
+                f"OHLC unavailable symbol={symbol} interval={config.interval}",
+            )
+        else:
+            permission.clear_block(
+                "MARKET_DATA_BLOCKED",
+                f"OHLC fresh symbol={symbol} interval={config.interval}",
+            )
+    return df
 
 
 def load_crypto_price_data_interval(
@@ -62,6 +76,7 @@ def load_crypto_price_data_interval(
     """
     scope = get_scope()
     crypto_config = load_crypto_config(scope)
+    permission = get_trade_permission()
 
     provider_name = str(crypto_config.get("MARKET_DATA_PROVIDER", "")).upper()
     if provider_name != "KRAKEN":
@@ -87,7 +102,19 @@ def load_crypto_price_data_interval(
         max_staleness_seconds=max_staleness,
     )
     provider = KrakenMarketDataProvider(scope=scope, config=config)
-    return provider.fetch_ohlcv(symbol, lookback_bars)
+    df = provider.fetch_ohlcv(symbol, lookback_bars)
+    if scope.env.lower() == "live":
+        if df is None or df.empty:
+            permission.set_block(
+                "MARKET_DATA_BLOCKED",
+                f"OHLC unavailable symbol={symbol} interval={interval}",
+            )
+        else:
+            permission.clear_block(
+                "MARKET_DATA_BLOCKED",
+                f"OHLC fresh symbol={symbol} interval={interval}",
+            )
+    return df
 
 
 def load_crypto_price_data_two_timeframes(

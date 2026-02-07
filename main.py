@@ -1,3 +1,4 @@
+from runtime.trade_permission import get_trade_permission
 """
 Main trading screener orchestration.
 Loads data, computes features, scores symbols, and ranks candidates.
@@ -346,6 +347,19 @@ def run_paper_trading(mode='trade', runtime: Optional[PaperTradingRuntime] = Non
                 "safe_mode": reconciliation_result.get("safe_mode"),
             },
         )
+
+    # Runtime trade permission snapshot (visibility)
+    snapshot = get_trade_permission().snapshot()
+    logger.info(
+        "RUNTIME_TRADE_PERMISSION | ENV=%s BROKER=%s TRADING_ALLOWED=%s "
+        "BLOCK_STATE=%s BLOCK_REASON=%s LAST_BLOCK_CHANGE=%s",
+        snapshot.get("ENV"),
+        snapshot.get("BROKER"),
+        snapshot.get("TRADING_ALLOWED"),
+        snapshot.get("BLOCK_STATE"),
+        snapshot.get("BLOCK_REASON"),
+        snapshot.get("LAST_BLOCK_CHANGE"),
+    )
     
     # Check if we can proceed with trading
     if startup_status == "FAILED":

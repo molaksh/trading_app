@@ -27,6 +27,8 @@ from strategy.exit_evaluator import ExitEvaluator
 from strategies.registry import instantiate_strategies_for_scope
 from strategies.base import Strategy
 from crypto.scope_guard import enforce_crypto_scope_guard
+from crypto.universe import CryptoUniverse
+from runtime.trade_permission import get_trade_permission
 
 logger = logging.getLogger(__name__)
 
@@ -171,4 +173,38 @@ def reconcile_runtime(runtime: PaperTradingRuntime) -> dict:
     runtime.executor.safe_mode_enabled = reconciliation_result.get("safe_mode", False)
     runtime.executor.startup_status = reconciliation_result.get("status", "UNKNOWN")
     runtime.executor.external_symbols = reconciler.unreconciled_broker_symbols  # Track unreconciled symbols to block duplicates
+
+    # Runtime reconciliation guard (live only): block trading on mismatch
+    if runtime.scope.env.lower() == "live" and runtime.scope.broker.lower() == "kraken":
+        permission = get_trade_permission()
+        broker_positions = runtime.broker.get_positions()
+        broker_symbols = set()
+        if isinstance(broker_positions, dict):
+            for key, value in broker_positions.items():
+                symbol = None
+                if isinstance(value, dict):
+                    symbol = value.get("symbol") or value.get("pair") or value.get("pairname")
+                if symbol is None:
+                    symbol = key
+                try:
+                    symbol = CryptoUniverse().get_canonical_symbol(symbol)
+                except Exception:
+                    pass
+                broker_symbols.add(symbol)
+        elif isinstance(broker_positions, list):
+            for pos in broker_positions:
+                symbol = getattr(pos, "symbol", None)
+                if symbol:
+                    broker_symbols.add(symbol)
+
+        ledger_symbols = set(getattr(runtime.trade_ledger, "_open_positions", {}).keys())
+        external_only = broker_symbols - ledger_symbols
+        ledger_only = ledger_symbols - broker_symbols
+
+        if external_only or ledger_only:
+            reason = f"external_only={sorted(external_only)} ledger_only={sorted(ledger_only)}"
+            permission.set_block("RECONCILIATION_BLOCKED", reason)
+        else:
+            permission.clear_block("RECONCILIATION_BLOCKED", "broker/ledger match")
+
     return reconciliation_result

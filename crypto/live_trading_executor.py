@@ -25,6 +25,7 @@ from decimal import Decimal
 
 from config.scope import get_scope
 from runtime.environment_guard import get_environment_guard
+from runtime.trade_permission import get_trade_permission
 
 logger = logging.getLogger(__name__)
 
@@ -195,6 +196,7 @@ class LiveOrderExecutor:
         self.scope = get_scope()
         self.guard = get_environment_guard()
         self.audit_logger = LiveOrderAuditLogger(ledger_path)
+        self.trade_permission = get_trade_permission()
     
     def validate_order(
         self,
@@ -306,6 +308,14 @@ class LiveOrderExecutor:
         # Validate environment
         if not self.guard.is_live():
             logger.error("Not in LIVE environment. Aborting.")
+            return False
+
+        if not self.trade_permission.trade_allowed():
+            block = self.trade_permission.get_primary_block()
+            if block is not None:
+                logger.error(
+                    f"TRADE_SKIPPED_{block.state} | reason={block.reason} | ts={block.timestamp}"
+                )
             return False
         
         # Validate order type

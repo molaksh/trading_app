@@ -19,6 +19,7 @@ from typing import Dict, List, Optional, Tuple
 import pandas as pd
 
 from config.crypto.loader import load_crypto_config
+from runtime.trade_permission import get_trade_permission
 from crypto.features import build_execution_features, build_regime_features
 from crypto.pipeline.logging import log_pipeline_stage
 from crypto.regime import CryptoRegimeEngine, RegimeThresholds, MarketRegime
@@ -61,6 +62,7 @@ def run_crypto_pipeline(
     # Stage 1: DATA
     bars_5m: Dict[str, pd.DataFrame] = {}
     bars_4h: Dict[str, pd.DataFrame] = {}
+    permission = get_trade_permission()
 
     for symbol in symbols:
         exec_bars, regime_bars = load_crypto_price_data_two_timeframes(
@@ -76,6 +78,19 @@ def run_crypto_pipeline(
             _validate_timeframe(regime_bars, 240, symbol, regime_interval)
         bars_5m[symbol] = exec_bars
         bars_4h[symbol] = regime_bars
+
+    # Block trading on partial/inconsistent market data (live mode)
+    missing_exec = [s for s in symbols if bars_5m.get(s) is None or bars_5m[s].empty]
+    missing_regime = [s for s in symbols if bars_4h.get(s) is None or bars_4h[s].empty]
+    if missing_exec or missing_regime:
+        reason = f"missing_exec={missing_exec} missing_regime={missing_regime}"
+        if scope.env.lower() == "live":
+            permission.set_block("MARKET_DATA_BLOCKED", reason)
+        logger.warning(f"MARKET_DATA_BLOCKED | {reason}")
+        return pd.DataFrame()
+    else:
+        if scope.env.lower() == "live":
+            permission.clear_block("MARKET_DATA_BLOCKED", "market data complete")
 
     log_pipeline_stage(
         stage="DATA_LOADED",
@@ -101,7 +116,11 @@ def run_crypto_pipeline(
     # Regime features use anchor symbol (BTC preferred)
     anchor_symbol = "BTC" if "BTC" in symbols else symbols[0]
     if bars_4h.get(anchor_symbol) is None or bars_4h[anchor_symbol].empty:
-        raise ValueError(f"Regime candles missing for anchor symbol {anchor_symbol}")
+        reason = f"Regime candles missing for anchor symbol {anchor_symbol}"
+        if scope.env.lower() == "live":
+            permission.set_block("MARKET_DATA_BLOCKED", reason)
+        logger.warning(f"MARKET_DATA_BLOCKED | {reason}")
+        return pd.DataFrame()
     regime_ctx = build_regime_features(anchor_symbol, bars_4h[anchor_symbol], correlation_symbols=bars_4h)
 
     log_pipeline_stage(
