@@ -21,6 +21,7 @@ Environment variables (passed from docker run -e):
 import logging
 import sys
 import argparse
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -38,7 +39,21 @@ from execution.runtime import build_paper_trading_runtime, reconcile_runtime
 from main import run_paper_trading
 from crypto.scheduling import TradingState
 from runtime.environment_guard import get_environment_guard
-from crypto.live_trading_startup import verify_live_trading_startup
+from broker.kraken_client import KrakenClient, KrakenConfig, KrakenAPIError
+from broker.trade_ledger import TradeLedger
+from config.crypto.loader import load_crypto_config
+from core.data.providers.kraken_provider import KrakenMarketDataProvider, KrakenOHLCConfig
+from crypto.universe import CryptoUniverse
+from risk.portfolio_state import PortfolioState
+from risk.risk_manager import RiskManager
+from config.settings import (
+    RISK_PER_TRADE,
+    MAX_RISK_PER_SYMBOL,
+    MAX_PORTFOLIO_HEAT,
+    MAX_TRADES_PER_DAY,
+    MAX_CONSECUTIVE_LOSSES,
+    DAILY_LOSS_LIMIT,
+)
 
 # ============================================================================
 # LOGGING CONFIGURATION
@@ -60,6 +75,200 @@ def _setup_logging():
 
 
 logger = _setup_logging()
+
+
+def _parse_bool(value: str) -> bool:
+    if value is None:
+        return False
+    return value.strip().lower() in {"1", "true", "yes"}
+
+
+def verify_live_startup_or_exit() -> None:
+    """
+    Strict live startup verification. Exits immediately on failure.
+
+    Emits exactly one terminal event:
+      - LIVE_STARTUP_VERIFIED
+      - LIVE_STARTUP_FAILED_<REASON>
+    """
+
+    def fail(reason: str, details: str = "") -> None:
+        message = f"LIVE_STARTUP_FAILED_{reason}"
+        if details:
+            logger.error(f"{message} | {details}")
+        else:
+            logger.error(message)
+        raise SystemExit(1)
+
+    scope = get_scope()
+    env = os.getenv("ENV", "").lower()
+    broker = os.getenv("BROKER", "").lower()
+    mode = os.getenv("MODE", "").lower()
+    market = os.getenv("MARKET", "").lower()
+    paper_trading = _parse_bool(os.getenv("PAPER_TRADING", "false"))
+    live_approved = _parse_bool(os.getenv("LIVE_TRADING_APPROVED", "false"))
+
+    if env != "live" or scope.env.lower() != "live":
+        fail("ENV_NOT_LIVE", f"env={env} scope={scope}")
+    if broker != "kraken" or scope.broker.lower() != "kraken":
+        fail("BROKER_NOT_KRAKEN", f"broker={broker} scope={scope}")
+    if mode != "crypto" or scope.mode.lower() != "crypto":
+        fail("MODE_NOT_CRYPTO", f"mode={mode} scope={scope}")
+    if market not in {"global", "crypto"} or scope.market.lower() != "global":
+        fail("MARKET_NOT_CRYPTO", f"market={market} scope={scope}")
+    if paper_trading:
+        fail("PAPER_TRADING_TRUE", "PAPER_TRADING must be false in live mode")
+    if not live_approved:
+        fail("LIVE_TRADING_NOT_APPROVED", "LIVE_TRADING_APPROVED must be true")
+
+    api_key = os.getenv("KRAKEN_API_KEY", "").strip()
+    api_secret = os.getenv("KRAKEN_API_SECRET", "").strip()
+    if not api_key or not api_secret:
+        fail("MISSING_KRAKEN_KEYS", "KRAKEN_API_KEY/SECRET required")
+
+    margin_allowed = _parse_bool(os.getenv("MARGIN_TRADING_APPROVED", "false"))
+
+    client = None
+    balances = {}
+    positions_raw = {}
+    try:
+        client = KrakenClient(
+            KrakenConfig(
+                api_key=api_key,
+                api_secret=api_secret,
+                timeout_sec=10,
+                max_retries=0,
+                backoff_factor=0.0,
+            )
+        )
+
+        status = client.request_public("SystemStatus", {})
+        if status.get("status") != "online":
+            fail("KRAKEN_OFFLINE", f"status={status.get('status')}")
+
+        try:
+            balances = client.request_private("Balance", {})
+        except KrakenAPIError as e:
+            fail("KRAKEN_AUTH_FAILED", str(e))
+
+        if not isinstance(balances, dict):
+            fail("KRAKEN_AUTH_FAILED", "balance response invalid")
+
+        try:
+            client.request_private("OpenOrders", {})
+        except KrakenAPIError as e:
+            fail("KRAKEN_PERMISSIONS", str(e))
+
+        try:
+            client.request_private("WithdrawInfo", {"asset": "ZUSD", "amount": "1", "key": "invalid"})
+            fail("WITHDRAWAL_PERMISSION_ENABLED", "withdraw permission appears enabled")
+        except KrakenAPIError as e:
+            if "Permission denied" not in str(e):
+                fail("WITHDRAWAL_PERMISSION_UNKNOWN", str(e))
+
+        try:
+            positions_raw = client.request_private("OpenPositions", {})
+        except KrakenAPIError as e:
+            fail("KRAKEN_POSITIONS", str(e))
+    finally:
+        if client is not None:
+            client.close()
+
+    total_equity = 0.0
+    for asset, value in balances.items():
+        try:
+            amount = float(value)
+        except Exception:
+            fail("BALANCE_PARSE", f"asset={asset} value={value}")
+        if amount < 0:
+            fail("BALANCE_NEGATIVE", f"asset={asset} value={amount}")
+        total_equity += amount
+
+    if total_equity < 0:
+        fail("BALANCE_NEGATIVE", f"total_equity={total_equity}")
+
+    crypto_config = load_crypto_config(scope)
+    enable_cache = bool(crypto_config.get("ENABLE_OHLC_CACHE", True))
+    try:
+        provider_5m = KrakenMarketDataProvider(
+            scope=scope,
+            config=KrakenOHLCConfig(
+                interval="5m",
+                enable_ws=False,
+                cache_enabled=enable_cache,
+                max_staleness_seconds=0,
+            ),
+        )
+        provider_4h = KrakenMarketDataProvider(
+            scope=scope,
+            config=KrakenOHLCConfig(
+                interval="4h",
+                enable_ws=False,
+                cache_enabled=enable_cache,
+                max_staleness_seconds=0,
+            ),
+        )
+        bars_5m = provider_5m.fetch_ohlcv("BTC", 2)
+        bars_4h = provider_4h.fetch_ohlcv("BTC", 2)
+        if bars_5m is None or bars_5m.empty or bars_4h is None or bars_4h.empty:
+            fail("MARKET_DATA_BLOCKED", "fresh OHLC not available")
+    except RuntimeError as e:
+        fail("MARKET_DATA_BLOCKED", str(e))
+
+    universe = CryptoUniverse()
+    broker_positions = set()
+    positions_payload = {}
+    if isinstance(positions_raw, dict):
+        if "open" in positions_raw and isinstance(positions_raw["open"], dict):
+            positions_payload = positions_raw["open"]
+        else:
+            positions_payload = positions_raw
+
+    for _, pos in positions_payload.items():
+        if not isinstance(pos, dict):
+            continue
+        pair = pos.get("pair") or pos.get("symbol") or pos.get("pairname")
+        if not pair:
+            continue
+        try:
+            broker_symbol = universe.get_canonical_symbol(pair)
+        except Exception:
+            broker_symbol = pair
+        broker_positions.add(broker_symbol)
+
+        leverage = pos.get("leverage") or pos.get("margin") or ""
+        if not margin_allowed and str(leverage).strip() not in {"", "0", "0.0", "1", "1.0"}:
+            fail("MARGIN_NOT_APPROVED", f"symbol={broker_symbol} leverage={leverage}")
+
+    ledger = TradeLedger()
+    ledger_positions = set(getattr(ledger, "_open_positions", {}).keys())
+    external_only = broker_positions - ledger_positions
+    ledger_only = ledger_positions - broker_positions
+    if external_only or ledger_only:
+        details = f"external_only={sorted(external_only)} ledger_only={sorted(ledger_only)}"
+        logger.error(f"RECONCILIATION_BLOCKED | {details}")
+        fail("RECONCILIATION_BLOCKED", details)
+
+    max_positions = int(crypto_config.get("STRATEGY_MAX_POSITION_COUNT", 0))
+    if max_positions <= 0:
+        fail("RISK_MANAGER_INVALID", f"STRATEGY_MAX_POSITION_COUNT={max_positions}")
+
+    if any(
+        value <= 0
+        for value in (
+            RISK_PER_TRADE,
+            MAX_RISK_PER_SYMBOL,
+            MAX_PORTFOLIO_HEAT,
+            MAX_TRADES_PER_DAY,
+            MAX_CONSECUTIVE_LOSSES,
+            DAILY_LOSS_LIMIT,
+        )
+    ):
+        fail("RISK_MANAGER_INVALID", "risk settings must be positive")
+
+    _ = RiskManager(PortfolioState(total_equity))
+
+    logger.info("LIVE_STARTUP_VERIFIED")
 
 
 def _task_trading_tick(runtime=None):
@@ -237,13 +446,7 @@ def run_daemon():
     # GATE 0: LIVE environment startup verification (must pass before anything)
     guard = get_environment_guard()
     if guard.is_live():
-        logger.info("")
-        logger.info("LIVE ENVIRONMENT DETECTED - Running mandatory startup verification...")
-        try:
-            verify_live_trading_startup()
-        except SystemExit:
-            logger.error("LIVE startup verification FAILED - halting for safety")
-            raise
+        verify_live_startup_or_exit()
     else:
         logger.info(f"Paper environment ({guard.environment.value}) - startup verification skipped")
     
@@ -258,8 +461,8 @@ def run_daemon():
     logger.info("Building persistent trading runtime...")
     runtime = build_paper_trading_runtime()
     
-    # Optional startup reconciliation
-    if CRYPTO_RUN_STARTUP_RECONCILIATION:
+    # Optional startup reconciliation (never auto-run in live)
+    if not guard.is_live() and CRYPTO_RUN_STARTUP_RECONCILIATION:
         logger.info("Running startup reconciliation...")
         reconcile_runtime(runtime)
     

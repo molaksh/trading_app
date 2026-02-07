@@ -21,6 +21,74 @@
 
 ## �🔔 Latest Updates (Newest First)
 
+### 2026-02-06 — CRITICAL: Live Kraken Crypto Startup Safety Gate (Fail-Closed)
+
+**Status**: ✅ MERGED
+**Severity**: CRITICAL — Live trading safety gate
+
+#### Summary
+
+Added a strict two-layer startup verification for `live_kraken_crypto_global`:
+
+1. **Shell-level preflight** in `run_live_kraken_crypto.sh`
+2. **Python-level gate** in `crypto_main.py` (before scheduler init)
+
+If ANY check fails, the container exits immediately. No retries. No fallbacks.
+
+#### Shell-Level Checks (run_live_kraken_crypto.sh)
+
+- ENV = live
+- BROKER = kraken
+- MODE = crypto
+- MARKET = crypto/global
+- PAPER_TRADING = false
+- LIVE_TRADING_APPROVED = true
+- Downtime window format validated (HH:MM, start != end)
+- Kraken API key + secret present
+
+Failure behavior: prints ERROR banner and exits non-zero **before** container start.
+
+#### Python-Level Checks (verify_live_startup_or_exit)
+
+**A. Environment invariants**: ENV/BROKER/MODE/MARKET/PAPER_TRADING/LIVE_TRADING_APPROVED
+
+**B. Kraken API + permissions**:
+- Authenticated call succeeds
+- OpenOrders permission works
+- Withdrawal permission must be disabled (verified by `WithdrawInfo` permission-denied)
+- Margin positions blocked unless explicitly approved
+
+**C. Balance sanity**:
+- Balances readable
+- No negative balances
+- Total equity >= 0
+
+**D. OHLC freshness**:
+- Live startup fetches 5m + 4h OHLC
+- Zero staleness tolerance
+- If fresh OHLC unavailable ⇒ `MARKET_DATA_BLOCKED` and exit
+
+**E. External reconciliation**:
+- Kraken open positions must match local ledger
+- Any mismatch ⇒ `RECONCILIATION_BLOCKED` and exit
+
+**F. RiskManager init**:
+- Valid risk settings
+- RiskManager initializes successfully
+
+#### Logging Requirement
+
+Startup emits exactly one terminal event:
+- `LIVE_STARTUP_VERIFIED`
+- or `LIVE_STARTUP_FAILED_<REASON>`
+
+#### Files Changed
+
+- `run_live_kraken_crypto.sh` (strict shell preflight)
+- `crypto_main.py` (verify_live_startup_or_exit)
+
+---
+
 ### 2026-02-06 — CRITICAL FIX: Kraken OHLC Staleness Guard (Live & Paper)
 
 **Status**: ✅ MERGED

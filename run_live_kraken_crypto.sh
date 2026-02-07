@@ -60,6 +60,76 @@ if [ -z "$KRAKEN_API_SECRET" ] && [ -n "$KRKN_LIVE_API_SECRET_KEY" ]; then
     KRAKEN_API_SECRET="$KRKN_LIVE_API_SECRET_KEY"
 fi
 
+# Pre-flight environment values (fail-closed)
+ENV_VALUE="live"
+BROKER_VALUE="kraken"
+MODE_VALUE="crypto"
+MARKET_VALUE="global"
+PAPER_TRADING="${PAPER_TRADING:-false}"
+CRYPTO_DOWNTIME_START_UTC="${CRYPTO_DOWNTIME_START_UTC:-08:00}"
+CRYPTO_DOWNTIME_END_UTC="${CRYPTO_DOWNTIME_END_UTC:-10:00}"
+
+fail_startup() {
+    echo "=========================================="
+    echo "ERROR: LIVE STARTUP PRE-FLIGHT FAILED"
+    echo "=========================================="
+    echo "$1"
+    echo "=========================================="
+    exit 1
+}
+
+to_lower() {
+    echo "$1" | tr '[:upper:]' '[:lower:]'
+}
+
+validate_time_hhmm() {
+    local value="$1"
+    if [[ ! "$value" =~ ^([01][0-9]|2[0-3]):[0-5][0-9]$ ]]; then
+        return 1
+    fi
+    return 0
+}
+
+echo "Pre-flight checks (shell-level)..."
+
+if [ -n "$ENV" ] && [ "$(to_lower "$ENV")" != "live" ]; then
+    fail_startup "ENV must be live (got: $ENV)"
+fi
+
+if [ -n "$BROKER" ] && [ "$(to_lower "$BROKER")" != "kraken" ]; then
+    fail_startup "BROKER must be kraken (got: $BROKER)"
+fi
+
+if [ -n "$MODE" ] && [ "$(to_lower "$MODE")" != "crypto" ]; then
+    fail_startup "MODE must be crypto (got: $MODE)"
+fi
+
+if [ -n "$MARKET" ] && [ "$(to_lower "$MARKET")" != "global" ] && [ "$(to_lower "$MARKET")" != "crypto" ]; then
+    fail_startup "MARKET must be crypto/global (got: $MARKET)"
+fi
+
+case "$(to_lower "$PAPER_TRADING")" in
+    true|yes|1)
+        fail_startup "PAPER_TRADING must be false for live trading"
+        ;;
+esac
+
+if [ "$(to_lower "$LIVE_TRADING_APPROVED")" != "yes" ] && [ "$(to_lower "$LIVE_TRADING_APPROVED")" != "true" ]; then
+    fail_startup "LIVE_TRADING_APPROVED must be true (got: $LIVE_TRADING_APPROVED)"
+fi
+
+if ! validate_time_hhmm "$CRYPTO_DOWNTIME_START_UTC"; then
+    fail_startup "CRYPTO_DOWNTIME_START_UTC must be HH:MM (got: $CRYPTO_DOWNTIME_START_UTC)"
+fi
+
+if ! validate_time_hhmm "$CRYPTO_DOWNTIME_END_UTC"; then
+    fail_startup "CRYPTO_DOWNTIME_END_UTC must be HH:MM (got: $CRYPTO_DOWNTIME_END_UTC)"
+fi
+
+if [ "$CRYPTO_DOWNTIME_START_UTC" = "$CRYPTO_DOWNTIME_END_UTC" ]; then
+    fail_startup "Downtime window start/end cannot be equal"
+fi
+
 # MANDATORY: Check for explicit LIVE_TRADING_APPROVED flag
 if [ "$LIVE_TRADING_APPROVED" != "yes" ]; then
     echo "=========================================="
@@ -142,12 +212,13 @@ docker run -d \
   -e MARKET_TIMEZONE=America/New_York \
   -e TZ=America/New_York \
   -e CASH_ONLY_TRADING=true \
+    -e PAPER_TRADING="$PAPER_TRADING" \
   -e KRAKEN_API_KEY="$KRAKEN_API_KEY" \
   -e KRAKEN_API_SECRET="$KRAKEN_API_SECRET" \
   -e LIVE_TRADING_APPROVED="$LIVE_TRADING_APPROVED" \
   -e MARGIN_TRADING_APPROVED="${MARGIN_TRADING_APPROVED:-no}" \
-  -e CRYPTO_DOWNTIME_START_UTC="${CRYPTO_DOWNTIME_START_UTC:-08:00}" \
-  -e CRYPTO_DOWNTIME_END_UTC="${CRYPTO_DOWNTIME_END_UTC:-10:00}" \
+    -e CRYPTO_DOWNTIME_START_UTC="$CRYPTO_DOWNTIME_START_UTC" \
+    -e CRYPTO_DOWNTIME_END_UTC="$CRYPTO_DOWNTIME_END_UTC" \
   -e CRYPTO_SCHEDULER_TICK_SECONDS="${CRYPTO_SCHEDULER_TICK_SECONDS:-60}" \
   -e PYTHONUNBUFFERED=1 \
   live-kraken-crypto-global \
