@@ -37,6 +37,8 @@ from execution.crypto_scheduler import CryptoScheduler, CryptoSchedulerTask
 from execution.runtime import build_paper_trading_runtime, reconcile_runtime
 from main import run_paper_trading
 from crypto.scheduling import TradingState
+from runtime.environment_guard import get_environment_guard
+from crypto.live_trading_startup import verify_live_trading_startup
 
 # ============================================================================
 # LOGGING CONFIGURATION
@@ -212,6 +214,16 @@ def run_daemon():
     Start crypto scheduler daemon (24/7 continuous).
     
     This is the main entry point for production crypto trading.
+    
+    For LIVE environment, performs 8 mandatory startup verification checks:
+    1. Environment validation (LIVE flag, explicit approval)
+    2. API key safety
+    3. Account safety
+    4. Position reconciliation
+    5. Strategy whitelist
+    6. Risk manager enforcement
+    7. ML read-only mode
+    8. Dry-run verification
     """
     logger.info("=" * 80)
     logger.info("CRYPTO DAEMON STARTUP")
@@ -221,6 +233,19 @@ def run_daemon():
     logger.info(f"Tick interval: {CRYPTO_SCHEDULER_TICK_SECONDS}s")
     logger.info(f"Trading interval: {CRYPTO_TRADING_TICK_INTERVAL_MINUTES} min")
     logger.info("=" * 80)
+    
+    # GATE 0: LIVE environment startup verification (must pass before anything)
+    guard = get_environment_guard()
+    if guard.is_live():
+        logger.info("")
+        logger.info("LIVE ENVIRONMENT DETECTED - Running mandatory startup verification...")
+        try:
+            verify_live_trading_startup()
+        except SystemExit:
+            logger.error("LIVE startup verification FAILED - halting for safety")
+            raise
+    else:
+        logger.info(f"Paper environment ({guard.environment.value}) - startup verification skipped")
     
     # Initialize scheduler
     scheduler = CryptoScheduler(

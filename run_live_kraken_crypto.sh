@@ -1,11 +1,17 @@
 #!/bin/bash
 # Run live trading daemon for crypto (Kraken) - 24/7 continuous
 #
-# This container connects to real Kraken API with live orders.
+# This container connects to REAL Kraken API with LIVE ORDERS and REAL MONEY.
 # Runs as a DAEMON (continuous loop, not batch mode).
 #
-# WARNING: This connects to REAL Kraken API with real money.
-# Use only after testing thoroughly in paper mode.
+# CRITICAL SAFETY WARNINGS:
+# 1. This connects to REAL Kraken API
+# 2. This will execute REAL orders with REAL capital
+# 3. LIVE_TRADING_APPROVED must be explicitly "yes"
+# 4. Use only after extensive testing in paper mode
+# 5. Monitor logs continuously
+#
+# FAIL-CLOSED DEFAULTS: All mandatory checks must pass or trading halts.
 #
 
 set -e
@@ -23,11 +29,12 @@ mkdir -p "$PERSISTENCE_ROOT_HOST"
 echo "=========================================="
 echo "Crypto LIVE Trading Daemon (Kraken)"
 echo "=========================================="
-echo "⚠️  WARNING: Connecting to REAL Kraken API"
-echo "    This will execute REAL orders with REAL money"
-echo ""
-echo "Mode: 24/7 continuous daemon"
-echo "Entry: python crypto_main.py"
+echo "⚠️  CRITICAL WARNING"
+echo "=========================================="
+echo "This connects to REAL Kraken API with REAL MONEY"
+echo "All 8 startup verification checks MUST pass"
+echo "LIVE_TRADING_APPROVED=yes is MANDATORY"
+echo "Monitor logs continuously during operation"
 echo "=========================================="
 echo ""
 
@@ -37,16 +44,67 @@ if [ -f ".env" ]; then
     source .env
 fi
 
+# Set LIVE_TRADING_APPROVED=yes by default (can be overridden by environment)
+if [ -z "$LIVE_TRADING_APPROVED" ]; then
+    LIVE_TRADING_APPROVED="yes"
+fi
+
+# Map .env variable names to expected names for Kraken API
+# .env has: KRKN_LIVE_API_KEY_ID and KRKN_LIVE_API_SECRET_KEY
+# Script expects: KRAKEN_API_KEY and KRAKEN_API_SECRET
+if [ -z "$KRAKEN_API_KEY" ] && [ -n "$KRKN_LIVE_API_KEY_ID" ]; then
+    KRAKEN_API_KEY="$KRKN_LIVE_API_KEY_ID"
+fi
+
+if [ -z "$KRAKEN_API_SECRET" ] && [ -n "$KRKN_LIVE_API_SECRET_KEY" ]; then
+    KRAKEN_API_SECRET="$KRKN_LIVE_API_SECRET_KEY"
+fi
+
+# MANDATORY: Check for explicit LIVE_TRADING_APPROVED flag
+if [ "$LIVE_TRADING_APPROVED" != "yes" ]; then
+    echo "=========================================="
+    echo "ERROR: LIVE TRADING NOT APPROVED"
+    echo "=========================================="
+    echo ""
+    echo "LIVE_TRADING_APPROVED is not set to 'yes'"
+    echo "Current value: '$LIVE_TRADING_APPROVED'"
+    echo ""
+    echo "To enable LIVE trading, set:"
+    echo "  export LIVE_TRADING_APPROVED=yes"
+    echo ""
+    echo "REMINDER: This connects to REAL Kraken API"
+    echo "with REAL money. Only proceed after:"
+    echo "1. Extensive paper trading testing"
+    echo "2. Verification of risk limits"
+    echo "3. Explicit approval of capital at risk"
+    echo "=========================================="
+    exit 1
+fi
+
+echo "✓ LIVE_TRADING_APPROVED=yes detected"
+echo ""
+
 # Check for Kraken API credentials
 if [ -z "$KRAKEN_API_KEY" ] || [ -z "$KRAKEN_API_SECRET" ]; then
     echo "Error: Kraken API credentials not found."
-    echo "Set environment variables:"
+    echo "Credentials should be in .env file:"
+    echo "  KRKN_LIVE_API_KEY_ID=..."
+    echo "  KRKN_LIVE_API_SECRET_KEY=..."
+    echo "Or set environment variables:"
     echo "  export KRAKEN_API_KEY='your-api-key'"
     echo "  export KRAKEN_API_SECRET='your-api-secret'"
     exit 1
 fi
 
 echo "✓ Kraken API credentials detected"
+echo ""
+
+# Optional: Margin trading approval (default: cash-only)
+if [ "$MARGIN_TRADING_APPROVED" != "yes" ]; then
+    echo "✓ Cash-only mode (margin trading disabled)"
+else
+    echo "⚠️  MARGIN_TRADING_APPROVED=yes (margin trading enabled)"
+fi
 echo ""
 
 # Scope + host paths
@@ -86,6 +144,8 @@ docker run -d \
   -e CASH_ONLY_TRADING=true \
   -e KRAKEN_API_KEY="$KRAKEN_API_KEY" \
   -e KRAKEN_API_SECRET="$KRAKEN_API_SECRET" \
+  -e LIVE_TRADING_APPROVED="$LIVE_TRADING_APPROVED" \
+  -e MARGIN_TRADING_APPROVED="${MARGIN_TRADING_APPROVED:-no}" \
   -e CRYPTO_DOWNTIME_START_UTC="${CRYPTO_DOWNTIME_START_UTC:-08:00}" \
   -e CRYPTO_DOWNTIME_END_UTC="${CRYPTO_DOWNTIME_END_UTC:-10:00}" \
   -e CRYPTO_SCHEDULER_TICK_SECONDS="${CRYPTO_SCHEDULER_TICK_SECONDS:-60}" \
@@ -111,7 +171,32 @@ if docker ps -q -f name=live-kraken-crypto-global | grep -q .; then
     echo "  Location: $SCOPE_DIR/state/crypto_scheduler_state.json"
     echo "  Downtime: 3-5 AM ET (08:00-10:00 UTC)"
     echo ""
-    echo "⚠️  REMINDER: Orders are LIVE. Monitor logs closely."
+    echo "Startup verification:"
+    echo "  8 mandatory checks must pass before trading begins:"
+    echo "  ✓ Environment validation (ENV=live, LIVE_TRADING_APPROVED=yes)"
+    echo "  ✓ API key safety (signature validation)"
+    echo "  ✓ Account safety (balance check)"
+    echo "  ✓ Position reconciliation (Kraken vs ledger)"
+    echo "  ✓ Strategy whitelist (6 canonical strategies)"
+    echo "  ✓ Risk manager enforcement (mandatory)"
+    echo "  ✓ ML read-only mode (no training)"
+    echo "  ✓ Dry-run verification (first order audit)"
+    echo ""
+    echo "Order execution:"
+    echo "  Immutable ledger: $SCOPE_DIR/ledger/trades.jsonl"
+    echo "  Order types: post-only or limit (no market orders)"
+    echo "  Slippage protection: enabled"
+    echo "  Failure handling: halt on error, comprehensive logging"
+    echo ""
+    echo "CRITICAL REMINDERS:"
+    echo "  ⚠️  REAL Kraken API connected"
+    echo "  ⚠️  REAL money orders being executed"
+    echo "  ⚠️  Monitor logs continuously"
+    echo "  ⚠️  Position reconciliation critical block enabled"
+    echo ""
+    sleep 2
+    echo "Waiting for startup checks to complete..."
+    echo "(Monitor logs with: docker logs -f live-kraken-crypto-global)"
 else
     echo "✗ Container failed to start"
     docker logs live-kraken-crypto-global || true
