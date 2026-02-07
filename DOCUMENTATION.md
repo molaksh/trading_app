@@ -21,6 +21,54 @@
 
 ## �🔔 Latest Updates (Newest First)
 
+### 2026-02-06 — CRITICAL FIX: Kraken OHLC Staleness Guard (Live & Paper)
+
+**Status**: ✅ MERGED
+**Severity**: CRITICAL — Data correctness (stale market data)
+
+#### Root Cause
+
+Kraken OHLC cache was used whenever a cache file existed and had “enough rows.”
+There was **no staleness validation**, so both paper and live could trade on outdated candles.
+
+#### Fix Summary
+
+1. **Explicit staleness check** using last candle timestamp vs current UTC time.
+2. **Live mode is strict**: zero tolerance beyond the current candle.
+3. **Paper mode allows tolerance** (configurable, default = interval + 2 candles).
+4. **Truthful logging** for every OHLC decision:
+    - `OHLC_CACHE_HIT_FRESH`
+    - `OHLC_CACHE_STALE_REFRESH`
+    - `OHLC_API_FETCH`
+5. **Fail-safe for live**: if fresh OHLC cannot be obtained, trading is blocked for that tick (`MARKET_DATA_BLOCKED`).
+6. **Atomic cache writes** to prevent partial/corrupt cache files.
+
+#### New Config Flags
+
+- `ENABLE_OHLC_CACHE` (default: true)
+- `MAX_OHLC_STALENESS_SECONDS`
+   - **Live**: `0` (no extra tolerance beyond current candle)
+   - **Paper**: `"auto"` (interval + 2 candles)
+
+#### Files Changed
+
+- `core/data/providers/kraken_provider.py`
+   - Added staleness validation, strict live blocking, required OHLC logs
+   - Added atomic cache writes
+- `data/crypto_price_loader.py`
+   - Plumbed `ENABLE_OHLC_CACHE` and `MAX_OHLC_STALENESS_SECONDS`
+- `config/crypto/live.kraken.crypto.global.yaml`
+   - `ENABLE_OHLC_CACHE=true`, `MAX_OHLC_STALENESS_SECONDS=0`
+- `config/crypto/paper.kraken.crypto.global.yaml`
+   - `ENABLE_OHLC_CACHE=true`, `MAX_OHLC_STALENESS_SECONDS="auto"`
+
+#### Migration Notes
+
+Live trading now **refuses to proceed** if OHLC data is stale or fetch fails.
+Paper trading remains permissive but no longer silently uses stale caches.
+
+---
+
 ### 2026-02-05 — CRITICAL FIX: ML Orchestration Gating & Truthful Logging
 
 **Status**: ✅ MERGED (Commit `23f7dc7`)  

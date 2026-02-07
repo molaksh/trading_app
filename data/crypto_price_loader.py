@@ -32,10 +32,15 @@ def load_crypto_price_data(symbol: str, lookback_days: int) -> Optional[pd.DataF
             f"CRYPTO_SCOPE_SYMBOL_NOT_ALLOWED: symbol={symbol} allowed={canonical}"
         )
 
+    enable_cache = bool(crypto_config.get("ENABLE_OHLC_CACHE", True))
+    max_staleness = crypto_config.get("MAX_OHLC_STALENESS_SECONDS", None)
+    if isinstance(max_staleness, str) and max_staleness.strip().lower() == "auto":
+        max_staleness = None
     config = KrakenOHLCConfig(
         interval=str(crypto_config.get("KRAKEN_OHLC_INTERVAL", "1d")),
         enable_ws=bool(crypto_config.get("ENABLE_WS_MARKETDATA", False)),
-        cache_enabled=True,
+        cache_enabled=enable_cache,
+        max_staleness_seconds=max_staleness,
     )
 
     provider = KrakenMarketDataProvider(scope=scope, config=config)
@@ -71,10 +76,15 @@ def load_crypto_price_data_interval(
             f"CRYPTO_SCOPE_SYMBOL_NOT_ALLOWED: symbol={symbol} allowed={canonical}"
         )
 
+    enable_cache = bool(crypto_config.get("ENABLE_OHLC_CACHE", True))
+    max_staleness = crypto_config.get("MAX_OHLC_STALENESS_SECONDS", None)
+    if isinstance(max_staleness, str) and max_staleness.strip().lower() == "auto":
+        max_staleness = None
     config = KrakenOHLCConfig(
         interval=str(interval),
         enable_ws=bool(crypto_config.get("ENABLE_WS_MARKETDATA", False)),
-        cache_enabled=True,
+        cache_enabled=enable_cache,
+        max_staleness_seconds=max_staleness,
     )
     provider = KrakenMarketDataProvider(scope=scope, config=config)
     return provider.fetch_ohlcv(symbol, lookback_bars)

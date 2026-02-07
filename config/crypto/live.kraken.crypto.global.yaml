@@ -13,6 +13,9 @@ ENVIRONMENT = "live"
 MARKET_DATA_PROVIDER = "KRAKEN"
 KRAKEN_OHLC_INTERVAL = "1d"
 ENABLE_WS_MARKETDATA = false
+ENABLE_OHLC_CACHE = true
+# Live requires strict freshness. 0 means no extra tolerance beyond current candle.
+MAX_OHLC_STALENESS_SECONDS = 0
 
 # Universe symbols (canonical format)
 CRYPTO_UNIVERSE = ["BTC", "ETH", "SOL"]

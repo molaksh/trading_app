@@ -13,6 +13,9 @@ ENVIRONMENT = "paper"
 MARKET_DATA_PROVIDER = "KRAKEN"
 KRAKEN_OHLC_INTERVAL = "1d"
 ENABLE_WS_MARKETDATA = false
+ENABLE_OHLC_CACHE = true
+# Paper allows staleness tolerance (auto = interval + 2 candles)
+MAX_OHLC_STALENESS_SECONDS = "auto"
 
 # Universe symbols (canonical format)
 CRYPTO_UNIVERSE = ["BTC", "ETH", "SOL"]
