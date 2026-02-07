@@ -40,6 +40,8 @@ class TradePermission:
             return
         self._blocks[state] = BlockState(state=state, reason=reason, timestamp=now)
         logger.error(f"TRADING_BLOCKED_{state} | reason={reason} | ts={now}")
+        if _BLOCK_HOOK is not None:
+            _BLOCK_HOOK(state, reason, "block")
 
     def clear_block(self, state: str, reason: str) -> None:
         if state not in self._blocks:
@@ -47,6 +49,8 @@ class TradePermission:
         now = datetime.now(timezone.utc).isoformat()
         del self._blocks[state]
         logger.error(f"TRADING_UNBLOCKED_{state} | reason={reason} | ts={now}")
+        if _BLOCK_HOOK is not None:
+            _BLOCK_HOOK(state, reason, "unblock")
 
     def trade_allowed(self) -> bool:
         return len(self._blocks) == 0
@@ -75,6 +79,12 @@ class TradePermission:
 
 
 _TRADE_PERMISSION: Optional[TradePermission] = None
+_BLOCK_HOOK = None
+
+
+def set_trade_permission_hook(hook) -> None:
+    global _BLOCK_HOOK
+    _BLOCK_HOOK = hook
 
 
 def get_trade_permission() -> TradePermission:

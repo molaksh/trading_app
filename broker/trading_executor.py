@@ -26,6 +26,7 @@ from risk.risk_manager import RiskManager
 from risk.portfolio_state import PortfolioState
 from monitoring.system_guard import SystemGuard
 from runtime.trade_permission import get_trade_permission
+from runtime.observability import get_observability
 from strategy.exit_evaluator import ExitEvaluator, ExitSignal
 
 logger = logging.getLogger(__name__)
@@ -313,6 +314,7 @@ class TradingExecutor:
                 logger.error(
                     f"TRADE_SKIPPED_{block.state} | reason={block.reason} | ts={block.timestamp}"
                 )
+                get_observability().record_trade_skipped(block.state)
             return False, None
         
         # SAFE MODE CHECK: Block new entries if safe mode is active
@@ -485,6 +487,7 @@ class TradingExecutor:
                 )
             
             logger.info(f"✓ Order submitted: {order_result.order_id}")
+            get_observability().record_trade_taken()
             return True, order_result.order_id
         
         except Exception as e:

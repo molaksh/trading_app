@@ -21,6 +21,94 @@
 
 ## �🔔 Latest Updates (Newest First)
 
+### 2026-02-06 — Operational Observability (Live Crypto)
+
+**Status**: ✅ MERGED
+**Severity**: HIGH — Live auditability and explainability
+
+#### Purpose
+
+Adds two explicit observability artifacts:
+
+1. **Live status snapshot** (human‑readable)
+2. **Daily immutable summary** (machine‑readable JSONL)
+
+#### Live Status Snapshot
+
+Emitted on:
+- Startup success
+- Block entry/clearance
+- Every N minutes (configurable)
+
+Format:
+
+```
+================ LIVE STATUS =================
+ENV: LIVE
+BROKER: KRAKEN
+MARKET: GLOBAL
+TRADING_ALLOWED: YES
+ACTIVE_BLOCK_STATE: NONE
+BLOCK_REASON: NONE
+MARKET_DATA_STATUS: FRESH
+RECONCILIATION_STATUS: OK
+OPEN_POSITIONS: 0
+DAILY_PNL: 0.00
+LAST_TRADE_TIMESTAMP: NONE
+UPTIME_SECONDS: 120
+=============================================
+```
+
+#### Daily Immutable Summary (JSONL)
+
+Written **once per UTC day** to an append‑only JSONL file.
+No overwrites. Duplicate writes are rejected with error logs.
+
+Example record:
+
+```json
+{
+   "date": "2026-02-06",
+   "env": "live",
+   "broker": "kraken",
+   "uptime_seconds": 86400,
+   "trades_taken": 2,
+   "trades_skipped": 5,
+   "skip_reasons": {"MARKET_DATA_BLOCKED": 3, "RISK_LIMIT_BLOCKED": 2},
+   "realized_pnl": 25.50,
+   "unrealized_pnl": -3.10,
+   "max_drawdown": 0.04,
+   "blocks_encountered": ["MARKET_DATA_BLOCKED", "RISK_LIMIT_BLOCKED"],
+   "data_issues": 3,
+   "reconciliation_issues": 0,
+   "risk_blocks": 2,
+   "manual_halt_used": false
+}
+```
+
+#### Configuration
+
+- `STATUS_SNAPSHOT_INTERVAL_MINUTES` (default: 15)
+- `DAILY_SUMMARY_OUTPUT_PATH` (default: <scope>/logs/daily_summary.jsonl)
+
+#### Operational Guidance
+
+- Snapshot is for **human inspection** in logs
+- Summary is for **audit, compliance, and ML analysis**
+- Startup failure exits the container; runtime blocks keep it alive but refuse trades
+
+#### Files Changed
+
+- `runtime/observability.py` (new)
+- `runtime/trade_permission.py`
+- `crypto_main.py`
+- `execution/crypto_scheduler.py`
+- `data/crypto_price_loader.py`
+- `core/data/providers/kraken_provider.py`
+- `broker/trading_executor.py`
+
+---
+
 ### 2026-02-06 — Runtime NO-TRADE States (Live Kraken Crypto)
 
 **Status**: ✅ MERGED

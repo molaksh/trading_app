@@ -24,6 +24,7 @@ from typing import Optional, Dict, Callable, Tuple
 from config.scope import get_scope
 from config.scope_paths import get_scope_path
 from crypto.scheduling import DowntimeScheduler, TradingState
+from runtime.observability import get_observability
 from crypto.scheduling.state import CryptoSchedulerState
 
 logger = logging.getLogger(__name__)
@@ -182,6 +183,9 @@ class CryptoScheduler:
                 f"Tick {loop_count} | Time: {now.strftime('%Y-%m-%d %H:%M:%S')} UTC | "
                 f"State: {state_label}"
             )
+
+            # Daily summary check (once per UTC day)
+            get_observability().check_daily_summary()
             
             # Execute due tasks
             executed_count = 0
@@ -213,6 +217,7 @@ class CryptoScheduler:
         # Graceful shutdown
         logger.info("Shutdown requested. Persisting final state...")
         self.state._persist()
+        get_observability().emit_daily_summary(force=True)
         logger.info("Scheduler stopped gracefully")
         sys.exit(0)
     

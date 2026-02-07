@@ -33,12 +33,14 @@ from config.crypto_scheduler_settings import (
     CRYPTO_SCHEDULER_TICK_SECONDS,
     CRYPTO_TRADING_TICK_INTERVAL_MINUTES,
     CRYPTO_RUN_STARTUP_RECONCILIATION,
+    STATUS_SNAPSHOT_INTERVAL_MINUTES,
 )
 from execution.crypto_scheduler import CryptoScheduler, CryptoSchedulerTask
 from execution.runtime import build_paper_trading_runtime, reconcile_runtime
 from main import run_paper_trading
 from crypto.scheduling import TradingState
 from runtime.environment_guard import get_environment_guard
+from runtime.observability import get_observability
 from broker.kraken_client import KrakenClient, KrakenConfig, KrakenAPIError
 from broker.trade_ledger import TradeLedger
 from config.crypto.loader import load_crypto_config
@@ -460,11 +462,16 @@ def run_daemon():
     # Build persistent runtime (shared across ticks)
     logger.info("Building persistent trading runtime...")
     runtime = build_paper_trading_runtime()
+    observability = get_observability()
+    observability.attach_runtime(runtime)
     
     # Optional startup reconciliation (never auto-run in live)
     if not guard.is_live() and CRYPTO_RUN_STARTUP_RECONCILIATION:
         logger.info("Running startup reconciliation...")
         reconcile_runtime(runtime)
+
+    if guard.is_live():
+        observability.emit_live_status_snapshot(trigger="startup")
     
     # Register tasks
     # Each task closure captures runtime and updates it after execution
@@ -483,6 +490,9 @@ def run_daemon():
     def make_reconciliation():
         nonlocal runtime
         runtime = _task_reconciliation(runtime)
+
+    def make_status_snapshot():
+        observability.emit_live_status_snapshot(trigger="interval")
     
     scheduler.register_task(CryptoSchedulerTask(
         name="trading_tick",
@@ -509,6 +519,13 @@ def run_daemon():
         name="reconciliation",
         func=make_reconciliation,
         interval_minutes=60,  # Every 60 minutes
+        # No state restriction: can run anytime
+    ))
+
+    scheduler.register_task(CryptoSchedulerTask(
+        name="status_snapshot",
+        func=make_status_snapshot,
+        interval_minutes=max(1, STATUS_SNAPSHOT_INTERVAL_MINUTES),
         # No state restriction: can run anytime
     ))
     

@@ -12,6 +12,7 @@ from config.crypto.loader import load_crypto_config
 from core.data.providers.kraken_provider import KrakenMarketDataProvider, KrakenOHLCConfig
 from crypto.scope_guard import validate_crypto_universe_symbols
 from runtime.trade_permission import get_trade_permission
+from runtime.observability import get_observability
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +55,7 @@ def load_crypto_price_data(symbol: str, lookback_days: int) -> Optional[pd.DataF
                 f"OHLC unavailable symbol={symbol} interval={config.interval}",
             )
         else:
+            get_observability().mark_market_data_fresh()
             permission.clear_block(
                 "MARKET_DATA_BLOCKED",
                 f"OHLC fresh symbol={symbol} interval={config.interval}",
@@ -110,6 +112,7 @@ def load_crypto_price_data_interval(
                 f"OHLC unavailable symbol={symbol} interval={interval}",
             )
         else:
+            get_observability().mark_market_data_fresh()
             permission.clear_block(
                 "MARKET_DATA_BLOCKED",
                 f"OHLC fresh symbol={symbol} interval={interval}",

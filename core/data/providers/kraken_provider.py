@@ -16,6 +16,7 @@ import pandas as pd
 from config.scope import Scope
 from config.scope_paths import ScopePathResolver
 from crypto.universe import CryptoUniverse
+from runtime.observability import get_observability
 
 logger = logging.getLogger(__name__)
 
@@ -154,6 +155,7 @@ class KrakenMarketDataProvider:
                 self.config.interval,
                 cached.index.max(),
             )
+            get_observability().mark_market_data_stale()
             log_event = "OHLC_CACHE_STALE_REFRESH"
             fetch_reason = "stale_cache"
         params = {
