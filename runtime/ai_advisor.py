@@ -1,5 +1,5 @@
 """
-AI Advisor (Phase A) - Read-only universe ranking.
+AI Advisor (Phase B) - Read-only universe ranking.
 """
 
 from __future__ import annotations
@@ -28,7 +28,7 @@ from runtime.observability import get_observability
 
 logger = logging.getLogger(__name__)
 
-_ALLOWED_SYMBOLS = ["BTC", "ETH", "SOL", "LINK", "AVAX"]
+_DEFAULT_ALLOWLIST = ["BTC", "ETH", "SOL", "LINK", "AVAX"]
 _PROMPT_PATH = Path(__file__).resolve().parent.parent / "prompts" / "universe_ranking_phase_a.txt"
 
 
@@ -110,7 +110,7 @@ class AIAdvisorRunner:
         return delta < max(1, AI_RANKING_INTERVAL_HOURS) * 3600
 
     def get_ranked_symbols(self, default_symbols: List[str]) -> List[str]:
-        if self._last_ranking and _valid_ranking(self._last_ranking):
+        if self._last_ranking and _valid_ranking(self._last_ranking, default_symbols):
             return list(self._last_ranking)
         return list(default_symbols)
 
@@ -241,7 +241,9 @@ class AIAdvisorRunner:
             ranked = parsed.get("ranked_symbols", [])
             reasoning = parsed.get("reasoning", "")
 
-            if not _valid_ranking(ranked):
+            allowlist = _get_allowlist(load_crypto_config(get_scope()))
+            normalized = _normalize_ranked_symbols(ranked, allowlist)
+            if normalized is None:
                 self._last_error = "invalid_symbols"
                 logger.error(
                     "AI_ADVISOR_RANKING_FAILED | trigger=%s ts=%s calls_today=%s error=%s",
@@ -255,9 +257,9 @@ class AIAdvisorRunner:
 
             self._last_success_time = datetime.now(timezone.utc)
             self._last_error = None
-            self._last_ranking = list(ranked)
+            self._last_ranking = list(normalized)
             self._last_reasoning = reasoning
-            observability.record_ai_success(self._last_success_time, ranked, reasoning)
+            observability.record_ai_success(self._last_success_time, normalized, reasoning)
 
             logger.info(
                 "AI_ADVISOR_RESPONSE | trigger=%s ts=%s response_id=%s model=%s raw=%s",
@@ -282,7 +284,7 @@ class AIAdvisorRunner:
                     "response_id": result.get("response_id"),
                     "model": result.get("model"),
                     "symbols": sorted(symbol_features.keys()),
-                    "ranked_symbols": ranked,
+                    "ranked_symbols": normalized,
                     "reasoning": reasoning,
                     "raw_response": result.get("raw", ""),
                 }
@@ -293,9 +295,9 @@ class AIAdvisorRunner:
                 trigger,
                 self._last_success_time.isoformat(),
                 self._calls_today,
-                ",".join(ranked),
+                ",".join(normalized),
             )
-            return {"ranked_symbols": ranked, "reasoning": reasoning}
+            return {"ranked_symbols": normalized, "reasoning": reasoning}
         except Exception as e:
             self._last_error = str(e)
             logger.error(
@@ -334,26 +336,43 @@ def _write_ai_call_log(payload: Dict[str, Any]) -> None:
         logger.error("AI_ADVISOR_LOG_WRITE_FAILED | error=%s", e)
 
 
-def _valid_ranking(ranked: List[str]) -> bool:
-    if not isinstance(ranked, list) or len(ranked) != len(_ALLOWED_SYMBOLS):
+def _get_allowlist(crypto_config: Dict[str, Any]) -> List[str]:
+    allowlist = crypto_config.get("UNIVERSE_ALLOWLIST") or crypto_config.get("CRYPTO_UNIVERSE")
+    if not allowlist:
+        allowlist = _DEFAULT_ALLOWLIST
+    return validate_crypto_universe_symbols(allowlist)
+
+
+def _normalize_ranked_symbols(ranked: Any, allowlist: List[str]) -> Optional[List[str]]:
+    if not isinstance(ranked, list):
+        return None
+    allowed_set = set(allowlist)
+    seen = set()
+    filtered = []
+    for symbol in ranked:
+        if symbol in allowed_set and symbol not in seen:
+            filtered.append(symbol)
+            seen.add(symbol)
+    for symbol in allowlist:
+        if symbol not in seen:
+            filtered.append(symbol)
+            seen.add(symbol)
+    if len(filtered) != len(allowlist):
+        return None
+    return filtered
+
+
+def _valid_ranking(ranked: List[str], allowlist: List[str]) -> bool:
+    if not isinstance(ranked, list) or len(ranked) != len(allowlist):
         return False
     ranked_set = set(ranked)
-    return ranked_set == set(_ALLOWED_SYMBOLS)
+    return ranked_set == set(allowlist)
 
 
 def _build_ai_features_from_market_data() -> Optional[Dict[str, Dict[str, Any]]]:
     scope = get_scope()
     crypto_config = load_crypto_config(scope)
-    universe_symbols = crypto_config.get("CRYPTO_UNIVERSE", _ALLOWED_SYMBOLS)
-    canonical = validate_crypto_universe_symbols(universe_symbols)
-
-    if set(canonical) != set(_ALLOWED_SYMBOLS):
-        logger.error(
-            "AI_ADVISOR_RANKING_FAILED | reason=universe_mismatch expected=%s got=%s",
-            sorted(_ALLOWED_SYMBOLS),
-            sorted(canonical),
-        )
-        return None
+    canonical = _get_allowlist(crypto_config)
 
     execution_interval = str(crypto_config.get("EXECUTION_CANDLE_INTERVAL", "5m"))
     if execution_interval != "5m":
@@ -380,7 +399,7 @@ def _build_ai_features_from_market_data() -> Optional[Dict[str, Dict[str, Any]]]
     )
 
     features: Dict[str, Dict[str, Any]] = {}
-    for symbol in _ALLOWED_SYMBOLS:
+    for symbol in canonical:
         bars = provider.fetch_ohlcv(symbol, execution_lookback)
         if bars is None or bars.empty:
             logger.error("AI_ADVISOR_RANKING_FAILED | reason=missing_data symbol=%s", symbol)

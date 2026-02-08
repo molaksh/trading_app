@@ -42,11 +42,28 @@ class KrakenAdapter(BrokerAdapter):
     
     # Symbol mapping: internal -> Kraken (e.g., "BTC/USD" -> "XBTUSDT")
     SYMBOL_MAP = {
+        "BTC": "XBTUSD",
+        "ETH": "ETHUSD",
+        "SOL": "SOLUSD",
+        "LINK": "LINKUSD",
+        "AVAX": "AVAXUSD",
+        "ADA": "ADAUSD",
+        "XRP": "XRPUSD",
+        "DOT": "DOTUSD",
+        "DOGE": "DOGEUSD",
+        "LTC": "LTCUSD",
+        "BCH": "BCHUSD",
         "BTC/USD": "XBTUSD",
         "ETH/USD": "ETHUSD",
         "SOL/USD": "SOLUSD",
         "LINK/USD": "LINKUSD",
         "AVAX/USD": "AVAXUSD",
+        "ADA/USD": "ADAUSD",
+        "XRP/USD": "XRPUSD",
+        "DOT/USD": "DOTUSD",
+        "DOGE/USD": "DOGEUSD",
+        "LTC/USD": "LTCUSD",
+        "BCH/USD": "BCHUSD",
         "BTC/USDT": "XBTUSDT",
         "ETH/USDT": "ETHUSD T",
         "SOL/USDT": "SOLUSDT",
@@ -56,11 +73,28 @@ class KrakenAdapter(BrokerAdapter):
     REVERSE_SYMBOL_MAP = {v: k for k, v in SYMBOL_MAP.items()}
     
     MIN_ORDER_SIZE = {
+        "BTC": 0.00001,
+        "ETH": 0.0001,
+        "SOL": 0.01,
+        "LINK": 0.1,
+        "AVAX": 0.1,
+        "ADA": 1.0,
+        "XRP": 1.0,
+        "DOT": 0.1,
+        "DOGE": 10.0,
+        "LTC": 0.01,
+        "BCH": 0.01,
         "BTC/USD": 0.00001,
         "ETH/USD": 0.0001,
         "SOL/USD": 0.01,
         "LINK/USD": 0.1,
         "AVAX/USD": 0.1,
+        "ADA/USD": 1.0,
+        "XRP/USD": 1.0,
+        "DOT/USD": 0.1,
+        "DOGE/USD": 10.0,
+        "LTC/USD": 0.01,
+        "BCH/USD": 0.01,
     }
     
     def __init__(

@@ -43,6 +43,9 @@ class ObservabilityCounters:
     ai_last_success_time: Optional[str] = None
     ai_last_error: Optional[str] = None
     ai_last_ranking: Optional[Dict[str, Any]] = None
+    ai_ranked_universe_size: Optional[int] = None
+    ai_scan_coverage_count: Optional[int] = None
+    signals_skipped_due_to_capacity: int = 0
 
 
 class RuntimeObservability:
@@ -101,6 +104,17 @@ class RuntimeObservability:
 
     def record_ai_error(self, error: str) -> None:
         self._counters.ai_last_error = error
+
+    def record_scan_metrics(
+        self,
+        ai_ranked_universe_size: int,
+        ai_scan_coverage_count: int,
+        skipped_due_to_capacity: int,
+    ) -> None:
+        self._counters.ai_ranked_universe_size = int(ai_ranked_universe_size)
+        self._counters.ai_scan_coverage_count = int(ai_scan_coverage_count)
+        if skipped_due_to_capacity > 0:
+            self._counters.signals_skipped_due_to_capacity += int(skipped_due_to_capacity)
 
     def on_block_change(self, state: str, reason: str, action: str) -> None:
         if action == "block":
@@ -209,6 +223,11 @@ class RuntimeObservability:
         logger.info(f"AI_LAST_CALL_TIME: {self._counters.ai_last_call_time or 'NONE'}")
         logger.info(f"AI_LAST_SUCCESS_TIME: {self._counters.ai_last_success_time or 'NONE'}")
         logger.info(f"AI_LAST_ERROR: {self._counters.ai_last_error or 'NONE'}")
+        logger.info(f"AI_RANKED_UNIVERSE_SIZE: {self._counters.ai_ranked_universe_size or 0}")
+        logger.info(f"AI_SCAN_COVERAGE_COUNT: {self._counters.ai_scan_coverage_count or 0}")
+        logger.info(
+            f"SIGNALS_SKIPPED_DUE_TO_CAPACITY: {self._counters.signals_skipped_due_to_capacity}"
+        )
         logger.info(f"OPEN_POSITIONS: {open_positions}")
         logger.info(f"DAILY_PNL: {realized + unrealized:.2f}")
         logger.info(f"LAST_TRADE_TIMESTAMP: {last_trade_ts}")
@@ -278,6 +297,9 @@ class RuntimeObservability:
             "ai_last_success_time": self._counters.ai_last_success_time,
             "ai_last_error": self._counters.ai_last_error,
             "ai_last_ranking": self._counters.ai_last_ranking,
+            "ai_ranked_universe_size": self._counters.ai_ranked_universe_size,
+            "ai_scan_coverage_count": self._counters.ai_scan_coverage_count,
+            "signals_skipped_due_to_capacity": self._counters.signals_skipped_due_to_capacity,
         }
 
         try:

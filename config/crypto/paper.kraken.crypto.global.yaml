@@ -18,7 +18,14 @@ ENABLE_OHLC_CACHE = true
 MAX_OHLC_STALENESS_SECONDS = "auto"
 
 # Universe symbols (canonical format)
-CRYPTO_UNIVERSE = ["BTC", "ETH", "SOL", "LINK", "AVAX"]
+CRYPTO_UNIVERSE = ["BTC", "ETH", "SOL", "LINK", "AVAX", "ADA", "XRP", "DOT", "DOGE", "LTC", "BCH"]
+UNIVERSE_ALLOWLIST = ["BTC", "ETH", "SOL", "LINK", "AVAX", "ADA", "XRP", "DOT", "DOGE", "LTC", "BCH"]
+
+# AI Phase (advisory only)
+AI_PHASE = "B"
+
+# Scan limits (Phase B)
+MAX_SYMBOLS_SCANNED_PER_CYCLE = 10
 
 # Universe filters
 UNIVERSE_MIN_VOLUME_USD = 1000000

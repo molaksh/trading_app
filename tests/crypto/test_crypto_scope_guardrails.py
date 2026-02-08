@@ -137,4 +137,16 @@ def test_crypto_scope_guard_enforces_provider_and_universe(tmp_path, monkeypatch
 
     summary = enforce_crypto_scope_guard(scope, broker, scope_paths)
     assert summary["market_data_provider"] == "KRAKEN"
-    assert set(summary["crypto_universe"]) == {"BTC", "ETH", "SOL"}
+    assert set(summary["crypto_universe"]) == {
+        "BTC",
+        "ETH",
+        "SOL",
+        "LINK",
+        "AVAX",
+        "ADA",
+        "XRP",
+        "DOT",
+        "DOGE",
+        "LTC",
+        "BCH",
+    }

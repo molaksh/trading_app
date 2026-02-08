@@ -30,11 +30,15 @@ CRYPTO_RECONCILIATION_INTERVAL_MINUTES = int(os.getenv("CRYPTO_RECONCILIATION_IN
 STATUS_SNAPSHOT_INTERVAL_MINUTES = int(os.getenv("STATUS_SNAPSHOT_INTERVAL_MINUTES", "15"))
 DAILY_SUMMARY_OUTPUT_PATH = os.getenv("DAILY_SUMMARY_OUTPUT_PATH", "")
 
-# AI Advisor (Phase A)
+# AI Advisor (Phase B)
+AI_PHASE = os.getenv("AI_PHASE", "B").strip().upper()
 AI_ADVISOR_ENABLED = os.getenv("AI_ADVISOR_ENABLED", "false").lower() == "true"
 AI_MAX_CALLS_PER_DAY = int(os.getenv("AI_MAX_CALLS_PER_DAY", "1"))
 AI_RANKING_INTERVAL_HOURS = int(os.getenv("AI_RANKING_INTERVAL_HOURS", "24"))
 AI_VALIDATE_SCHEDULER = os.getenv("AI_VALIDATE_SCHEDULER", "false").lower() == "true"
+
+# Scan limits (Phase B)
+MAX_SYMBOLS_SCANNED_PER_CYCLE = int(os.getenv("MAX_SYMBOLS_SCANNED_PER_CYCLE", "10"))
 
 # Startup behaviors
 CRYPTO_RUN_STARTUP_RECONCILIATION = os.getenv("CRYPTO_RUN_STARTUP_RECONCILIATION", "true").lower() == "true"

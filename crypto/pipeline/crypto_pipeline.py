@@ -19,8 +19,10 @@ from typing import Dict, List, Optional, Tuple
 import pandas as pd
 
 from config.crypto.loader import load_crypto_config
+from config.settings import MAX_TRADES_PER_DAY
 from runtime.trade_permission import get_trade_permission
 from runtime.ai_advisor import get_ai_runner
+from runtime.observability import get_observability
 from crypto.features import build_execution_features, build_regime_features
 from crypto.pipeline.logging import log_pipeline_stage
 from crypto.regime import CryptoRegimeEngine, RegimeThresholds, MarketRegime
@@ -30,9 +32,6 @@ from crypto.scope_guard import validate_crypto_universe_symbols
 from data.crypto_price_loader import load_crypto_price_data_two_timeframes
 
 logger = logging.getLogger(__name__)
-
-_FIXED_AI_UNIVERSE = ["BTC", "ETH", "SOL", "LINK", "AVAX"]
-
 
 def run_crypto_pipeline(
     runtime,
@@ -46,12 +45,8 @@ def run_crypto_pipeline(
     """
     scope = runtime.scope
     crypto_config = load_crypto_config(scope)
-    symbols = validate_crypto_universe_symbols(crypto_config.get("CRYPTO_UNIVERSE", ["BTC", "ETH", "SOL"]))
-    if set(symbols) != set(_FIXED_AI_UNIVERSE):
-        raise ValueError(
-            "CRYPTO_UNIVERSE_FIXED_REQUIRED: expected=%s got=%s"
-            % (sorted(_FIXED_AI_UNIVERSE), sorted(symbols))
-        )
+    allowlist = crypto_config.get("UNIVERSE_ALLOWLIST") or crypto_config.get("CRYPTO_UNIVERSE")
+    symbols = validate_crypto_universe_symbols(allowlist or ["BTC", "ETH", "SOL"])
 
     if run_id is None:
         run_id = str(uuid.uuid4())
@@ -143,6 +138,47 @@ def run_crypto_pipeline(
     )
 
     ordered_symbols = get_ai_runner().get_ranked_symbols(symbols)
+    max_scanned = int(crypto_config.get("MAX_SYMBOLS_SCANNED_PER_CYCLE", len(ordered_symbols) or 1))
+    if max_scanned <= 0:
+        max_scanned = len(ordered_symbols)
+
+    primary_block = permission.get_primary_block()
+    capacity_blocked = False
+    if runtime.risk_manager.portfolio.daily_trades_opened >= MAX_TRADES_PER_DAY:
+        capacity_blocked = True
+    if primary_block is not None and primary_block.state == "RISK_LIMIT_BLOCKED":
+        capacity_blocked = True
+
+    if capacity_blocked:
+        scanned_symbols = []
+        skipped_symbols = list(ordered_symbols)
+    else:
+        scanned_symbols = list(ordered_symbols[:max_scanned])
+        skipped_symbols = list(ordered_symbols[max_scanned:])
+
+    get_observability().record_scan_metrics(
+        ai_ranked_universe_size=len(ordered_symbols),
+        ai_scan_coverage_count=len(scanned_symbols),
+        skipped_due_to_capacity=len(skipped_symbols),
+    )
+
+    if skipped_symbols:
+        logger.warning(
+            "SIGNAL_SKIPPED_DUE_TO_CAPACITY | count=%s symbols=%s",
+            len(skipped_symbols),
+            ",".join(skipped_symbols),
+        )
+        log_pipeline_stage(
+            stage="SIGNAL_SKIPPED_DUE_TO_CAPACITY",
+            scope=str(scope),
+            run_id=run_id,
+            symbols=skipped_symbols,
+            extra={
+                "skipped_count": len(skipped_symbols),
+                "max_symbols_scanned_per_cycle": max_scanned,
+                "capacity_blocked": capacity_blocked,
+            },
+        )
 
     # Stage 3: REGIME ENGINE
     thresholds = RegimeThresholds(
@@ -255,7 +291,7 @@ def run_crypto_pipeline(
         if strategy is None:
             continue
 
-        for symbol in ordered_symbols:
+        for symbol in scanned_symbols:
             if symbol not in execution_features:
                 continue
 
@@ -294,11 +330,11 @@ def run_crypto_pipeline(
         stage="SIGNALS_GENERATED",
         scope=str(scope),
         run_id=run_id,
-        symbols=ordered_symbols,
+        symbols=scanned_symbols,
         extra={
             "regime": regime_signal.regime.value,
             "signal_count": len(signals),
-            "scan_order": ordered_symbols,
+            "scan_order": scanned_symbols,
         },
     )
 

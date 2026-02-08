@@ -1,6 +1,6 @@
 # Repository Documentation (Single Source of Truth)
 
-*Last updated: 2026-02-07*
+*Last updated: 2026-02-08*
 
 ---
 
@@ -20,6 +20,49 @@
 ---
 
 ## �🔔 Latest Updates (Newest First)
+
+### 2026-02-08 — Step 4 Phase B: Expanded Universe + Scan Prioritization
+
+**Status**: ✅ IN PROGRESS
+**Severity**: MEDIUM — More symbols, same execution safety
+
+#### Phase B Definition
+
+Phase B expands the fixed crypto universe to **10–20 symbols** and uses AI
+ranking strictly to **prioritize scan order**. AI remains **advisory only** and
+cannot trade, mutate config, or bypass risk controls.
+
+#### What Changed
+
+- **Universe expanded** via explicit `UNIVERSE_ALLOWLIST` in config
+- **Scan order** now follows AI ranking (or deterministic fallback)
+- **Early scan stop** when capacity is reached (max trades per day or risk block)
+- New observability fields:
+   - `AI_RANKED_UNIVERSE_SIZE`
+   - `AI_SCAN_COVERAGE_COUNT`
+   - `SIGNALS_SKIPPED_DUE_TO_CAPACITY`
+
+#### What Did NOT Change (Non‑Negotiable)
+
+- AI never places trades
+- AI never mutates config
+- AI never bypasses RiskManager or TradePermission
+- AI scheduling remains **startup + daily only**
+- Failures remain **boring and harmless**
+- Trading behavior with AI ON/OFF is **identical** except scan order
+
+#### Example: Early Scan Stop Logs
+
+```
+SIGNAL_SKIPPED_DUE_TO_CAPACITY | count=4 symbols=DOT,DOGE,LTC,BCH
+CRYPTO_PIPELINE {"stage":"SIGNALS_GENERATED", "scan_order":["BTC","ETH","SOL","LINK","AVAX","ADA","XRP","BCH"], ...}
+```
+
+#### Configuration
+
+- `AI_PHASE = "B"`
+- `UNIVERSE_ALLOWLIST = ["BTC", "ETH", "SOL", "LINK", "AVAX", "ADA", "XRP", "DOT", "DOGE", "LTC", "BCH"]`
+- `MAX_SYMBOLS_SCANNED_PER_CYCLE = 10`
 
 ### 2026-02-07 — AI Advisor Scheduling + Full Call Logging
 
@@ -1365,7 +1408,7 @@ Before deploying LIVE trading:
 **Crypto System (Kraken)**:
 - Status: ✅ COMPLETE & TESTED
 - Location: `feature/crypto-kraken-global` branch
-- Features: 10 trading pairs (BTC, ETH, SOL, XRP, ADA, DOT, LINK, DOGE, MATIC, AVAX), 24/7 trading with 03:00-05:00 UTC downtime, ML training during downtime, 4-gate model validation, paper simulator with realistic fills, live Kraken adapter (skeleton)
+- Features: 11 trading pairs (BTC, ETH, SOL, XRP, ADA, DOT, LINK, DOGE, AVAX, LTC, BCH), 24/7 trading with 03:00-05:00 UTC downtime, ML training during downtime, 4-gate model validation, paper simulator with realistic fills, live Kraken adapter (skeleton)
 - Containers: 2 (paper + live)
 - Tests: 76 unit/integration tests (all passing)
 
