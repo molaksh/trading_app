@@ -9,6 +9,7 @@ from datetime import datetime
 from ops_agent.schemas import Intent, OpsDiagnostic, ObservabilitySnapshot
 from ops_agent.observability_reader import ObservabilityReader
 from ops_agent.summary_reader import SummaryReader
+from ops_agent.logs_reader import LogsReader
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +20,7 @@ class ResponseGenerator:
     def __init__(self, logs_root: str = "logs"):
         self.obs_reader = ObservabilityReader(logs_root)
         self.summary_reader = SummaryReader(logs_root)
+        self.logs_reader = LogsReader(logs_root)
 
     def generate_response(self, intent: Intent) -> str:
         """
@@ -26,15 +28,41 @@ class ResponseGenerator:
 
         Returns plain text response (no Markdown, no speculation).
         """
+        # For system-wide checks (jobs, errors), check all scopes if not specified
+        if intent.intent_type in ["EXPLAIN_JOBS", "EXPLAIN_ERRORS"] and not intent.scope:
+            if intent.intent_type == "EXPLAIN_JOBS":
+                return self._explain_all_jobs()
+            else:
+                return self._explain_all_errors()
+
         # Infer scope if not provided
         scope = intent.scope or self._infer_default_scope()
         if not scope:
             return "❓ Couldn't determine scope. Try: 'live crypto', 'paper us', etc."
 
-        # Get observability state
+        # Get observability state (try snapshot, fall back to daily summary)
         obs = self.obs_reader.get_snapshot(scope)
         if not obs:
-            return f"⚠️ No data yet for {scope}. Check back soon."
+            # Fall back to daily summary
+            latest_summary = self.summary_reader.get_latest_summary(scope)
+            if not latest_summary:
+                return f"⏳ {scope}: No data yet. Check back soon."
+
+            # Build minimal snapshot from daily summary
+            obs = ObservabilitySnapshot(
+                scope=scope,
+                timestamp=latest_summary.timestamp,
+                regime=latest_summary.regime,
+                trading_active=latest_summary.trades_executed > 0 or not latest_summary.blocks,
+                blocks=latest_summary.blocks,
+                recent_trades=latest_summary.trades_executed,
+                daily_pnl=latest_summary.realized_pnl,
+                max_drawdown=latest_summary.max_drawdown,
+                scan_coverage=1 if latest_summary.trades_executed > 0 else 0,
+                signals_skipped=0,
+                trades_executed=latest_summary.trades_executed,
+                data_issues=latest_summary.data_issues,
+            )
 
         # Route to specific explanation
         if intent.intent_type == "EXPLAIN_NO_TRADES":
@@ -49,6 +77,12 @@ class ResponseGenerator:
             return self._explain_today(scope, obs)
         elif intent.intent_type == "EXPLAIN_GOVERNANCE":
             return self._explain_governance()
+        elif intent.intent_type == "EXPLAIN_AI_RANKING":
+            return self._explain_ai_ranking(scope)
+        elif intent.intent_type == "EXPLAIN_JOBS":
+            return self._explain_jobs(scope)
+        elif intent.intent_type == "EXPLAIN_ERRORS":
+            return self._explain_errors(scope)
         else:  # STATUS
             return self._explain_status(scope, obs)
 
@@ -145,13 +179,124 @@ class ResponseGenerator:
         block_text = f" — {obs.blocks[0]}" if obs.blocks else ""
         return f"{emoji} {scope}: {obs.regime}, {obs.trades_executed} trades{block_text}"
 
+    def _explain_ai_ranking(self, scope: str) -> str:
+        """Show latest AI ranking."""
+        ranking = self.logs_reader.get_latest_ai_ranking(scope)
+        if not ranking:
+            return f"📊 {scope}: No AI ranking data yet"
+
+        top_3 = ", ".join(ranking.get("top_3", []))
+        return f"🤖 {scope} AI ranking:\n  Top 3: {top_3}\n  ({ranking.get('timestamp', 'unknown time')})"
+
+    def _explain_jobs(self, scope: str) -> str:
+        """Show job freshness (last run times)."""
+        state = self.logs_reader.get_scheduler_state(scope)
+        if not state:
+            return f"⏳ {scope}: No scheduler state"
+
+        stale_jobs = []
+        fresh_jobs = []
+
+        for job_name, timestamp_str in state.items():
+            is_stale = self.logs_reader.job_is_stale(scope, job_name, max_age_seconds=3600)
+            if is_stale:
+                stale_jobs.append(job_name)
+            else:
+                fresh_jobs.append(job_name)
+
+        if stale_jobs:
+            return f"⚠️ {scope}: Stale jobs: {', '.join(stale_jobs)}"
+        else:
+            return f"✓ {scope}: All jobs fresh (last hour)"
+
+    def _explain_all_jobs(self) -> str:
+        """Check job health across all scopes."""
+        all_scopes = [
+            "live_kraken_crypto_global",
+            "live_alpaca_swing_us",
+            "paper_kraken_crypto_global",
+            "paper_alpaca_swing_us",
+            "governance",
+        ]
+
+        results = []
+        for scope in all_scopes:
+            state = self.logs_reader.get_scheduler_state(scope)
+            if not state:
+                continue
+
+            stale_jobs = []
+            for job_name in state.keys():
+                if self.logs_reader.job_is_stale(scope, job_name, max_age_seconds=3600):
+                    stale_jobs.append(job_name)
+
+            if stale_jobs:
+                results.append(f"⚠️ {scope}: {', '.join(stale_jobs)}")
+            else:
+                results.append(f"✓ {scope}: Fresh")
+
+        if not results:
+            return "⏳ No job data found"
+
+        return "📋 All containers:\n" + "\n".join(results)
+
+    def _explain_errors(self, scope: str) -> str:
+        """Show recent errors from logs."""
+        errors = self.logs_reader.get_recent_errors(scope, lines=5)
+        if not errors:
+            return f"✓ {scope}: No recent errors"
+
+        error_lines = "\n  ".join(errors[:3])
+        return f"🚨 {scope}: Recent errors:\n  {error_lines}"
+
+    def _explain_all_errors(self) -> str:
+        """Check for errors across all scopes."""
+        all_scopes = [
+            "live_kraken_crypto_global",
+            "live_alpaca_swing_us",
+            "paper_kraken_crypto_global",
+            "paper_alpaca_swing_us",
+            "governance",
+        ]
+
+        results = []
+        for scope in all_scopes:
+            errors = self.logs_reader.get_recent_errors(scope, lines=3)
+            if errors:
+                results.append(f"🚨 {scope}:")
+                for error in errors[:1]:  # Show just first error per scope
+                    results.append(f"  {error[:80]}")
+            else:
+                results.append(f"✓ {scope}: OK")
+
+        if not results:
+            return "⏳ No log data found"
+
+        return "📋 All containers:\n" + "\n".join(results)
+
     def _infer_default_scope(self) -> Optional[str]:
-        """Infer default scope (live crypto, then live us)."""
-        obs_reader = ObservabilityReader()
-        if obs_reader.get_snapshot("live_kraken_crypto_global"):
-            return "live_kraken_crypto_global"
-        if obs_reader.get_snapshot("live_alpaca_swing_us"):
-            return "live_alpaca_swing_us"
+        """Infer default scope (try all available scopes, prefer live)."""
+        all_scopes = [
+            "live_kraken_crypto_global",
+            "live_alpaca_swing_us",
+            "paper_kraken_crypto_global",
+            "paper_alpaca_swing_us",
+        ]
+
+        # First try live scopes
+        for scope in all_scopes:
+            if "live" in scope:
+                latest = self.summary_reader.get_latest_summary(scope)
+                if latest:
+                    return scope
+
+        # Fall back to paper scopes
+        for scope in all_scopes:
+            if "paper" in scope:
+                latest = self.summary_reader.get_latest_summary(scope)
+                if latest:
+                    return scope
+
         return None
 
 

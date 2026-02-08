@@ -18,7 +18,7 @@ class IntentParser:
         r"paper.*crypto|crypto.*paper": "paper_crypto",
         r"live.*us|us.*live|live.*alpaca": "live_us",
         r"paper.*us|us.*paper|paper.*alpaca": "paper_us",
-        r"governance|proposals?": "governance",
+        r"govern|proposal": "governance",
     }
 
     # Intent patterns (question -> intent_type)
@@ -29,6 +29,9 @@ class IntentParser:
         r"block|what.*block": "EXPLAIN_BLOCKS",
         r"what.*happen.*today|today.*what|daily.*status": "EXPLAIN_TODAY",
         r"governance|proposal.*pending|wait.*approv": "EXPLAIN_GOVERNANCE",
+        r"ai.*rank|what.*ai|top.*symbol|symbol.*rank": "EXPLAIN_AI_RANKING",
+        r"job.*health|job.*status|stale|job.*running": "EXPLAIN_JOBS",
+        r"error|exception|crash|problem|fail": "EXPLAIN_ERRORS",
         r"status|how.*doing|current.*state": "STATUS",
         r"monitor.*|watch.*|alert.*|notif.*": "START_WATCH",
         r"stop.*monitor|stop.*watch|cancel.*alert": "STOP_WATCH",

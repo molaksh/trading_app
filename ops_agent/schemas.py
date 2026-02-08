@@ -49,10 +49,11 @@ class DailySummaryEntry(BaseModel):
 
     timestamp: datetime
     scope: str
-    regime: str
+    regime: str = "UNKNOWN"
     trades_executed: int
     realized_pnl: float
     max_drawdown: float
+    blocks: List[str] = []
     data_issues: int = 0
 
 

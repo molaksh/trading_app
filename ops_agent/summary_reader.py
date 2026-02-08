@@ -73,13 +73,26 @@ class SummaryReader:
                         if ts < cutoff_date:
                             continue
 
+                        # Extract blocks from blocks_encountered list
+                        blocks_raw = data.get("blocks_encountered", [])
+                        blocks = blocks_raw if isinstance(blocks_raw, list) else []
+
+                        # Use date field if available, otherwise fallback to timestamp
+                        date_str = data.get("date")
+                        if date_str:
+                            try:
+                                ts = datetime.fromisoformat(date_str)
+                            except:
+                                pass  # Use ts from above
+
                         entry = DailySummaryEntry(
                             timestamp=ts,
                             scope=scope,
-                            regime=data.get("regime", "UNKNOWN"),
-                            trades_executed=data.get("trades_executed", 0),
+                            regime=data.get("regime", "NEUTRAL"),  # Default to NEUTRAL if not present
+                            trades_executed=data.get("trades_taken", data.get("trades_executed", 0)),
                             realized_pnl=data.get("realized_pnl", 0.0),
                             max_drawdown=data.get("max_drawdown", 0.0),
+                            blocks=blocks,
                             data_issues=data.get("data_issues", 0),
                         )
                         entries.append(entry)

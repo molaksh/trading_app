@@ -119,7 +119,6 @@ class TelegramHandler:
             payload = {
                 "chat_id": chat_id,
                 "text": text,
-                "parse_mode": "plain",  # No Markdown
             }
 
             response = requests.post(url, json=payload, timeout=10)
