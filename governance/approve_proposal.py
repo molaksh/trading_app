@@ -172,9 +172,10 @@ def main():
     parser = argparse.ArgumentParser(description="Approve or reject governance proposals")
     parser.add_argument("--approve", help="Approve proposal (provide proposal_id)")
     parser.add_argument("--reject", help="Reject proposal (provide proposal_id)")
+    parser.add_argument("--defer", help="Defer proposal (same as reject, for clarity)")
     parser.add_argument("--list", action="store_true", help="List pending proposals")
     parser.add_argument("--notes", default="", help="Notes for approval")
-    parser.add_argument("--reason", default="", help="Reason for rejection")
+    parser.add_argument("--reason", default="", help="Reason for rejection/deferral")
     parser.add_argument("--approved-by", default="admin", help="Who approved (default: admin)")
     parser.add_argument("--rejected-by", default="admin", help="Who rejected (default: admin)")
     parser.add_argument("--persist-path", default="logs", help="Persistence path")
@@ -187,6 +188,8 @@ def main():
         approver.list_pending()
     elif args.approve:
         approver.approve_proposal(args.approve, args.notes, args.approved_by)
+    elif args.defer:
+        approver.reject_proposal(args.defer, args.reason, args.rejected_by)
     elif args.reject:
         approver.reject_proposal(args.reject, args.reason, args.rejected_by)
     else:

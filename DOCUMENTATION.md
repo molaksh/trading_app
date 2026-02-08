@@ -251,32 +251,32 @@ persist/governance/crypto/logs/
 }
 ```
 
-#### Scheduling with Cron
+#### Container Deployment
 
-Run weekly (Sunday 3:15 AM ET) during crypto downtime:
+**Start Governance Container (24/7)**:
 ```bash
-15 8 * * 0 cd /app && python governance_main.py --run-once >> /var/log/governance.log 2>&1
+./run_governance_crypto.sh
 ```
 
-#### Deployment & Execution
+Container runs continuously:
+- ✓ Always running inside Docker
+- ✓ Internal scheduler runs job every Sunday 8:15 AM UTC (3:15 AM ET)
+- ✓ No host system cron needed
+- ✓ Restarts automatically if stopped
 
-**Launcher Script** (recommended):
+**Stop Container**:
 ```bash
-./run_governance_crypto.sh              # Real execution (with persistence)
-./run_governance_crypto.sh --dry-run    # Dry-run (read-only, no artifacts)
+docker stop governance-crypto
 ```
 
-The `.sh` script:
-- Rebuilds governance Docker image
-- Sets up volumes and environment variables
-- Executes governance job (one-time, not daemon)
-- Cleans up container after completion
-- Logs to both console and file
-
-**Direct Python Execution**:
+**View Logs**:
 ```bash
-python governance_main.py --run-once    # Real execution
-python governance_main.py --dry-run     # Dry-run (testing)
+docker logs -f governance-crypto
+```
+
+**Direct Python Execution** (inside container):
+```bash
+python governance_main.py --daemon      # Run scheduler 24/7
 ```
 
 **Direct Docker Execution**:
@@ -348,6 +348,330 @@ persist/governance/crypto/logs/
 4. **Constitutional**: Hard-coded rules enforced in code
 5. **Fail-Safe**: If idle, trading continues unchanged
 6. **Immutable**: Append-only artifact storage (JSONL)
+
+#### Container Execution Model (Important!)
+
+**The container does NOT keep running continuously.**
+
+```
+Sunday 3:15 AM ET (downtime window)
+    ↓
+[Cron triggers: run_governance_crypto.sh]
+    ↓
+[Container starts]
+    ↓
+[Governance job runs: ~5 minutes]
+  - Reads summaries (paper + live)
+  - Runs 4-agent pipeline
+  - Writes artifacts to logs/governance/
+  - Logs events
+    ↓
+[Container exits completely]
+    ↓
+[Artifacts remain on disk for human review]
+    ↓
+[You have 72 hours to review and decide]
+    ↓
+[Proposal expires if no action after 72 hours]
+```
+
+**Automatic**: Container starts, runs job, exits (once per week)
+**Manual**: You review proposals and decide to approve/reject/defer
+
+#### How to Review & Decide on Proposals
+
+**Step 1: Check for Pending Proposals**
+```bash
+python governance/check_pending_proposals.py --summary
+```
+
+**Step 2: Review Full Details**
+```bash
+python governance/check_pending_proposals.py --detailed
+```
+
+**Step 3: Read the Decision Packet** (most important)
+```bash
+cat logs/governance/crypto/proposals/<proposal_id>/synthesis.json | jq .
+```
+
+Shows: Summary, key risks, final recommendation (APPROVE/REJECT/DEFER), confidence level
+
+**Step 4: (Optional) Read Agent Reasoning**
+```bash
+cat logs/governance/crypto/proposals/<proposal_id>/proposal.json    # Proposer
+cat logs/governance/crypto/proposals/<proposal_id>/critique.json    # Critic
+cat logs/governance/crypto/proposals/<proposal_id>/audit.json       # Auditor
+```
+
+**Step 5: Make Your Decision**
+
+**Option A - Approve**:
+```bash
+python governance/approve_proposal.py \
+  --approve <proposal_id> \
+  --notes "Your reasoning here"
+```
+Then manually: Edit configs → Commit → Redeploy
+
+**Option B - Reject**:
+```bash
+python governance/approve_proposal.py \
+  --reject <proposal_id> \
+  --reason "Why you reject it"
+```
+Result: Proposal archived, no changes
+
+**Option C - Do Nothing**:
+Proposal expires in 72 hours (safe, no harm)
+
+**Recommendations by Confidence**:
+- **APPROVE (>70%)**: Confidence high, risks low → Good to apply
+- **CAUTION (40-70%)**: Mixed signals → Review carefully
+- **DEFER (<40%)**: Uncertainty or low confidence → Wait for more data
+- **REJECT**: Significant risks identified → Don't apply
+
+**Review Checklist**:
+- [ ] Does the recommendation make sense?
+- [ ] Are key risks actually significant?
+- [ ] Recent regime change or solid data?
+- [ ] What's the impact if wrong?
+- [ ] Do I have enough information to decide?
+
+**Example Timeline**:
+```
+Sunday 3:15 AM: Governance runs, Proposal created
+Monday 9:00 AM: You check, see pending proposal
+Tuesday 2:00 PM: You review and APPROVE
+Tuesday 2:30 PM: You edit configs and redeploy
+Wednesday: New trading runs with approved changes
+```
+
+**Important**: Approving a proposal does NOT apply changes automatically. You must:
+1. Edit config files
+2. Commit to git
+3. Redeploy/restart containers
+4. Monitor results
+
+#### Approval Decision Support (--defer Option)
+
+In addition to approve/reject, you can also use `--defer`:
+
+```bash
+# Defer for more data (same as reject but indicates "wait, don't reject permanently")
+python governance/approve_proposal.py \
+  --defer <proposal_id> \
+  --reason "Need more data, recency bias detected, will re-evaluate next week"
+```
+
+All three options (approve/reject/defer) are safe. Governance will re-analyze deferred proposals the following week.
+
+#### Real-World Example: How to Review a Proposal
+
+**Scenario**: Sunday governance runs, creates proposal for paper universe expansion
+
+**Step 1: Check pending**
+```bash
+$ python governance/check_pending_proposals.py --summary
+
+⚠️  PENDING GOVERNANCE PROPOSALS: 1
+Proposal ID: abc-xyz-123-def
+Environment: paper
+Type: ADD_SYMBOLS
+Symbols: DOGE, SHIB, PEPE
+Recommendation: CAUTION
+Confidence: 58%
+```
+
+**Step 2: Read synthesis (the decision packet)**
+```bash
+$ cat logs/governance/crypto/proposals/abc-xyz-123-def/synthesis.json | jq .
+
+{
+  "summary": "Add DOGE, SHIB, PEPE to paper universe...",
+  "key_risks": [
+    "Recency bias: 2-day PANIC regime surge",
+    "Liquidity concerns: PEPE has low volume",
+    "Correlation risk: All three symbols are correlated",
+    "Scan time: 60% increase in scanning needed"
+  ],
+  "final_recommendation": "CAUTION",
+  "confidence": 0.58
+}
+```
+
+**Step 3: Your decision making**
+- Confidence 58% = moderate, not high
+- Recency bias identified = risky
+- Liquidity concerns = real downside
+- This is paper (safer) but risks are real
+- Verdict: **DEFER for more data**
+
+**Step 4: Submit decision**
+```bash
+$ python governance/approve_proposal.py \
+  --defer abc-xyz-123-def \
+  --reason "Confidence 58% too low. Recency bias from 2-day surge. Need 1 more week of data before deciding."
+```
+
+**Result**: Proposal archived. Governance re-analyzes next week. No changes made. ✅
+
+**Alternative outcome** (if you approved):
+1. Create `approval.json` record
+2. You manually edit `config/crypto/universe_settings.yaml`
+3. You commit and redeploy
+4. Trading runs with new symbols next day
+5. You monitor: Did signals improve? Did scan time increase? Did recommendations hold?
+
+**Key insight**: The synthesis.json tells you everything. If confidence is low OR risks are high, DEFER is always safe.
+
+#### Quick Decision Reference
+
+| Confidence | Risk Level | Recommendation | Action |
+|-----------|-----------|-----------------|--------|
+| 80%+ | Low | APPROVE | Edit config → Redeploy |
+| 70-80% | Low/Medium | APPROVE | Safe for production |
+| 60-70% | Medium | CAUTION → Approve if paper | Test in paper first |
+| 50-60% | Medium/High | DEFER | Wait for more data |
+| <50% | High | REJECT/DEFER | Skip or wait |
+
+**Golden Rule**: If confidence <70% OR risks seem significant, DEFER. You can always revisit next week with more data.
+
+#### Optional: Check Market Conditions with Adaptive Scheduler
+
+Phase C uses a **static weekly schedule** by default (runs Sunday 3:15 AM ET). However, if you want to check what the current **market mode** would be (for diagnostic purposes), you can use `governance/adaptive_scheduler.py` as an optional utility:
+
+```bash
+python governance/adaptive_scheduler.py
+```
+
+**Output Example**:
+```
+================================================================================
+ADAPTIVE GOVERNANCE SCHEDULER STATUS
+================================================================================
+
+Market Conditions:
+  Volatility:      MEDIUM
+  Max Drawdown:    2.34%
+  Missed Signals:  STABLE
+  Performance:     STABLE
+  Data Quality:    GOOD
+
+Governance Mode: NORMAL
+Reason: Market stable: volatility=MEDIUM, performance=STABLE
+Next run in: 168 hours (7.0 days)
+
+Mode Meanings:
+  NORMAL:    Weekly (calm markets)
+  VOLATILE:  Every 3 days (elevated activity)
+  REACTIVE:  Every 2 days (market stress)
+  EMERGENCY: Daily (crisis mode)
+```
+
+**What This Shows**:
+- **NORMAL**: Weekly governance (default, current)
+- **VOLATILE**: Would run every 3 days if integrated (medium volatility)
+- **REACTIVE**: Would run every 2 days if integrated (high volatility, drawdown 5-15%)
+- **EMERGENCY**: Would run daily if integrated (extreme volatility, drawdown >15%, or critical performance)
+
+**Note**: This is diagnostic only. Phase C continues to run on weekly schedule. If you want to migrate to dynamic scheduling in the future, `adaptive_scheduler.py` can be integrated into `governance_main.py`, but for now it's useful for understanding current market conditions.
+
+#### Notifications & Monitoring
+
+**NO AUTOMATIC CHANGES**: The governance system will NEVER automatically apply changes. All proposals require your explicit approval.
+
+**Check for Pending Proposals**:
+```bash
+# Quick summary
+python governance/check_pending_proposals.py --summary
+
+# Detailed view
+python governance/check_pending_proposals.py --detailed
+
+# Table format
+python governance/approve_proposal.py --list
+```
+
+**Generate Alerts for Notifications**:
+```bash
+# Export to text file (for email)
+python governance/check_pending_proposals.py --export --output governance_alert.txt
+
+# Export as JSON (for dashboards or Slack)
+python governance/check_pending_proposals.py --json --output governance_pending.json
+```
+
+**Automated Monitoring Options**:
+
+Option 1 - Daily email alert:
+```bash
+0 9 * * * cd /app && python governance/check_pending_proposals.py --export --output /tmp/governance_alert.txt && mail -s "Governance Alert" admin@example.com < /tmp/governance_alert.txt
+```
+
+Option 2 - Slack webhook:
+```bash
+#!/bin/bash
+PENDING=$(python governance/check_pending_proposals.py --json --output /tmp/pending.json)
+COUNT=$(jq '.count' /tmp/pending.json)
+if [ $COUNT -gt 0 ]; then
+  curl -X POST https://hooks.slack.com/services/YOUR/WEBHOOK/HERE \
+    -H 'Content-Type: application/json' \
+    -d "{\"text\": \"🚨 $COUNT governance proposal(s) pending approval\"}"
+fi
+```
+
+Option 3 - Dashboard:
+```bash
+python governance/check_pending_proposals.py --json > /var/www/html/governance_status.json
+```
+
+**Full Event History** (append-only):
+```bash
+cat logs/governance/crypto/logs/governance_events.jsonl
+```
+
+Events include:
+- GOVERNANCE_PROPOSAL_CREATED
+- GOVERNANCE_PROPOSAL_CRITIQUED
+- GOVERNANCE_PROPOSAL_AUDITED
+- GOVERNANCE_PROPOSAL_SYNTHESIZED
+- GOVERNANCE_PROPOSAL_APPROVED (manual)
+- GOVERNANCE_PROPOSAL_REJECTED (manual)
+- GOVERNANCE_PROPOSAL_EXPIRED (72h no action)
+
+**Proposal Lifecycle** (72-hour window):
+```
+Week 1 (Sunday 3:15 AM ET)
+  ↓
+[Governance job runs]
+  ↓
+[Creates proposal: <id>]
+  ↓
+[Status: AWAITING APPROVAL]
+  ↓
+[You check: python governance/check_pending_proposals.py --summary]
+  ↓
+Week 1-3 (72-hour window)
+  ↓
+[You can APPROVE, REJECT, or DEFER]
+  ↓
+If APPROVED:
+  ↓
+  [You manually edit config/crypto/universe_settings.yaml]
+  ↓
+  [You git commit and redeploy]
+
+If REJECTED/DEFERRED:
+  ↓
+  [Proposal archived, no changes]
+
+If NO ACTION:
+  ↓
+  [After 72 hours: PROPOSAL EXPIRES]
+  ↓
+  [No changes applied]
+```
 
 ---
 

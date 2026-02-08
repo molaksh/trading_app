@@ -34,10 +34,11 @@ class ProposalChecker:
             if not proposal_dir.is_dir():
                 continue
 
-            # Check if already approved
+            # Check if already approved or rejected
             approval_file = proposal_dir / "approval.json"
-            if approval_file.exists():
-                continue  # Skip approved proposals
+            rejection_file = proposal_dir / "rejection.json"
+            if approval_file.exists() or rejection_file.exists():
+                continue  # Skip approved or rejected proposals
 
             # Read synthesis (human-readable decision)
             synthesis_file = proposal_dir / "synthesis.json"

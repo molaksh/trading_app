@@ -5,13 +5,18 @@ Standalone governance job for Phase C.
 Runs independently from trading containers.
 Executes 4-agent pipeline and produces non-binding proposals.
 
-Usage:
-  python governance_main.py --run-once
-  python governance_main.py --dry-run
-  python governance_main.py --run-once --dry-run
+Usage (ONE-TIME):
+  python governance_main.py --run-once        # Run once and exit
+  python governance_main.py --dry-run         # Test run (no persist)
 
-Scheduled via cron (Sunday 3:15 AM ET / 8:15 AM UTC):
-  15 8 * * 0 cd /app && python governance_main.py --run-once >> /var/log/governance.log 2>&1
+Usage (DAEMON - Inside Container):
+  python governance_main.py --daemon          # Run scheduler 24/7 (runs job Sunday 8:15 AM UTC)
+  python governance_main.py --daemon --time 08:15  # Custom time
+
+Deployment:
+  - Container should run: python governance_main.py --daemon
+  - Container runs 24/7 inside Docker
+  - No cron needed (scheduling inside container)
 """
 
 import sys
@@ -77,9 +82,19 @@ def main():
         help="Run governance job once and exit",
     )
     parser.add_argument(
+        "--daemon",
+        action="store_true",
+        help="Run as daemon (24/7 scheduler inside container)",
+    )
+    parser.add_argument(
         "--dry-run",
         action="store_true",
         help="Dry run: read summaries but don't persist artifacts",
+    )
+    parser.add_argument(
+        "--time",
+        default="08:15",
+        help="Job run time in HH:MM format UTC (default: 08:15 = 3:15 AM ET)",
     )
     parser.add_argument(
         "--persist-path",
@@ -92,36 +107,50 @@ def main():
     logger.info("=" * 70)
     logger.info("Phase C: Multi-Agent Constitutional AI Governance")
     logger.info("=" * 70)
-    logger.info(f"Dry run: {args.dry_run}")
-    logger.info(f"Persist path: {args.persist_path}")
 
     try:
-        # Import here to avoid issues if governance not available
-        from governance.crypto_governance_job import run_governance_job
+        # DAEMON MODE: Run scheduler 24/7
+        if args.daemon:
+            logger.info(f"DAEMON MODE: Container will run 24/7")
+            logger.info(f"Job scheduled for: Every Sunday at {args.time} UTC (3:15 AM ET)")
+            logger.info("Press Ctrl+C to stop daemon")
 
-        result = run_governance_job(
-            persist_path=args.persist_path,
-            dry_run=args.dry_run,
-        )
+            from governance.scheduler import GovernanceScheduler
 
-        logger.info("=" * 70)
-        logger.info("Governance Job Results")
-        logger.info("=" * 70)
-        logger.info(f"Success: {result['success']}")
-        logger.info(f"Proposal ID: {result['proposal_id']}")
-        logger.info(f"Errors: {len(result['errors'])}")
+            scheduler = GovernanceScheduler(run_time=args.time)
+            scheduler.start()
 
-        if result['synthesis']:
-            synthesis = result['synthesis']
-            logger.info(f"Final Recommendation: {synthesis.get('final_recommendation')}")
-            logger.info(f"Confidence: {synthesis.get('confidence'):.1%}")
+        # ONE-TIME MODE: Run once and exit
+        else:
+            logger.info(f"ONE-TIME MODE")
+            logger.info(f"Dry run: {args.dry_run}")
+            logger.info(f"Persist path: {args.persist_path}")
 
-        if result['errors']:
-            logger.warning(f"Errors encountered: {result['errors']}")
-            sys.exit(1)
+            from governance.crypto_governance_job import run_governance_job
 
-        logger.info("Governance job completed successfully")
-        sys.exit(0)
+            result = run_governance_job(
+                persist_path=args.persist_path,
+                dry_run=args.dry_run,
+            )
+
+            logger.info("=" * 70)
+            logger.info("Governance Job Results")
+            logger.info("=" * 70)
+            logger.info(f"Success: {result['success']}")
+            logger.info(f"Proposal ID: {result['proposal_id']}")
+            logger.info(f"Errors: {len(result['errors'])}")
+
+            if result['synthesis']:
+                synthesis = result['synthesis']
+                logger.info(f"Final Recommendation: {synthesis.get('final_recommendation')}")
+                logger.info(f"Confidence: {synthesis.get('confidence'):.1%}")
+
+            if result['errors']:
+                logger.warning(f"Errors encountered: {result['errors']}")
+                sys.exit(1)
+
+            logger.info("Governance job completed successfully")
+            sys.exit(0)
 
     except ImportError as e:
         logger.error(f"Failed to import governance module: {e}")
