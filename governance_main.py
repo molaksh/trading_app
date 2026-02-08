@@ -15,15 +15,55 @@ Scheduled via cron (Sunday 3:15 AM ET / 8:15 AM UTC):
 """
 
 import sys
+import os
 import argparse
 import logging
+from pathlib import Path
+from datetime import datetime
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-)
-logger = logging.getLogger(__name__)
+# Configure logging (console + file)
+def setup_logging(log_dir: str = None) -> logging.Logger:
+    """Set up logging to console and file."""
+    if log_dir is None:
+        log_dir = os.getenv("PERSISTENCE_ROOT", "persist")
+
+    log_path = Path(log_dir) / "governance_logs"
+    log_path.mkdir(parents=True, exist_ok=True)
+
+    # Log file with timestamp
+    log_file = log_path / f"governance_{datetime.utcnow().strftime('%Y-%m-%d_%H%M%S')}.log"
+
+    # Configure root logger
+    logger = logging.getLogger(__name__)
+    logger.setLevel(logging.INFO)
+
+    # Remove existing handlers to avoid duplicates
+    logger.handlers.clear()
+
+    # Formatter
+    formatter = logging.Formatter(
+        "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S"
+    )
+
+    # Console handler
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(formatter)
+    logger.addHandler(console_handler)
+
+    # File handler
+    file_handler = logging.FileHandler(log_file)
+    file_handler.setFormatter(formatter)
+    logger.addHandler(file_handler)
+
+    # Also configure other loggers
+    logging.getLogger("governance").setLevel(logging.INFO)
+    logging.getLogger("governance").addHandler(console_handler)
+    logging.getLogger("governance").addHandler(file_handler)
+
+    return logger
+
+logger = setup_logging()
 
 
 def main():
