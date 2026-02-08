@@ -21,6 +21,148 @@
 
 ## �🔔 Latest Updates (Newest First)
 
+
+### 2026-02-09 — Step 4 Phase C: Multi-Agent Constitutional AI Governance
+
+**Status**: ✅ IMPLEMENTED
+**Severity**: HIGH — Governance layer for AI-driven proposals
+
+#### Phase C Definition
+
+Phase C introduces a **separate governance job** that runs **weekly (Sunday 3:15 AM ET)** during crypto downtime. It analyzes paper and live trading summaries using a **4-agent AI system** and produces **non-binding proposals** that require **human approval** before any changes are applied.
+
+**Critical Architecture Constraint**: Phase C runs **OUTSIDE** trading containers. It has **read-only access** to daily summaries and **ZERO ability** to modify configs, mutate universes, or apply changes automatically.
+
+#### Multi-Agent Architecture
+
+The governance pipeline consists of 4 specialized agents:
+
+1. **Proposer (Agent 1)**: Analyzes trading summaries, identifies opportunities
+   - Input: 7 days of daily_summary.jsonl from paper and live scopes
+   - Output: Structured proposal with rationale, evidence, confidence
+   - Logic: Identifies scan starvation, dead symbols, missed signals
+   - Constitutional requirement: `non_binding = True` (always)
+
+2. **Critic (Agent 2)**: Assumes proposal is WRONG (adversarial stance)
+   - Input: Proposal from Agent 1
+   - Output: Criticisms, counter-evidence, recommendation
+   - Logic: Identifies recency bias, overfitting, liquidity risks
+   - Recommendation options: PROCEED, CAUTION, REJECT
+
+3. **Auditor (Agent 3)**: Enforces constitutional rules (pure compliance)
+   - Input: Proposal from Agent 1
+   - Output: Constitutional audit with violations list
+   - Logic: Validates proposal_type, non_binding, symbols, limits
+   - **ZERO market analysis** — pure format and rule validation
+   - Automatic pipeline termination if audit fails
+
+4. **Synthesizer (Agent 4)**: Builds human-readable decision packet
+   - Input: Proposal + Critique + Audit
+   - Output: Summary, key risks, final recommendation, confidence
+   - Logic: Combines all inputs into executive summary
+   - Final recommendations: APPROVE, REJECT, DEFER
+
+#### Constitutional Rules (Hard-Coded, Non-Bypassable)
+
+All rules enforced in `governance/constitution.py`:
+
+- **Allowed proposal types**: ADD_SYMBOLS, REMOVE_SYMBOLS, ADJUST_RULE, ADJUST_THRESHOLD
+- **Forbidden proposal types**: EXECUTE_TRADE, MODIFY_POSITION, BYPASS_RISK, DISABLE_SAFETY, OVERRIDE_RULE
+- **Symbol limits**: Max 5 add per proposal, max 3 remove per proposal
+- **Non-binding requirement**: ALL proposals must have `non_binding = True` (constitutional)
+- **Forbidden language**: execute, auto-apply, bypass, override, force, disable, skip, inject
+
+#### Scheduling & Execution
+
+- **Frequency**: Weekly (Sunday only)
+- **Time**: 3:15 AM ET (8:15 AM UTC) during crypto downtime
+- **Duration**: ~5 minutes (4 AI calls + persistence)
+- **Entry point**: `governance_main.py --run-once`
+- **Execution mode**: Separate job/container (not inside trading)
+
+#### Workflow: Non-Binding Proposal to Approval
+
+```
+[Governance Job Runs] → [Read Summaries] → [Agent 1: Propose] → [Agent 2: Critique]
+→ [Agent 3: Audit] → [If PASS] → [Agent 4: Synthesize] → [Persist Artifacts]
+→ [Log Event] → [EXIT — No Application] → [HUMAN REVIEWS & APPROVES]
+```
+
+#### Fail-Safe Guarantees
+
+- **Job fails**: Trading continues unchanged (no retry)
+- **No proposal**: Trading continues unchanged
+- **Constitutional violation**: Pipeline stops, violation logged
+- **No approval**: Trading continues unchanged indefinitely
+
+#### Persistence: Append-Only
+
+```
+persist/governance/crypto/proposals/<proposal_id>/
+  - proposal.json (Proposer)
+  - critique.json (Critic)
+  - audit.json (Auditor)
+  - synthesis.json (Synthesizer)
+  - approval.json (Human approval, if approved)
+
+persist/governance/crypto/logs/
+  - governance_events.jsonl (Append-only event log)
+```
+
+#### Files Created
+
+**Modules** (10 files):
+- `governance/` — Package with __init__.py
+- `governance/schemas.py` — Pydantic validation
+- `governance/constitution.py` — Constitutional rules
+- `governance/persistence.py` — Artifact storage
+- `governance/summary_reader.py` — JSONL reader
+- `governance/crypto_governance_job.py` — Orchestrator
+- `config/governance_settings.py` — Configuration
+
+**Agents** (4 files):
+- `governance/agents/proposer.py` — Agent 1
+- `governance/agents/critic.py` — Agent 2
+- `governance/agents/auditor.py` — Agent 3
+- `governance/agents/synthesizer.py` — Agent 4
+
+**Entry point** (1 file):
+- `governance_main.py` — CLI
+
+**Tests** (5 files):
+- `tests/governance/test_constitution.py`
+- `tests/governance/test_proposer.py`
+- `tests/governance/test_auditor.py`
+- `tests/governance/test_persistence.py`
+- `tests/governance/test_governance_job_integration.py`
+
+#### Testing
+
+```bash
+# All governance tests
+pytest tests/governance/ -v
+
+# Dry-run (read only)
+python governance_main.py --dry-run
+
+# Real run
+python governance_main.py --run-once
+```
+
+#### Hard Constraints
+
+**MUST NOT**:
+- Access brokers or executors
+- Modify config files automatically
+- Hot-reload universes or parameters
+- Run inside trading containers
+
+**CAN**:
+- Read immutable daily summaries
+- Propose changes in structured format
+- Enforce constitutional rules
+- Generate human-readable reports
+
 ### 2026-02-08 — Step 4 Phase B: Expanded Universe + Scan Prioritization
 
 **Status**: ✅ IN PROGRESS

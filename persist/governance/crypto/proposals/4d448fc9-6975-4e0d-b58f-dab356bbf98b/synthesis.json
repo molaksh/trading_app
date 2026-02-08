@@ -1,0 +1,10 @@
+{
+  "proposal_id": "4d448fc9-6975-4e0d-b58f-dab356bbf98b",
+  "summary": "Adjust adjust_rule for paper trading. Analysis suggests efficiency improvements.",
+  "key_risks": [
+    "Proposal appears sound but proceed with caution due to inherent market uncertainty.",
+    "Threshold/rule changes should be monitored for impact on win rate."
+  ],
+  "final_recommendation": "DEFER",
+  "confidence": 0.45
+}
