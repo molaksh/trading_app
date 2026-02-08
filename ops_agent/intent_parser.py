@@ -24,7 +24,7 @@ class IntentParser:
     # Intent patterns (question -> intent_type)
     INTENT_PATTERNS = {
         r"why.*(?:no|not).*trade|why.*no.*signal": "EXPLAIN_NO_TRADES",
-        r"why.*trade|why.*happen|why.*execut": "EXPLAIN_TRADES",
+        r"fill|what.*filled|executed.*trade": "EXPLAIN_TRADES",
         r"what.*regime|what mode|current regime|regime\s*\?": "EXPLAIN_REGIME",
         r"block|what.*block": "EXPLAIN_BLOCKS",
         r"what.*happen.*today|today.*what|daily.*status": "EXPLAIN_TODAY",
@@ -33,6 +33,9 @@ class IntentParser:
         r"job.*health|job.*status|stale|job.*running": "EXPLAIN_JOBS",
         r"error|exception|crash|problem|fail": "EXPLAIN_ERRORS",
         r"hold|position|what.*own|my.*stock|portfolio": "EXPLAIN_HOLDINGS",
+        r"model|ml.*model|ml.*state|training": "EXPLAIN_ML",
+        r"reconcili|rec.*state|rec.*health": "EXPLAIN_RECONCILIATION",
+        r"health|system.*health|overall.*status": "EXPLAIN_HEALTH",
         r"status|how.*doing|current.*state": "STATUS",
         r"monitor.*|watch.*|alert.*|notif.*": "START_WATCH",
         r"stop.*monitor|stop.*watch|cancel.*alert": "STOP_WATCH",

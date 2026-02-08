@@ -12,6 +12,10 @@ from ops_agent.observability_reader import ObservabilityReader
 from ops_agent.summary_reader import SummaryReader
 from ops_agent.logs_reader import LogsReader
 from ops_agent.positions_reader import PositionsReader
+from ops_agent.trades_reader import TradesReader
+from ops_agent.errors_reader import ErrorsReader
+from ops_agent.reconciliation_reader import ReconciliationReader
+from ops_agent.ml_reader import MLReader
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +28,10 @@ class ResponseGenerator:
         self.summary_reader = SummaryReader(logs_root)
         self.logs_reader = LogsReader(logs_root)
         self.positions_reader = PositionsReader(logs_root)
+        self.trades_reader = TradesReader(logs_root)
+        self.errors_reader = ErrorsReader(logs_root)
+        self.rec_reader = ReconciliationReader(logs_root)
+        self.ml_reader = MLReader(logs_root)
 
     def generate_response(self, intent: Intent) -> str:
         """
@@ -103,6 +111,14 @@ class ResponseGenerator:
             return self._explain_errors(scope)
         elif intent.intent_type == "EXPLAIN_HOLDINGS":
             return self._explain_holdings(scope)
+        elif intent.intent_type == "EXPLAIN_TRADES":
+            return self._explain_trade_fills(scope)
+        elif intent.intent_type == "EXPLAIN_ML":
+            return self._explain_ml_status(scope)
+        elif intent.intent_type == "EXPLAIN_RECONCILIATION":
+            return self._explain_reconciliation_status(scope)
+        elif intent.intent_type == "EXPLAIN_HEALTH":
+            return self._explain_health_check(scope)
         else:  # STATUS
             return self._explain_status(scope, obs)
 
@@ -400,6 +416,57 @@ class ResponseGenerator:
                 results.append(f"💼 {scope}: {count} open positions")
 
         return "💼 Holdings (all scopes):\n" + "\n".join(results)
+
+    def _explain_trade_fills(self, scope: str) -> str:
+        """Show trade fills for a scope."""
+        count = self.trades_reader.get_trade_count(scope)
+        if count == 0:
+            return f"📈 {scope}: No trades filled yet"
+
+        summary = self.trades_reader.get_trade_summary(scope)
+        if not summary:
+            return f"📈 {scope}: No trade data"
+
+        return f"📈 {scope} Recent Fills ({count} total):\n{summary}"
+
+    def _explain_ml_status(self, scope: str) -> str:
+        """Show ML model status."""
+        status = self.ml_reader.get_ml_status(scope)
+        if not status:
+            return f"🤖 {scope}: No ML state"
+
+        return f"🤖 {scope} ML Status:\n{status}"
+
+    def _explain_reconciliation_status(self, scope: str) -> str:
+        """Show reconciliation status."""
+        status = self.rec_reader.get_reconciliation_status(scope)
+        if not status:
+            return f"✓ {scope}: No reconciliation data"
+
+        healthy = self.rec_reader.is_healthy(scope)
+        emoji = "✓" if healthy else "⚠️"
+        return f"{emoji} {scope} Reconciliation:\n{status}"
+
+    def _explain_health_check(self, scope: str) -> str:
+        """Show overall system health."""
+        results = []
+
+        # Trading active
+        obs = self.obs_reader.get_snapshot(scope)
+        if obs:
+            emoji = "✓" if obs.trading_active else "⛔"
+            results.append(f"{emoji} Trading: {'Active' if obs.trading_active else 'Inactive'}")
+
+        # Reconciliation health
+        rec_healthy = self.rec_reader.is_healthy(scope)
+        results.append(f"✓ Reconciliation: {'Healthy' if rec_healthy else 'Issues'}")
+
+        # Errors
+        has_errors = self.errors_reader.has_errors(scope)
+        emoji = "⚠️" if has_errors else "✓"
+        results.append(f"{emoji} Errors: {'Present' if has_errors else 'None'}")
+
+        return f"🏥 {scope} Health Check:\n  " + "\n  ".join(results)
 
     def _infer_default_scope(self) -> Optional[str]:
         """Infer default scope (try all available scopes, prefer live)."""
