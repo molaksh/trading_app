@@ -261,8 +261,7 @@ class RuntimeObservability:
 
     def emit_daily_summary(self, force: bool = False) -> None:
         scope = get_scope()
-        if scope.env.lower() != "live":
-            return
+        # Emit daily summaries for ALL scopes (live, paper, all strategies)
 
         today = date.today().isoformat()
         if self._last_summary_date == today and not force:
