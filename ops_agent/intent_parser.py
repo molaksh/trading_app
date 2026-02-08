@@ -72,6 +72,21 @@ class IntentParser:
         # 3. Check if user wants info about all containers
         all_scopes = any(word in text_lower for word in ["all", "containers", "everything", "all containers"])
 
+        # Also detect multi-scope patterns like "paper and live", "both", etc.
+        if not all_scopes:
+            multi_scope_patterns = [
+                r"paper\s+(?:and|&|\+)\s+live",
+                r"live\s+(?:and|&|\+)\s+paper",
+                r"both\s+paper\s+and\s+live",
+                r"both\s+live\s+and\s+paper",
+                r"crypto.*and.*alpaca|alpaca.*and.*crypto",
+                r"swing.*and.*crypto|crypto.*and.*swing",
+            ]
+            for pattern in multi_scope_patterns:
+                if re.search(pattern, text_lower):
+                    all_scopes = True
+                    break
+
         # 4. Extract TTL for watches
         ttl_hours = None
         if intent_type == "START_WATCH":
