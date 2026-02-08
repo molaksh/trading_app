@@ -483,6 +483,13 @@ class TradingScheduler:
 
             self._run_health_check(now)
 
+            # Emit daily summary for observability
+            try:
+                from runtime.observability import get_observability
+                get_observability().check_daily_summary()
+            except Exception as e:
+                logger.debug(f"Daily summary check failed: {e}")
+
             time.sleep(self.tick_seconds)
 
 
