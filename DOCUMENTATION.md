@@ -163,6 +163,147 @@ python governance_main.py --run-once
 - Enforce constitutional rules
 - Generate human-readable reports
 
+#### Quick Start Guide
+
+**Run Dry-Run (Testing, No Persistence)**:
+```bash
+python governance_main.py --dry-run
+```
+- Reads summaries
+- Runs full 4-agent pipeline
+- Does NOT write artifacts
+- Safe for testing
+
+**Run Real Job (Full Persistence)**:
+```bash
+python governance_main.py --run-once
+```
+- Reads summaries
+- Runs full 4-agent pipeline
+- Writes artifacts to `persist/governance/crypto/proposals/<id>/`
+- Logs events to `governance_events.jsonl`
+
+**Run All Tests**:
+```bash
+pytest tests/test_governance/ -v
+```
+- 53 tests
+- 100% passing
+- Comprehensive coverage of all components
+
+#### Architecture Diagram
+
+```
+[Summary Data]
+    ↓
+[Agent 1: Proposer] → Generates proposal
+    ↓
+[Agent 2: Critic] → Reviews for risks
+    ↓
+[Agent 3: Auditor] → Checks constitutional rules (if fails → STOP)
+    ↓
+[Agent 4: Synthesizer] → Creates human-readable summary
+    ↓
+[Persist Artifacts] → Write to governance/
+    ↓
+[EXIT] → No application, waiting for human approval
+```
+
+#### Configuration Options
+
+All settings in `config/governance_settings.py`:
+
+```python
+GOVERNANCE_ENABLED = True              # Enable/disable job
+GOVERNANCE_RUN_TIME_UTC = "08:15"      # 3:15 AM ET
+GOVERNANCE_LOOKBACK_DAYS = 7           # Analyze 7 days
+MAX_SYMBOLS_ADDED_PER_PROPOSAL = 5    # Limit per proposal
+MAX_SYMBOLS_REMOVED_PER_PROPOSAL = 3  # Limit per proposal
+PROPOSAL_EXPIRY_HOURS = 72            # Expiry timeout
+```
+
+#### Artifact Output Example
+
+**What Gets Written**:
+```
+persist/governance/crypto/proposals/<proposal_id>/
+├── proposal.json           # What Proposer suggests
+├── critique.json           # What Critic thinks
+├── audit.json              # Constitutional compliance
+├── synthesis.json          # Human-readable summary
+└── approval.json           # Human approval record (if approved)
+
+persist/governance/crypto/logs/
+└── governance_events.jsonl # Event log (append-only)
+```
+
+**Example Synthesis Output** (what humans review):
+```json
+{
+  "proposal_id": "abc-123",
+  "summary": "Add BTC and ETH to live universe. Paper shows strong signals...",
+  "key_risks": [
+    "Recency bias from 2-day strong regime",
+    "Liquidity concerns for altcoins"
+  ],
+  "final_recommendation": "DEFER",
+  "confidence": 0.65
+}
+```
+
+#### Scheduling with Cron
+
+Run weekly (Sunday 3:15 AM ET) during crypto downtime:
+```bash
+15 8 * * 0 cd /app && python governance_main.py --run-once >> /var/log/governance.log 2>&1
+```
+
+#### Core File Locations
+
+**Governance Modules**:
+- `governance/` — Main governance package
+- `governance/agents/` — 4 agent implementations
+- `governance/constitution.py` — Hard-coded rules
+- `governance/persistence.py` — Artifact storage
+- `governance/summary_reader.py` — Daily summary reader
+
+**Configuration**:
+- `config/governance_settings.py` — All settings
+
+**Entry Point**:
+- `governance_main.py` — CLI (--run-once, --dry-run)
+
+**Tests** (53 tests, 100% passing):
+- `tests/test_governance/` — Comprehensive test suite
+
+#### Troubleshooting
+
+**"Governance job found no proposal opportunities"**
+- No summaries found in logs
+- Check that daily_summary.jsonl exists in:
+  - `logs/paper_kraken_crypto_global/logs/daily_summary.jsonl`
+  - `logs/live_kraken_crypto_global/logs/daily_summary.jsonl`
+
+**"Constitutional violations detected"**
+- Proposal violated hard-coded rules
+- Check `violations` field in audit.json
+- Common issues: non_binding=false, forbidden proposal type, too many symbols
+
+**Artifacts not written in dry-run**
+- Expected behavior! Dry-run intentionally doesn't persist
+- Use `--run-once` for real execution
+
+#### Key Design Principles
+
+1. **Separate Execution**: Runs outside trading containers (own job)
+2. **Non-Binding**: All proposals require human approval
+3. **Read-Only**: No access to brokers or config mutations
+4. **Constitutional**: Hard-coded rules enforced in code
+5. **Fail-Safe**: If idle, trading continues unchanged
+6. **Immutable**: Append-only artifact storage (JSONL)
+
+---
+
 ### 2026-02-08 — Step 4 Phase B: Expanded Universe + Scan Prioritization
 
 **Status**: ✅ IN PROGRESS
