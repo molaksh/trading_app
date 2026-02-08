@@ -258,6 +258,61 @@ Run weekly (Sunday 3:15 AM ET) during crypto downtime:
 15 8 * * 0 cd /app && python governance_main.py --run-once >> /var/log/governance.log 2>&1
 ```
 
+#### Deployment & Execution
+
+**Launcher Script** (follows existing pattern):
+```bash
+./run_governance_crypto.sh              # Real execution (with persistence)
+./run_governance_crypto.sh --dry-run    # Dry-run (read-only, no artifacts)
+```
+
+**Docker Compose**:
+```bash
+# Real execution (one-time job, exits after completion)
+docker-compose run --rm governance-crypto python governance_main.py --run-once
+
+# View docker-compose service
+docker-compose config | grep -A 50 "governance-crypto:"
+```
+
+**Environment Variables**:
+```bash
+GOVERNANCE_ENABLED=true                 # Enable/disable job
+GOVERNANCE_LOOKBACK_DAYS=7              # Analyze 7 days
+GOVERNANCE_AI_MODEL=gpt-4-turbo         # AI model choice
+PERSISTENCE_ROOT=/app/persist           # Artifact storage location
+```
+
+**Container Behavior**:
+- **Type**: One-time execution (not a daemon)
+- **Restart Policy**: `restart: "no"` (exits after completion)
+- **Volume**: Mounts shared crypto-data volume
+- **Logging**: Console + file-based logging with timestamps
+- **Duration**: ~5 minutes per run
+
+**Log Files**:
+```
+persist/governance_logs/
+└── governance_YYYY-MM-DD_HHMMSS.log    # Timestamped job logs
+
+persist/governance/crypto/logs/
+└── governance_events.jsonl             # Append-only event log
+```
+
+**Service Configuration** (docker-compose.yml):
+```yaml
+governance-crypto:
+  build: .
+  image: governance-crypto
+  command: python governance_main.py --run-once
+  environment:
+    - GOVERNANCE_ENABLED=true
+    - PERSISTENCE_ROOT=/app/persist
+  volumes:
+    - crypto-data:/app/persist
+  restart: "no"  # ONE-TIME JOB (not daemon)
+```
+
 #### Core File Locations
 
 **Governance Modules**:
@@ -270,8 +325,10 @@ Run weekly (Sunday 3:15 AM ET) during crypto downtime:
 **Configuration**:
 - `config/governance_settings.py` — All settings
 
-**Entry Point**:
-- `governance_main.py` — CLI (--run-once, --dry-run)
+**Entry Points**:
+- `governance_main.py` — Python CLI (--run-once, --dry-run)
+- `run_governance_crypto.sh` — Launcher script (Docker-based execution)
+- `docker-compose.yml` — Service definition
 
 **Tests** (53 tests, 100% passing):
 - `tests/test_governance/` — Comprehensive test suite
