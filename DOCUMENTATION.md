@@ -22,6 +22,129 @@
 ## �🔔 Latest Updates (Newest First)
 
 
+### 2026-02-09 — Step 5 Phase E: Interactive Ops & Concierge Agent
+
+**Status**: ✅ IMPLEMENTED (Phase E v1)
+**Severity**: MEDIUM — Human-friendly Telegram ops interface
+
+#### Phase E Overview
+
+Phase E is a **READ-ONLY, SAFE, BOUNDED Telegram bot** that answers one question:
+
+> **"Do I need to care right now?"**
+
+It explains:
+- Why trades are or aren't happening
+- What regime the system is in
+- Whether anything is blocked
+- Whether governance is waiting for human input
+
+Completely passive: observes state, answers questions, never modifies anything.
+
+#### Quick Start
+
+**1. Get Telegram Bot Token**:
+- Message `@BotFather` on Telegram
+- Send `/newbot`, follow prompts
+- Copy token
+
+**2. Get Your Chat ID**:
+- Message your bot any text
+- Run: `curl https://api.telegram.org/bot<TOKEN>/getUpdates`
+- Find your chat ID in response
+
+**3. Start Agent**:
+```bash
+export TELEGRAM_BOT_TOKEN='your-token'
+export TELEGRAM_ALLOWED_CHAT_IDS='your-chat-id'
+./run_ops_agent.sh
+```
+
+**4. Test**:
+- Message bot: "Why no trades?"
+
+#### Example Conversations
+
+```
+User: Why no trades?
+Bot:  ⛔ live_crypto: Not trading — PANIC regime (safety off)
+
+User: What regime?
+Bot:  🟡 live_crypto: NEUTRAL
+
+User: What happened today?
+Bot:  📊 live_crypto: 3 trades, $124.50 PnL, -2.3% drawdown
+
+User: Is governance waiting?
+Bot:  ⚠️ 1 governance proposal awaiting your review
+```
+
+#### Capabilities (Phase E v1)
+
+**On-Demand Explanations** (deterministic, no speculation):
+- Explains why trades are/aren't happening
+- Shows current regime
+- Lists any blocks
+- Reports daily stats
+- Checks governance status
+
+**Data Sources** (read-only, graceful):
+- `logs/<scope>/observability/latest_snapshot.json` – Latest state
+- `logs/<scope>/logs/daily_summary.jsonl` – Performance history
+- `logs/governance/crypto/proposals/` – Governance status
+
+#### Hard Constraints
+
+Agent MUST NEVER:
+- Trade
+- Approve governance
+- Modify configs
+- Restart containers
+- Create jobs or cron
+- Change any system state
+
+If user asks for mutation: Bot refuses, explains current state.
+
+#### Deployment
+
+**Start** (24/7 Telegram polling):
+```bash
+./run_ops_agent.sh
+```
+
+**View Logs**:
+```bash
+docker logs -f ops-agent
+```
+
+**Stop**:
+```bash
+docker stop ops-agent
+```
+
+#### Architecture
+
+**Separate ops-agent container**:
+- 24/7 operation
+- Polls Telegram API every 5 seconds
+- Single-user access v1
+- READ-ONLY to all system state
+- Logs interactions (append-only)
+
+**Components**:
+- Telegram handler (polling + validation)
+- Intent parser (deterministic grammar)
+- Observability reader (latest state)
+- Summary reader (daily stats)
+- Response generator (concise replies)
+
+#### Phase E v1 vs v2
+
+**v1 (current)**: On-demand explanations
+**v2 (future)**: Temporary monitoring with TTL, predefined digests, regime alerts
+
+---
+
 ### 2026-02-09 — Step 4 Phase C: Multi-Agent Constitutional AI Governance
 
 **Status**: ✅ IMPLEMENTED
