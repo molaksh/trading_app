@@ -5,6 +5,7 @@ Generate concise, deterministic responses to user intents.
 import logging
 from typing import Optional, Tuple
 from datetime import datetime
+from pathlib import Path
 
 from ops_agent.schemas import Intent, OpsDiagnostic, ObservabilitySnapshot
 from ops_agent.observability_reader import ObservabilityReader
@@ -28,6 +29,19 @@ class ResponseGenerator:
 
         Returns plain text response (no Markdown, no speculation).
         """
+        # If user asked for "all containers", check all scopes
+        if intent.all_scopes:
+            if intent.intent_type == "EXPLAIN_JOBS":
+                return self._explain_all_jobs()
+            elif intent.intent_type == "EXPLAIN_ERRORS":
+                return self._explain_all_errors()
+            elif intent.intent_type == "EXPLAIN_TODAY":
+                return self._explain_all_today()
+            elif intent.intent_type == "EXPLAIN_AI_RANKING":
+                return self._explain_all_ai_rankings()
+            elif intent.intent_type in ["STATUS", "EXPLAIN_NO_TRADES"]:
+                return self._explain_all_status()
+
         # For system-wide checks (jobs, errors), check all scopes if not specified
         if intent.intent_type in ["EXPLAIN_JOBS", "EXPLAIN_ERRORS"] and not intent.scope:
             if intent.intent_type == "EXPLAIN_JOBS":
@@ -273,6 +287,82 @@ class ResponseGenerator:
             return "⏳ No log data found"
 
         return "📋 All containers:\n" + "\n".join(results)
+
+    def _explain_all_today(self) -> str:
+        """Get today's stats across all scopes."""
+        all_scopes = [
+            "live_kraken_crypto_global",
+            "live_alpaca_swing_us",
+            "paper_kraken_crypto_global",
+            "paper_alpaca_swing_us",
+        ]
+
+        results = []
+        for scope in all_scopes:
+            latest = self.summary_reader.get_latest_summary(scope)
+            if latest:
+                results.append(
+                    f"📊 {scope}: {latest.trades_executed} trades, "
+                    f"${latest.realized_pnl:,.2f} PnL, {latest.max_drawdown:.1%} DD"
+                )
+            else:
+                results.append(f"⏳ {scope}: No data")
+
+        return "📊 Today across all scopes:\n" + "\n".join(results)
+
+    def _explain_all_ai_rankings(self) -> str:
+        """Get AI rankings across all trading scopes."""
+        all_scopes = [
+            "live_kraken_crypto_global",
+            "live_alpaca_swing_us",
+            "paper_kraken_crypto_global",
+            "paper_alpaca_swing_us",
+        ]
+
+        results = []
+        for scope in all_scopes:
+            ranking = self.logs_reader.get_latest_ai_ranking(scope)
+            if ranking:
+                top_3 = ", ".join(ranking.get("top_3", []))
+                results.append(f"🤖 {scope}: {top_3}")
+            else:
+                results.append(f"⏳ {scope}: No ranking data")
+
+        return "🤖 AI Rankings (all scopes):\n" + "\n".join(results)
+
+    def _explain_all_status(self) -> str:
+        """Get status across all scopes."""
+        all_scopes = [
+            "live_kraken_crypto_global",
+            "live_alpaca_swing_us",
+            "paper_kraken_crypto_global",
+            "paper_alpaca_swing_us",
+            "governance",
+        ]
+
+        results = []
+        for scope in all_scopes:
+            if scope == "governance":
+                # Governance doesn't have observability data
+                pending = 0
+                proposals_dir = Path("logs/governance/crypto/proposals")
+                if proposals_dir.exists():
+                    for proposal_dir in proposals_dir.iterdir():
+                        if proposal_dir.is_dir():
+                            if not (proposal_dir / "approval.json").exists() and not (
+                                proposal_dir / "rejection.json"
+                            ).exists():
+                                pending += 1
+                results.append(f"🏛️ governance: {pending} pending proposals")
+            else:
+                latest = self.summary_reader.get_latest_summary(scope)
+                if latest:
+                    emoji = "🟢" if latest.trades_executed > 0 else "⏸"
+                    results.append(f"{emoji} {scope}: {latest.regime}, {latest.trades_executed} trades")
+                else:
+                    results.append(f"⏳ {scope}: No data")
+
+        return "📋 Status (all containers):\n" + "\n".join(results)
 
     def _infer_default_scope(self) -> Optional[str]:
         """Infer default scope (try all available scopes, prefer live)."""

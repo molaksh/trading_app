@@ -65,14 +65,17 @@ class IntentParser:
         # 2. Detect scope
         scope = self._detect_scope(text_lower)
 
-        # 3. Extract TTL for watches
+        # 3. Check if user wants info about all containers
+        all_scopes = any(word in text_lower for word in ["all", "containers", "everything", "all containers"])
+
+        # 4. Extract TTL for watches
         ttl_hours = None
         if intent_type == "START_WATCH":
             ttl_hours = self._extract_ttl(text_lower)
             if ttl_hours is None:
                 ttl_hours = 24  # Default: 24 hours
 
-        # 4. Detect watch condition
+        # 5. Detect watch condition
         condition = None
         if intent_type == "START_WATCH":
             condition = self._detect_watch_condition(text_lower)
@@ -83,6 +86,7 @@ class IntentParser:
         return Intent(
             intent_type=intent_type,
             scope=scope,
+            all_scopes=all_scopes,
             condition=condition,
             ttl_hours=ttl_hours,
             confidence=confidence,

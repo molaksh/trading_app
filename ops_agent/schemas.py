@@ -12,6 +12,7 @@ class Intent(BaseModel):
 
     intent_type: str  # EXPLAIN_*, STATUS, START_WATCH, STOP_WATCH
     scope: Optional[str] = None  # live_crypto, paper_crypto, live_us, paper_us, governance
+    all_scopes: bool = False  # Check all containers
     condition: Optional[str] = None  # For watches: regime_change, governance_pending, etc.
     ttl_hours: Optional[int] = None  # For watches: default 24
     confidence: float = Field(ge=0, le=1)  # 0-1 confidence in parsing
