@@ -11,6 +11,7 @@ from ops_agent.schemas import Intent, OpsDiagnostic, ObservabilitySnapshot
 from ops_agent.observability_reader import ObservabilityReader
 from ops_agent.summary_reader import SummaryReader
 from ops_agent.logs_reader import LogsReader
+from ops_agent.positions_reader import PositionsReader
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +23,7 @@ class ResponseGenerator:
         self.obs_reader = ObservabilityReader(logs_root)
         self.summary_reader = SummaryReader(logs_root)
         self.logs_reader = LogsReader(logs_root)
+        self.positions_reader = PositionsReader(logs_root)
 
     def generate_response(self, intent: Intent) -> str:
         """
@@ -39,6 +41,8 @@ class ResponseGenerator:
                 return self._explain_all_today()
             elif intent.intent_type == "EXPLAIN_AI_RANKING":
                 return self._explain_all_ai_rankings()
+            elif intent.intent_type == "EXPLAIN_HOLDINGS":
+                return self._explain_all_holdings()
             elif intent.intent_type in ["STATUS", "EXPLAIN_NO_TRADES"]:
                 return self._explain_all_status()
 
@@ -97,6 +101,8 @@ class ResponseGenerator:
             return self._explain_jobs(scope)
         elif intent.intent_type == "EXPLAIN_ERRORS":
             return self._explain_errors(scope)
+        elif intent.intent_type == "EXPLAIN_HOLDINGS":
+            return self._explain_holdings(scope)
         else:  # STATUS
             return self._explain_status(scope, obs)
 
@@ -363,6 +369,37 @@ class ResponseGenerator:
                     results.append(f"⏳ {scope}: No data")
 
         return "📋 Status (all containers):\n" + "\n".join(results)
+
+    def _explain_holdings(self, scope: str) -> str:
+        """Show holdings for a scope."""
+        count = self.positions_reader.get_position_count(scope)
+        if count == 0:
+            return f"💼 {scope}: No open positions"
+
+        summary = self.positions_reader.get_position_summary(scope)
+        if not summary:
+            return f"💼 {scope}: No holdings data"
+
+        return f"💼 {scope} Holdings ({count} positions):\n{summary}"
+
+    def _explain_all_holdings(self) -> str:
+        """Get holdings across all scopes."""
+        all_scopes = [
+            "live_kraken_crypto_global",
+            "live_alpaca_swing_us",
+            "paper_kraken_crypto_global",
+            "paper_alpaca_swing_us",
+        ]
+
+        results = []
+        for scope in all_scopes:
+            count = self.positions_reader.get_position_count(scope)
+            if count == 0:
+                results.append(f"💼 {scope}: No positions")
+            else:
+                results.append(f"💼 {scope}: {count} open positions")
+
+        return "💼 Holdings (all scopes):\n" + "\n".join(results)
 
     def _infer_default_scope(self) -> Optional[str]:
         """Infer default scope (try all available scopes, prefer live)."""

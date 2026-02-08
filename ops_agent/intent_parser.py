@@ -32,6 +32,7 @@ class IntentParser:
         r"ai.*rank|what.*ai|top.*symbol|symbol.*rank": "EXPLAIN_AI_RANKING",
         r"job.*health|job.*status|stale|job.*running": "EXPLAIN_JOBS",
         r"error|exception|crash|problem|fail": "EXPLAIN_ERRORS",
+        r"hold|position|what.*own|my.*stock|portfolio": "EXPLAIN_HOLDINGS",
         r"status|how.*doing|current.*state": "STATUS",
         r"monitor.*|watch.*|alert.*|notif.*": "START_WATCH",
         r"stop.*monitor|stop.*watch|cancel.*alert": "STOP_WATCH",
