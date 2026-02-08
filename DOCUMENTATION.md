@@ -86,12 +86,24 @@ Bot:  ⚠️ 1 governance proposal awaiting your review
 - Shows current regime
 - Lists any blocks
 - Reports daily stats
+- Shows recent trade fills and execution history
+- Reports holdings and positions with P&L
+- Shows error history and system health
+- Reports ML model state and training status
+- Checks reconciliation health
 - Checks governance status
 
 **Data Sources** (read-only, graceful):
 - `logs/<scope>/observability/latest_snapshot.json` – Latest state
-- `logs/<scope>/logs/daily_summary.jsonl` – Performance history
-- `logs/governance/crypto/proposals/` – Governance status
+- `logs/<scope>/logs/daily_summary.jsonl` – Performance history (all 4 scopes)
+- `logs/<scope>/logs/ai_advisor_calls.jsonl` – AI ranking decisions
+- `logs/<scope>/logs/scheduler_state.json` – Scheduler health
+- `logs/<scope>/state/open_positions.json` – Current holdings with P&L
+- `logs/<scope>/ledger/trades.jsonl` – Trade fills and entry/exit history
+- `logs/<scope>/logs/errors.jsonl` – Error events with timestamps
+- `logs/<scope>/state/reconciliation_cursor.json` – Reconciliation health status
+- `logs/<scope>/state/ml_state.json` – ML model version and training state
+- `logs/governance/crypto/proposals/` – Governance proposals and status
 
 #### Hard Constraints
 
@@ -135,12 +147,68 @@ docker stop ops-agent
 - Telegram handler (polling + validation)
 - Intent parser (deterministic grammar)
 - Observability reader (latest state)
-- Summary reader (daily stats)
+- Summary reader (daily stats, all 4 scopes)
+- AI advisor reader (ranking decisions)
+- Scheduler reader (job health)
+- Positions reader (holdings with P&L)
+- Trades reader (fill history)
+- Errors reader (error events)
+- Reconciliation reader (rec health)
+- ML reader (model state & training)
 - Response generator (concise replies)
+
+#### Query Types & Examples
+
+**Regime & Trading Status**:
+- "What regime?" → Current market regime
+- "Why no trades?" → Explains why trading is blocked
+- "What happened today?" → Daily summary with stats
+- "Status" → Overall system status
+
+**Execution & Holdings**:
+- "What's my position?" → Current holdings with P&L
+- "What filled?" → Recent trade fills and entry/exit prices
+- "Show my portfolio" → Holdings summary across scopes
+
+**System Health**:
+- "Any errors?" → Recent error events
+- "System health?" → Overall health check (trading, reconciliation, errors)
+- "Is it healthy?" → Health status with details
+- "Check all containers" → Info about all 4 trading scopes
+
+**ML & Model State**:
+- "What's the AI ranking?" → Current AI advisor state
+- "Model status?" → ML model version and training timestamp
+- "ML state?" → Complete ML model state details
+
+**Reconciliation**:
+- "Rec health?" → Reconciliation status with any issues
+- "Reconciliation status?" → Detailed rec state
+
+**Governance**:
+- "Any proposals?" → Pending governance proposals
+- "Governance status?" → Governance state
+
+**Multi-Scope Queries**:
+- "all" or "containers" or "everything" → Returns info for all 4 scopes
+- "live crypto" / "paper crypto" / "live us" / "paper us" → Specific scope
+
+#### Recent Enhancements (2026-02-09)
+
+**Daily Summaries for All Scopes**: Daily summaries (daily_summary.jsonl) now emit for all 4 trading scopes (live_kraken_crypto_global, paper_kraken_crypto_global, live_alpaca_swing_us, paper_alpaca_swing_us), providing historical performance data for the ops agent to analyze.
+
+**Complete Data Access**: The ops agent can now access all persisted system data:
+- Holdings and positions with P&L
+- Trade fills and entry/exit history
+- Error logs with timestamps
+- Reconciliation health status
+- ML model state and training information
+
+**New Query Types**: Added query patterns for trades, ML state, reconciliation health, and system health checks.
 
 #### Phase E v1 vs v2
 
-**v1 (current)**: On-demand explanations
+**v1 (current)**: On-demand explanations with complete data access
 **v2 (future)**: Temporary monitoring with TTL, predefined digests, regime alerts
 
 ---
