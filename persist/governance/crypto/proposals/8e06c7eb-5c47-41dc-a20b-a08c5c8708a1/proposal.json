@@ -1,0 +1,19 @@
+{
+  "proposal_id": "8e06c7eb-5c47-41dc-a20b-a08c5c8708a1",
+  "environment": "paper",
+  "proposal_type": "ADJUST_RULE",
+  "symbols": [
+    "BTC",
+    "ETH"
+  ],
+  "rationale": "Increase scanning frequency during high-volatility windows. Current scan starvation (0 symbols) indicates capacity underuse.",
+  "evidence": {
+    "missed_signals": 0,
+    "scan_starvation": [],
+    "performance_notes": "Last 7 days: 0 trades executed, PnL -$0.00, no major drawdowns.",
+    "dead_symbols": []
+  },
+  "risk_notes": "Threshold/rule changes should be monitored for impact on win rate.",
+  "confidence": 0.5,
+  "non_binding": true
+}

@@ -19,11 +19,24 @@ from ops_agent.ml_reader import MLReader
 
 logger = logging.getLogger(__name__)
 
+# Type hint for optional v2 components
+try:
+    from ops_agent.duration_tracker import DurationTracker
+    from ops_agent.historical_analyzer import HistoricalAnalyzer
+except ImportError:
+    DurationTracker = None
+    HistoricalAnalyzer = None
+
 
 class ResponseGenerator:
     """Generate deterministic ops explanations."""
 
-    def __init__(self, logs_root: str = "logs"):
+    def __init__(
+        self,
+        logs_root: str = "logs",
+        duration_tracker: Optional["DurationTracker"] = None,
+        historical_analyzer: Optional["HistoricalAnalyzer"] = None,
+    ):
         self.obs_reader = ObservabilityReader(logs_root)
         self.summary_reader = SummaryReader(logs_root)
         self.logs_reader = LogsReader(logs_root)
@@ -32,6 +45,9 @@ class ResponseGenerator:
         self.errors_reader = ErrorsReader(logs_root)
         self.rec_reader = ReconciliationReader(logs_root)
         self.ml_reader = MLReader(logs_root)
+        # v2 components (optional)
+        self.duration_tracker = duration_tracker
+        self.historical_analyzer = historical_analyzer
 
     def generate_response(self, intent: Intent) -> str:
         """
@@ -136,10 +152,26 @@ class ResponseGenerator:
         # Determine reason
         if obs.blocks:
             reason = obs.blocks[0]  # SINGLE dominant reason
-            return f"⛔ {scope}: Not trading — {reason}"
+            response = f"⛔ {scope}: Not trading — {reason}"
+            # v2: Add historical context if analyzer available
+            if self.historical_analyzer and reason:
+                has_occurred = self.historical_analyzer.has_happened_before(
+                    scope, "no_trades"
+                )
+                if has_occurred:
+                    response += " (has occurred before)"
+            return response
 
         if obs.regime == "PANIC":
-            return f"⛔ {scope}: Not trading — in PANIC regime (safety off)"
+            response = f"⛔ {scope}: Not trading — in PANIC regime (safety off)"
+            # v2: Add historical context
+            if self.historical_analyzer:
+                has_occurred = self.historical_analyzer.has_happened_before(
+                    scope, "panic_regime"
+                )
+                if has_occurred:
+                    response += " (has occurred before)"
+            return response
 
         if not obs.trading_active:
             return f"⛔ {scope}: Trading inactive"
@@ -162,7 +194,24 @@ class ResponseGenerator:
         emoji_map = {"RISK_ON": "🟢", "NEUTRAL": "🟡", "RISK_OFF": "🔴", "PANIC": "🔴"}
         emoji = emoji_map.get(regime, "❓")
 
-        return f"{emoji} {scope}: {regime}"
+        response = f"{emoji} {scope}: {regime}"
+
+        # v2: Add duration context if tracker available
+        if self.duration_tracker:
+            duration_fmt = self.duration_tracker.get_duration_formatted(scope)
+            response += f" (for {duration_fmt})"
+
+            # Add historical framing if analyzer available
+            if self.historical_analyzer:
+                duration_hours = self.duration_tracker.get_duration(scope)
+                if duration_hours:
+                    framing = self.historical_analyzer.frame_expectation(
+                        scope, regime, duration_hours / 3600.0
+                    )
+                    if framing:
+                        response += f" {framing}"
+
+        return response
 
     def _explain_blocks(self, scope: str, obs: ObservabilitySnapshot) -> str:
         """Is anything blocked?"""

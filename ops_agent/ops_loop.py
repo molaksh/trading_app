@@ -11,6 +11,9 @@ from ops_agent.intent_parser import parse_telegram_message
 from ops_agent.response_generator import ResponseGenerator
 from ops_agent.schemas import TelegramMessage, OpsEvent
 from ops_agent.persistence import OpsEventLogger
+from typing import Optional
+from ops_agent.watch_manager import WatchManager
+from ops_agent.digest_generator import DigestGenerator
 
 logger = logging.getLogger(__name__)
 
@@ -56,11 +59,15 @@ class OpsLoop:
         response_generator: ResponseGenerator,
         event_logger: OpsEventLogger,
         poll_interval_seconds: int = 5,
+        watch_manager: Optional[WatchManager] = None,
+        digest_generator: Optional[DigestGenerator] = None,
     ):
         self.telegram = telegram_handler
         self.generator = response_generator
         self.event_logger = event_logger
         self.poll_interval = poll_interval_seconds
+        self.watch_manager = watch_manager
+        self.digest_generator = digest_generator
 
     def run(self) -> None:
         """Run the ops loop indefinitely."""
@@ -82,6 +89,15 @@ class OpsLoop:
 
     def _tick(self) -> None:
         """Single tick of the ops loop."""
+        # v2: Evaluate watches first (passive notifications)
+        if self.watch_manager:
+            self.watch_manager.evaluate(self.telegram, self.generator)
+
+        # v2: Send digest if due
+        if self.digest_generator and self.telegram.allowed_chat_ids:
+            for chat_id in self.telegram.allowed_chat_ids:
+                self.digest_generator.send_if_due(self.telegram, chat_id)
+
         # Poll Telegram
         messages = self.telegram.get_updates()
         if not messages:
@@ -138,7 +154,15 @@ def run_ops_loop(
     telegram_handler: TelegramHandler,
     response_generator: ResponseGenerator,
     event_logger: OpsEventLogger,
+    watch_manager: Optional[WatchManager] = None,
+    digest_generator: Optional[DigestGenerator] = None,
 ) -> None:
     """Convenience function to start the ops loop."""
-    loop = OpsLoop(telegram_handler, response_generator, event_logger)
+    loop = OpsLoop(
+        telegram_handler,
+        response_generator,
+        event_logger,
+        watch_manager=watch_manager,
+        digest_generator=digest_generator,
+    )
     loop.run()

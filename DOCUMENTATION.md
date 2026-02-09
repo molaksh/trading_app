@@ -206,10 +206,89 @@ docker stop ops-agent
 
 **New Query Types**: Added query patterns for trades, ML state, reconciliation health, and system health checks.
 
-#### Phase E v1 vs v2
+#### Phase E v2: Temporal Awareness & Passive Notifications
 
-**v1 (current)**: On-demand explanations with complete data access
-**v2 (future)**: Temporary monitoring with TTL, predefined digests, regime alerts
+**Status**: ✅ IMPLEMENTED (2026-02-09)
+**Type**: ENHANCEMENT — Adds temporal context and passive watches to Phase E v1
+
+**What's New**:
+1. **Regime Duration Tracking** — Shows how long each regime has been active
+2. **TTL-Based Watches** — Users can set temporary watches with expiration
+3. **Historical Framing** — Adds expectation context to responses
+4. **Optional Digest Mode** — Scheduled EOD summaries (opt-in)
+
+**Example Conversations (v2)**:
+
+```
+User: watch live_crypto for 2h
+Bot:  ✅ Watch created: regime_change (expires in 2h)
+
+User: what regime?
+Bot:  🟡 live_crypto: NEUTRAL (for 4h 12m) (typical: median ~3h)
+
+User: why no trades?
+Bot:  ⛔ No trades: PANIC regime (has occurred before in similar conditions)
+
+[2 hours later]
+Bot:  ⏱️ Watch expired: regime_change
+```
+
+**Feature Flags** (all default FALSE for backward compatibility):
+- `OPS_ENABLE_WATCHES=true` — Enable watch manager
+- `OPS_ENABLE_DURATION_TRACKING=true` — Enable regime duration tracking
+- `OPS_ENABLE_HISTORICAL_FRAMING=true` — Enable historical context
+- `OPS_ENABLE_DIGESTS=true` — Enable digest generation
+
+**Configuration**:
+```bash
+# Watch settings
+export OPS_WATCH_DEFAULT_TTL_HOURS=24
+export OPS_WATCH_MAX_TTL_HOURS=72
+
+# Digest settings
+export OPS_DIGEST_TIME_UTC="01:00"  # 9 PM ET
+```
+
+**Files Created**:
+- `ops_agent/duration_tracker.py` — Regime duration tracking
+- `ops_agent/watch_manager.py` — Watch lifecycle management
+- `ops_agent/historical_analyzer.py` — Historical context provider
+- `ops_agent/digest_generator.py` — EOD digest generation
+- `config/ops_settings.py` — v2 configuration
+- `persist/ops_agent/regime_history.jsonl` — Regime change history
+- `persist/ops_agent/active_watches.jsonl` — Active watches
+
+**Files Modified**:
+- `ops_agent/ops_loop.py` — Added watch evaluation and digest sending
+- `ops_agent/response_generator.py` — Added duration and historical context
+- `ops_agent/schemas.py` — Added RegimeEvent and DigestSettings
+- `ops_main.py` — Added v2 component initialization
+
+**Backward Compatibility**: ✅ GUARANTEED
+- All v2 features are opt-in via feature flags
+- With all flags disabled (default), Phase E v1 runs unchanged
+- Zero breaking changes to existing APIs
+- Graceful degradation if components missing
+
+**Testing**: 53 unit + integration tests
+- `tests/test_ops_v2/test_duration_tracker.py` (8 tests)
+- `tests/test_ops_v2/test_watch_manager.py` (10 tests)
+- `tests/test_ops_v2/test_historical_analyzer.py` (7 tests)
+- `tests/test_ops_v2/test_digest_generator.py` (6 tests)
+- `tests/test_ops_v2/test_ops_v2_integration.py` (10 tests)
+
+**Phase E v1 vs v2**
+
+| Feature | v1 | v2 |
+|---------|----|----|
+| On-demand explanations | ✅ | ✅ |
+| Regime duration | ❌ | ✅ |
+| TTL-based watches | ❌ | ✅ |
+| Historical context | ❌ | ✅ |
+| Digest mode | ❌ | ✅ |
+| Read-only | ✅ | ✅ |
+| Safe | ✅ | ✅ |
+| Bounded | ✅ | ✅ |
 
 ---
 

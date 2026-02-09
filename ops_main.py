@@ -77,12 +77,70 @@ def main():
     logger.info("✓ Components initialized")
     logger.info("✓ Telegram connection configured")
     logger.info("✓ Event logging ready")
+
+    # 3b. Phase E v2 components (feature-flagged)
+    from config.ops_settings import (
+        ENABLE_WATCHES,
+        ENABLE_DURATION_TRACKING,
+        ENABLE_HISTORICAL_FRAMING,
+        ENABLE_DIGESTS,
+        WATCH_DEFAULT_TTL_HOURS,
+        DIGEST_SCHEDULE_TIME_UTC,
+    )
+
+    watch_manager = None
+    duration_tracker = None
+    historical_analyzer = None
+    digest_generator = None
+
+    # Initialize v2 components if enabled
+    if ENABLE_DURATION_TRACKING:
+        from ops_agent.duration_tracker import DurationTracker
+
+        duration_tracker = DurationTracker(
+            history_file=f"{persistence_root}/ops_agent/regime_history.jsonl"
+        )
+        logger.info("✓ Duration tracking enabled")
+        generator.duration_tracker = duration_tracker
+
+    if ENABLE_HISTORICAL_FRAMING:
+        from ops_agent.historical_analyzer import HistoricalAnalyzer
+
+        historical_analyzer = HistoricalAnalyzer(logs_root=logs_root)
+        logger.info("✓ Historical framing enabled")
+        generator.historical_analyzer = historical_analyzer
+
+    if ENABLE_WATCHES:
+        from ops_agent.watch_manager import WatchManager
+
+        watch_manager = WatchManager(
+            watches_file=f"{persistence_root}/ops_agent/active_watches.jsonl",
+            logs_root=logs_root,
+        )
+        logger.info("✓ Watch manager enabled")
+
+    if ENABLE_DIGESTS:
+        from ops_agent.digest_generator import DigestGenerator
+
+        digest_generator = DigestGenerator(
+            response_generator=generator,
+            enabled=True,
+            schedule_time_utc=DIGEST_SCHEDULE_TIME_UTC,
+        )
+        logger.info("✓ Digest generation enabled")
+
     logger.info("=" * 70)
 
     # 4. Start ops loop
     try:
         logger.info("Starting ops loop (polling Telegram every 5 seconds)...")
-        run_ops_loop(telegram, generator, event_logger)
+        run_ops_loop(
+            telegram,
+            generator,
+            event_logger,
+            watch_manager=watch_manager,
+            digest_generator=digest_generator,
+        )
     except KeyboardInterrupt:
         logger.info("Ops agent stopped by user")
     except Exception as e:

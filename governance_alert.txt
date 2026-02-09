@@ -1,0 +1,19 @@
+================================================================================
+🚨 GOVERNANCE ALERT - PENDING PROPOSALS
+================================================================================
+Timestamp: 2026-02-08T08:51:41.519285
+Pending: 1 proposal(s)
+
+
+[1] PROPOSAL d5dc5531-1432-4f76-a5cd-fdad76c2a436
+    Environment: paper
+    Type: ADJUST_RULE
+    Summary: Adjust adjust_rule for paper trading. Analysis suggests efficiency improvements.
+    Recommendation: DEFER
+    Confidence: 45%
+    Status: AWAITING APPROVAL
+    Artifacts: logs/governance/crypto/proposals/d5dc5531-1432-4f76-a5cd-fdad76c2a436
+
+================================================================================
+ACTION REQUIRED: Review and approve/reject proposals
+================================================================================

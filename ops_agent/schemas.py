@@ -105,3 +105,21 @@ class OpsDiagnostic(BaseModel):
     reason: str  # Single dominant reason
     supporting_data: Dict[str, Any]  # Data backing the answer
     confidence: float
+
+
+class RegimeEvent(BaseModel):
+    """Regime change event for duration tracking."""
+
+    timestamp: datetime
+    scope: str
+    regime: str  # RISK_ON, NEUTRAL, RISK_OFF, PANIC
+    previous_regime: Optional[str] = None
+    duration_seconds: Optional[int] = None  # How long previous regime lasted
+
+
+class DigestSettings(BaseModel):
+    """Configuration for digest generation."""
+
+    enabled: bool = False
+    schedule_time_utc: str = "01:00"  # 9 PM ET
+    only_if_activity: bool = True  # Skip if no changes

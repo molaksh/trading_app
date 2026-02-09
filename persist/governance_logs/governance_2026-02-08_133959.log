@@ -1,0 +1,31 @@
+2026-02-08 08:39:59 - __main__ - INFO - ======================================================================
+2026-02-08 08:39:59 - __main__ - INFO - Phase C: Multi-Agent Constitutional AI Governance
+2026-02-08 08:39:59 - __main__ - INFO - ======================================================================
+2026-02-08 08:39:59 - __main__ - INFO - Dry run: False
+2026-02-08 08:39:59 - __main__ - INFO - Persist path: persist
+2026-02-08 08:39:59 - governance.crypto_governance_job - INFO - Starting crypto governance job
+2026-02-08 08:39:59 - governance.crypto_governance_job - INFO - Reading trading summaries...
+2026-02-08 08:39:59 - governance.crypto_governance_job - INFO - Loaded 0 paper and 2 live summaries
+2026-02-08 08:39:59 - governance.crypto_governance_job - INFO - Generating proposal for paper environment...
+2026-02-08 08:39:59 - governance.crypto_governance_job - INFO - Generated proposal 8e06c7eb-5c47-41dc-a20b-a08c5c8708a1 for paper
+2026-02-08 08:39:59 - governance.crypto_governance_job - INFO - Generating proposal for live environment...
+2026-02-08 08:39:59 - governance.crypto_governance_job - INFO - Generated proposal 2cd0b854-8703-4608-8e36-10377f2fb251 for live
+2026-02-08 08:39:59 - governance.crypto_governance_job - INFO - Critiquing proposal 8e06c7eb-5c47-41dc-a20b-a08c5c8708a1...
+2026-02-08 08:39:59 - governance.crypto_governance_job - INFO - Critique recommendation: PROCEED
+2026-02-08 08:39:59 - governance.crypto_governance_job - INFO - Auditing proposal 8e06c7eb-5c47-41dc-a20b-a08c5c8708a1...
+2026-02-08 08:39:59 - governance.crypto_governance_job - INFO - Constitutional compliance: True
+2026-02-08 08:39:59 - governance.crypto_governance_job - INFO - Synthesizing decision packet for 8e06c7eb-5c47-41dc-a20b-a08c5c8708a1...
+2026-02-08 08:39:59 - governance.crypto_governance_job - INFO - Final recommendation: DEFER
+2026-02-08 08:39:59 - governance.crypto_governance_job - INFO - Confidence: 45.0%
+2026-02-08 08:39:59 - governance.crypto_governance_job - INFO - Persisting artifacts to governance/8e06c7eb-5c47-41dc-a20b-a08c5c8708a1/...
+2026-02-08 08:39:59 - governance.crypto_governance_job - INFO - Artifacts persisted
+2026-02-08 08:39:59 - governance.crypto_governance_job - INFO - Governance job completed successfully
+2026-02-08 08:39:59 - __main__ - INFO - ======================================================================
+2026-02-08 08:39:59 - __main__ - INFO - Governance Job Results
+2026-02-08 08:39:59 - __main__ - INFO - ======================================================================
+2026-02-08 08:39:59 - __main__ - INFO - Success: True
+2026-02-08 08:39:59 - __main__ - INFO - Proposal ID: 8e06c7eb-5c47-41dc-a20b-a08c5c8708a1
+2026-02-08 08:39:59 - __main__ - INFO - Errors: 0
+2026-02-08 08:39:59 - __main__ - INFO - Final Recommendation: DEFER
+2026-02-08 08:39:59 - __main__ - INFO - Confidence: 45.0%
+2026-02-08 08:39:59 - __main__ - INFO - Governance job completed successfully

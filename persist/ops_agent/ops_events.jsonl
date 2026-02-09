@@ -1,0 +1,80 @@
+{"timestamp":"2026-02-08T22:24:24.698470","event_type":"INTENT_PARSED","chat_id":8428809396,"intent":"EXPLAIN_HOLDINGS","scope":"live_crypto","details":{"text":"What are the stocks and crypto i hold in paper and live","confidence":0.85}}
+{"timestamp":"2026-02-08T22:24:24.698470","event_type":"INTENT_EXECUTED","chat_id":8428809396,"intent":"EXPLAIN_HOLDINGS","scope":"live_crypto","details":{"success":true,"response_length":44}}
+{"timestamp":"2026-02-08T23:39:44.104722","event_type":"INTENT_PARSED","chat_id":8428809396,"intent":"EXPLAIN_HOLDINGS","scope":"live_crypto","details":{"text":"What are the stocks and crypto i hold in paper and live","confidence":0.85}}
+{"timestamp":"2026-02-08T23:39:44.104722","event_type":"INTENT_EXECUTED","chat_id":8428809396,"intent":"EXPLAIN_HOLDINGS","scope":"live_crypto","details":{"success":true,"response_length":184}}
+{"timestamp":"2026-02-08T23:41:24.743872","event_type":"INTENT_PARSED","chat_id":8428809396,"intent":"STATUS","scope":"live_us","details":{"text":"Give me last few logs in live swing us?","confidence":0.65}}
+{"timestamp":"2026-02-08T23:41:24.743872","event_type":"INTENT_EXECUTED","chat_id":8428809396,"intent":"STATUS","scope":"live_us","details":{"success":true,"response_length":40}}
+{"timestamp":"2026-02-08T23:41:44.860519","event_type":"INTENT_PARSED","chat_id":8428809396,"intent":"STATUS","scope":null,"details":{"text":"Summary of all buys in all","confidence":0.5}}
+{"timestamp":"2026-02-08T23:41:44.860519","event_type":"INTENT_EXECUTED","chat_id":8428809396,"intent":"STATUS","scope":null,"details":{"success":true,"response_length":201}}
+{"timestamp":"2026-02-09T01:05:40.347899","event_type":"INTENT_PARSED","chat_id":8428809396,"intent":"STATUS","scope":null,"details":{"text":"Summary of all buys in all","confidence":0.5}}
+{"timestamp":"2026-02-09T01:05:40.347899","event_type":"INTENT_EXECUTED","chat_id":8428809396,"intent":"STATUS","scope":null,"details":{"success":true,"response_length":201}}
+{"timestamp":"2026-02-09T01:05:58.268994","event_type":"INTENT_PARSED","chat_id":8428809396,"intent":"STATUS","scope":null,"details":{"text":"Summary of all buys in all","confidence":0.5}}
+{"timestamp":"2026-02-09T01:05:58.268994","event_type":"INTENT_EXECUTED","chat_id":8428809396,"intent":"STATUS","scope":null,"details":{"success":true,"response_length":201}}
+{"timestamp":"2026-02-09T01:11:05.346211","event_type":"INTENT_PARSED","chat_id":8428809396,"intent":"EXPLAIN_HOLDINGS","scope":null,"details":{"text":"summary of open positions in all","confidence":0.5}}
+{"timestamp":"2026-02-09T01:11:05.346211","event_type":"INTENT_EXECUTED","chat_id":8428809396,"intent":"EXPLAIN_HOLDINGS","scope":null,"details":{"success":true,"response_length":184}}
+{"timestamp":"2026-02-09T01:11:32.426866","event_type":"INTENT_PARSED","chat_id":8428809396,"intent":"EXPLAIN_HOLDINGS","scope":null,"details":{"text":"What holdings do I have in paper and live?","confidence":0.7}}
+{"timestamp":"2026-02-09T01:11:32.426866","event_type":"INTENT_EXECUTED","chat_id":8428809396,"intent":"EXPLAIN_HOLDINGS","scope":null,"details":{"success":true,"response_length":184}}
+{"timestamp":"2026-02-09T01:13:28.454511","event_type":"INTENT_PARSED","chat_id":8428809396,"intent":"EXPLAIN_HOLDINGS","scope":null,"details":{"text":"What holdings do I have in paper and live?","confidence":0.7}}
+{"timestamp":"2026-02-09T01:13:28.454511","event_type":"INTENT_EXECUTED","chat_id":8428809396,"intent":"EXPLAIN_HOLDINGS","scope":null,"details":{"success":true,"response_length":184}}
+{"timestamp":"2026-02-09T01:19:01.023476","event_type":"INTENT_PARSED","chat_id":8428809396,"intent":"EXPLAIN_HOLDINGS","scope":null,"details":{"text":"What holdings do I have in paper and live?","confidence":0.7}}
+{"timestamp":"2026-02-09T01:19:01.023476","event_type":"INTENT_EXECUTED","chat_id":8428809396,"intent":"EXPLAIN_HOLDINGS","scope":null,"details":{"success":true,"response_length":193}}
+{"timestamp":"2026-02-09T01:19:17.621708","event_type":"INTENT_PARSED","chat_id":8428809396,"intent":"EXPLAIN_HOLDINGS","scope":"live_us","details":{"text":"what are the open positions in live swing us","confidence":0.85}}
+{"timestamp":"2026-02-09T01:19:17.621708","event_type":"INTENT_EXECUTED","chat_id":8428809396,"intent":"EXPLAIN_HOLDINGS","scope":"live_us","details":{"success":true,"response_length":40}}
+{"timestamp":"2026-02-09T01:23:45.675242","event_type":"INTENT_PARSED","chat_id":8428809396,"intent":"EXPLAIN_HOLDINGS","scope":"live_us","details":{"text":"what are the open positions in live swing us","confidence":0.85}}
+{"timestamp":"2026-02-09T01:23:45.675242","event_type":"INTENT_EXECUTED","chat_id":8428809396,"intent":"EXPLAIN_HOLDINGS","scope":"live_us","details":{"success":true,"response_length":150}}
+{"timestamp":"2026-02-09T01:24:02.336267","event_type":"INTENT_PARSED","chat_id":8428809396,"intent":"EXPLAIN_HOLDINGS","scope":"paper_us","details":{"text":"what are holdings in paper swing us","confidence":0.85}}
+{"timestamp":"2026-02-09T01:24:02.336267","event_type":"INTENT_EXECUTED","chat_id":8428809396,"intent":"EXPLAIN_HOLDINGS","scope":"paper_us","details":{"success":true,"response_length":1527}}
+{"timestamp":"2026-02-09T01:24:29.859269","event_type":"INTENT_PARSED","chat_id":8428809396,"intent":"STATUS","scope":null,"details":{"text":"thanks, can you pull up what are teh crypto currencies used in crypto universe?","confidence":0.7}}
+{"timestamp":"2026-02-09T01:24:29.859269","event_type":"INTENT_EXECUTED","chat_id":8428809396,"intent":"STATUS","scope":null,"details":{"success":true,"response_length":46}}
+{"timestamp":"2026-02-09T01:25:08.309854","event_type":"INTENT_PARSED","chat_id":8428809396,"intent":"STATUS","scope":null,"details":{"text":"is all the pods running okay?","confidence":0.5}}
+{"timestamp":"2026-02-09T01:25:08.309854","event_type":"INTENT_EXECUTED","chat_id":8428809396,"intent":"STATUS","scope":null,"details":{"success":true,"response_length":211}}
+{"timestamp":"2026-02-09T01:28:44.675028","event_type":"INTENT_PARSED","chat_id":8428809396,"intent":"STATUS","scope":"governance","details":{"text":"what is the pending proposal?","confidence":0.85}}
+{"timestamp":"2026-02-09T01:28:44.675028","event_type":"INTENT_EXECUTED","chat_id":8428809396,"intent":"STATUS","scope":"governance","details":{"success":true,"response_length":43}}
+{"timestamp":"2026-02-09T01:29:58.214209","event_type":"INTENT_PARSED","chat_id":8428809396,"intent":"STATUS","scope":null,"details":{"text":"hi","confidence":0.5}}
+{"timestamp":"2026-02-09T01:29:58.214209","event_type":"INTENT_EXECUTED","chat_id":8428809396,"intent":"STATUS","scope":null,"details":{"success":true,"response_length":46}}
+{"timestamp":"2026-02-09T01:32:47.348987","event_type":"INTENT_PARSED","chat_id":8428809396,"intent":"EXPLAIN_HOLDINGS","scope":null,"details":{"text":"what holdings do I have in paper and live?","confidence":0.7}}
+{"timestamp":"2026-02-09T01:32:47.348987","event_type":"INTENT_EXECUTED","chat_id":8428809396,"intent":"EXPLAIN_HOLDINGS","scope":null,"details":{"success":true,"response_length":193}}
+{"timestamp":"2026-02-09T01:32:53.653616","event_type":"INTENT_PARSED","chat_id":8428809396,"intent":"STATUS","scope":null,"details":{"text":"is all the pods running okay?","confidence":0.5}}
+{"timestamp":"2026-02-09T01:32:53.653616","event_type":"INTENT_EXECUTED","chat_id":8428809396,"intent":"STATUS","scope":null,"details":{"success":true,"response_length":211}}
+{"timestamp":"2026-02-09T01:32:59.795603","event_type":"INTENT_PARSED","chat_id":8428809396,"intent":"STATUS","scope":null,"details":{"text":"is all the pods running okay?","confidence":0.5}}
+{"timestamp":"2026-02-09T01:32:59.795603","event_type":"INTENT_EXECUTED","chat_id":8428809396,"intent":"STATUS","scope":null,"details":{"success":true,"response_length":211}}
+{"timestamp":"2026-02-09T01:32:59.795660","event_type":"INTENT_PARSED","chat_id":8428809396,"intent":"EXPLAIN_TODAY","scope":null,"details":{"text":"what happened today all containers?","confidence":0.7}}
+{"timestamp":"2026-02-09T01:32:59.795660","event_type":"INTENT_EXECUTED","chat_id":8428809396,"intent":"EXPLAIN_TODAY","scope":null,"details":{"success":true,"response_length":187}}
+{"timestamp":"2026-02-09T01:33:08.392057","event_type":"INTENT_PARSED","chat_id":8428809396,"intent":"EXPLAIN_GOVERNANCE","scope":"governance","details":{"text":"any pending governance?","confidence":0.65}}
+{"timestamp":"2026-02-09T01:33:08.392057","event_type":"INTENT_EXECUTED","chat_id":8428809396,"intent":"EXPLAIN_GOVERNANCE","scope":"governance","details":{"success":true,"response_length":45}}
+{"timestamp":"2026-02-09T01:33:25.139164","event_type":"INTENT_PARSED","chat_id":8428809396,"intent":"EXPLAIN_GOVERNANCE","scope":"governance","details":{"text":"what is the proposal waiting in governance?","confidence":0.85}}
+{"timestamp":"2026-02-09T01:33:25.139164","event_type":"INTENT_EXECUTED","chat_id":8428809396,"intent":"EXPLAIN_GOVERNANCE","scope":"governance","details":{"success":true,"response_length":45}}
+{"timestamp":"2026-02-09T01:36:34.366650","event_type":"INTENT_PARSED","chat_id":8428809396,"intent":"EXPLAIN_RECONCILIATION","scope":null,"details":{"text":"reconciliation status all?","confidence":0.7}}
+{"timestamp":"2026-02-09T01:36:34.366650","event_type":"INTENT_EXECUTED","chat_id":8428809396,"intent":"EXPLAIN_RECONCILIATION","scope":null,"details":{"success":true,"response_length":51}}
+{"timestamp":"2026-02-09T01:36:40.452657","event_type":"INTENT_PARSED","chat_id":8428809396,"intent":"EXPLAIN_HOLDINGS","scope":null,"details":{"text":"what holdings do I have in paper and live?","confidence":0.7}}
+{"timestamp":"2026-02-09T01:36:40.452657","event_type":"INTENT_EXECUTED","chat_id":8428809396,"intent":"EXPLAIN_HOLDINGS","scope":null,"details":{"success":true,"response_length":193}}
+{"timestamp":"2026-02-09T01:36:46.593335","event_type":"INTENT_PARSED","chat_id":8428809396,"intent":"EXPLAIN_HOLDINGS","scope":null,"details":{"text":"what holdings do I have in paper and live?","confidence":0.7}}
+{"timestamp":"2026-02-09T01:36:46.593335","event_type":"INTENT_EXECUTED","chat_id":8428809396,"intent":"EXPLAIN_HOLDINGS","scope":null,"details":{"success":true,"response_length":193}}
+{"timestamp":"2026-02-09T01:36:53.364795","event_type":"INTENT_PARSED","chat_id":8428809396,"intent":"EXPLAIN_HOLDINGS","scope":null,"details":{"text":"what holdings do I have in paper and live?","confidence":0.7}}
+{"timestamp":"2026-02-09T01:36:53.364795","event_type":"INTENT_EXECUTED","chat_id":8428809396,"intent":"EXPLAIN_HOLDINGS","scope":null,"details":{"success":true,"response_length":193}}
+{"timestamp":"2026-02-09T03:51:49.902107","event_type":"INTENT_PARSED","chat_id":8428809396,"intent":"STATUS","scope":null,"details":{"text":"is all the pods running okay?","confidence":0.5}}
+{"timestamp":"2026-02-09T03:51:49.902107","event_type":"INTENT_EXECUTED","chat_id":8428809396,"intent":"STATUS","scope":null,"details":{"success":true,"response_length":211}}
+{"timestamp":"2026-02-09T03:51:49.902607","event_type":"INTENT_PARSED","chat_id":8428809396,"intent":"STATUS","scope":null,"details":{"text":"is all the pods running okay?","confidence":0.5}}
+{"timestamp":"2026-02-09T03:51:49.902607","event_type":"INTENT_EXECUTED","chat_id":8428809396,"intent":"STATUS","scope":null,"details":{"success":true,"response_length":211}}
+{"timestamp":"2026-02-09T03:51:49.902625","event_type":"INTENT_PARSED","chat_id":8428809396,"intent":"STATUS","scope":null,"details":{"text":"is all the pods running okay?","confidence":0.5}}
+{"timestamp":"2026-02-09T03:51:49.902625","event_type":"INTENT_EXECUTED","chat_id":8428809396,"intent":"STATUS","scope":null,"details":{"success":true,"response_length":211}}
+{"timestamp":"2026-02-09T04:15:34.505088","event_type":"INTENT_PARSED","chat_id":8428809396,"intent":"EXPLAIN_REGIME","scope":"live_crypto","details":{"text":"What is the regime in live crypto?","confidence":0.85}}
+{"timestamp":"2026-02-09T04:15:34.505088","event_type":"INTENT_EXECUTED","chat_id":8428809396,"intent":"EXPLAIN_REGIME","scope":"live_crypto","details":{"success":true,"response_length":22}}
+{"timestamp":"2026-02-09T13:15:48.323575","event_type":"INTENT_PARSED","chat_id":8428809396,"intent":"STATUS","scope":null,"details":{"text":"is all the pods running okay?","confidence":0.5}}
+{"timestamp":"2026-02-09T13:15:48.323575","event_type":"INTENT_EXECUTED","chat_id":8428809396,"intent":"STATUS","scope":null,"details":{"success":true,"response_length":211}}
+{"timestamp":"2026-02-09T13:15:48.324127","event_type":"INTENT_PARSED","chat_id":8428809396,"intent":"STATUS","scope":null,"details":{"text":"is all the pods running okay?","confidence":0.5}}
+{"timestamp":"2026-02-09T13:15:48.324127","event_type":"INTENT_EXECUTED","chat_id":8428809396,"intent":"STATUS","scope":null,"details":{"success":true,"response_length":211}}
+{"timestamp":"2026-02-09T13:54:43.767775","event_type":"INTENT_PARSED","chat_id":8428809396,"intent":"EXPLAIN_HOLDINGS","scope":null,"details":{"text":"what holdings do I have in paper and live?","confidence":0.7}}
+{"timestamp":"2026-02-09T13:54:43.767775","event_type":"INTENT_EXECUTED","chat_id":8428809396,"intent":"EXPLAIN_HOLDINGS","scope":null,"details":{"success":true,"response_length":193}}
+{"timestamp":"2026-02-09T13:54:50.337368","event_type":"INTENT_PARSED","chat_id":8428809396,"intent":"EXPLAIN_TODAY","scope":null,"details":{"text":"what happened today all containers?","confidence":0.7}}
+{"timestamp":"2026-02-09T13:54:50.337368","event_type":"INTENT_EXECUTED","chat_id":8428809396,"intent":"EXPLAIN_TODAY","scope":null,"details":{"success":true,"response_length":187}}
+{"timestamp":"2026-02-09T13:54:56.390123","event_type":"INTENT_PARSED","chat_id":8428809396,"intent":"STATUS","scope":null,"details":{"text":"is all the pods running okay?","confidence":0.5}}
+{"timestamp":"2026-02-09T13:54:56.390123","event_type":"INTENT_EXECUTED","chat_id":8428809396,"intent":"STATUS","scope":null,"details":{"success":true,"response_length":211}}
+{"timestamp":"2026-02-09T13:55:02.468999","event_type":"INTENT_PARSED","chat_id":8428809396,"intent":"EXPLAIN_AI_RANKING","scope":null,"details":{"text":"what about AI ranking all?","confidence":0.7}}
+{"timestamp":"2026-02-09T13:55:02.468999","event_type":"INTENT_EXECUTED","chat_id":8428809396,"intent":"EXPLAIN_AI_RANKING","scope":null,"details":{"success":true,"response_length":197}}
+{"timestamp":"2026-02-09T14:27:30.842271","event_type":"INTENT_PARSED","chat_id":8428809396,"intent":"EXPLAIN_TODAY","scope":null,"details":{"text":"what happened today all containers?","confidence":0.7}}
+{"timestamp":"2026-02-09T14:27:30.842271","event_type":"INTENT_EXECUTED","chat_id":8428809396,"intent":"EXPLAIN_TODAY","scope":null,"details":{"success":true,"response_length":187}}
+{"timestamp":"2026-02-09T14:27:37.046535","event_type":"INTENT_PARSED","chat_id":8428809396,"intent":"EXPLAIN_GOVERNANCE","scope":"governance","details":{"text":"any pending governance?","confidence":0.65}}
+{"timestamp":"2026-02-09T14:27:37.046535","event_type":"INTENT_EXECUTED","chat_id":8428809396,"intent":"EXPLAIN_GOVERNANCE","scope":"governance","details":{"success":true,"response_length":45}}
+{"timestamp":"2026-02-09T14:27:45.358966","event_type":"INTENT_PARSED","chat_id":8428809396,"intent":"STATUS","scope":null,"details":{"text":"is all the pods running okay?","confidence":0.5}}
+{"timestamp":"2026-02-09T14:27:45.358966","event_type":"INTENT_EXECUTED","chat_id":8428809396,"intent":"STATUS","scope":null,"details":{"success":true,"response_length":211}}
