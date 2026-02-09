@@ -84,11 +84,13 @@ class ResponseGenerator:
 
         # For intents that don't need observability data, route directly
         if intent.intent_type in ["EXPLAIN_HOLDINGS", "EXPLAIN_ERRORS", "EXPLAIN_JOBS",
-                                   "EXPLAIN_GOVERNANCE", "EXPLAIN_AI_RANKING", "EXPLAIN_ML",
+                                   "EXPLAIN_GOVERNANCE", "EXPLAIN_GOVERNANCE_DETAILED", "EXPLAIN_AI_RANKING", "EXPLAIN_ML",
                                    "EXPLAIN_RECONCILIATION", "EXPLAIN_HEALTH", "EXPLAIN_TRADES"]:
             # Route to specific explanation (these don't need observability)
             if intent.intent_type == "EXPLAIN_HOLDINGS":
                 return self._explain_holdings(scope)
+            elif intent.intent_type == "EXPLAIN_GOVERNANCE_DETAILED":
+                return self._explain_governance_detailed()
             elif intent.intent_type == "EXPLAIN_GOVERNANCE":
                 return self._explain_governance()
             elif intent.intent_type == "EXPLAIN_AI_RANKING":
@@ -263,6 +265,178 @@ class ResponseGenerator:
         except Exception as e:
             logger.warning(f"Error checking governance: {e}")
             return "❓ Could not check governance status"
+
+    def _explain_governance_detailed(self) -> str:
+        """Show detailed governance proposal information."""
+        try:
+            from pathlib import Path
+            import json
+            from datetime import datetime, timedelta
+
+            # Try persist first (current location), then fallback to logs
+            proposals_dir = Path("persist/governance/crypto/proposals")
+            if not proposals_dir.exists():
+                proposals_dir = Path("logs/governance/crypto/proposals")
+            if not proposals_dir.exists():
+                return "✓ No governance activity"
+
+            # Find most recent pending proposal
+            pending_proposals = []
+            for proposal_dir in proposals_dir.iterdir():
+                if proposal_dir.is_dir():
+                    # Skip approved/rejected
+                    if (proposal_dir / "approval.json").exists() or (
+                        proposal_dir / "rejection.json"
+                    ).exists():
+                        continue
+
+                    # Check if proposal.json exists
+                    proposal_file = proposal_dir / "proposal.json"
+                    if proposal_file.exists():
+                        try:
+                            with open(proposal_file) as f:
+                                proposal = json.load(f)
+                                pending_proposals.append(
+                                    {
+                                        "dir": proposal_dir,
+                                        "proposal": proposal,
+                                    }
+                                )
+                        except Exception as e:
+                            logger.debug(f"Error reading proposal: {e}")
+
+            if not pending_proposals:
+                return "✓ No pending governance proposals"
+
+            # Use most recent
+            pending = pending_proposals[-1]
+            proposal_dir = pending["dir"]
+            proposal = pending["proposal"]
+
+            lines = []
+            lines.append("⚠️ GOVERNANCE PROPOSAL PENDING\n")
+
+            # Basic info
+            proposal_id = proposal.get("proposal_id", "unknown")
+            env = proposal.get("environment", "unknown").upper()
+            prop_type = proposal.get("proposal_type", "unknown")
+            symbols = ", ".join(proposal.get("symbols", []))
+
+            lines.append(f"📋 Type: {prop_type}")
+            lines.append(f"🎯 Symbols: {symbols}")
+            lines.append(f"🏢 Environment: {env}")
+            lines.append("")
+
+            # Rationale
+            rationale = proposal.get("rationale", "")
+            if rationale:
+                lines.append(f"💡 Rationale: {rationale}")
+
+            # Evidence
+            evidence = proposal.get("evidence", {})
+            if evidence:
+                lines.append("")
+                lines.append("📊 Evidence:")
+                missed = evidence.get("missed_signals", 0)
+                if missed:
+                    lines.append(f"  • Missed signals: {missed}")
+                scan = evidence.get("scan_starvation", [])
+                if scan:
+                    lines.append(f"  • Scan starvation: {len(scan)} symbols")
+                dead = evidence.get("dead_symbols", [])
+                if dead:
+                    lines.append(f"  • Dead symbols: {len(dead)}")
+
+            # Critic analysis
+            try:
+                critique_file = proposal_dir / "critique.json"
+                if critique_file.exists():
+                    with open(critique_file) as f:
+                        critique = json.load(f)
+                        lines.append("")
+                        lines.append(
+                            f"🤔 Critic's View: {critique.get('recommendation', 'N/A')}"
+                        )
+                        criticisms = critique.get("criticisms", [])
+                        if criticisms:
+                            for crit in criticisms[:1]:  # Just first criticism
+                                lines.append(f"  ⚠️ {crit}")
+            except Exception as e:
+                logger.debug(f"Error reading critique: {e}")
+
+            # Audit
+            try:
+                audit_file = proposal_dir / "audit.json"
+                if audit_file.exists():
+                    with open(audit_file) as f:
+                        audit = json.load(f)
+                        passed = audit.get("constitution_passed", False)
+                        violations = audit.get("violations", [])
+                        lines.append("")
+                        if passed:
+                            lines.append("✅ Constitutional: PASSED")
+                        else:
+                            lines.append("❌ Constitutional: FAILED")
+                            if violations:
+                                for v in violations[:2]:
+                                    lines.append(f"  ⛔ {v}")
+            except Exception as e:
+                logger.debug(f"Error reading audit: {e}")
+
+            # Synthesis (final recommendation)
+            try:
+                synthesis_file = proposal_dir / "synthesis.json"
+                if synthesis_file.exists():
+                    with open(synthesis_file) as f:
+                        synthesis = json.load(f)
+                        lines.append("")
+                        rec = synthesis.get("final_recommendation", "UNKNOWN")
+                        conf = synthesis.get("confidence", 0)
+                        conf_pct = int(conf * 100)
+                        lines.append(f"🎯 Recommendation: {rec} ({conf_pct}% confidence)")
+
+                        # Key risks
+                        risks = synthesis.get("key_risks", [])
+                        if risks:
+                            lines.append("")
+                            lines.append("⚠️ Key Risks:")
+                            for risk in risks[:2]:  # Top 2 risks
+                                lines.append(f"  • {risk}")
+            except Exception as e:
+                logger.debug(f"Error reading synthesis: {e}")
+
+            # Time remaining (72 hours from creation)
+            try:
+                proposal_timestamp = proposal.get("created_at")
+                if proposal_timestamp:
+                    # Try to parse timestamp
+                    try:
+                        created = datetime.fromisoformat(proposal_timestamp)
+                        expires = created + timedelta(hours=72)
+                        now = datetime.utcnow()
+                        remaining = expires - now
+
+                        if remaining.total_seconds() > 0:
+                            hours = int(remaining.total_seconds() / 3600)
+                            lines.append("")
+                            lines.append(f"⏰ Time remaining: {hours} hours")
+                        else:
+                            lines.append("")
+                            lines.append("⏰ EXPIRED - Defaulted to DEFER")
+                    except Exception:
+                        pass
+            except Exception as e:
+                logger.debug(f"Error calculating expiry: {e}")
+
+            # Action prompt
+            lines.append("")
+            lines.append("Actions: APPROVE | REJECT | DEFER")
+
+            return "\n".join(lines)
+
+        except Exception as e:
+            logger.warning(f"Error getting governance details: {e}")
+            return "❓ Could not retrieve governance details"
 
     def _explain_status(self, scope: str, obs: ObservabilitySnapshot) -> str:
         """General status."""

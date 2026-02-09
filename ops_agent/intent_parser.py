@@ -22,12 +22,15 @@ class IntentParser:
     }
 
     # Intent patterns (question -> intent_type)
+    # NOTE: Order matters - more specific patterns should come first!
     INTENT_PATTERNS = {
         r"why.*(?:no|not).*trade|why.*no.*signal": "EXPLAIN_NO_TRADES",
         r"fill|what.*filled|executed.*trade|buy|buys|all.*buy": "EXPLAIN_TRADES",
         r"what.*regime|what mode|current regime|regime\s*\?": "EXPLAIN_REGIME",
         r"block|what.*block": "EXPLAIN_BLOCKS",
         r"what.*happen.*today|today.*what|daily.*status": "EXPLAIN_TODAY",
+        # Detailed governance BEFORE general governance
+        r"governance.*detail|proposal.*detail|proposal.*full|show.*proposal": "EXPLAIN_GOVERNANCE_DETAILED",
         r"governance|proposal.*pending|wait.*approv": "EXPLAIN_GOVERNANCE",
         r"ai.*rank|what.*ai|top.*symbol|symbol.*rank": "EXPLAIN_AI_RANKING",
         r"job.*health|job.*status|stale|job.*running": "EXPLAIN_JOBS",
