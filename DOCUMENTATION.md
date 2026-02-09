@@ -26,6 +26,262 @@
 ## �🔔 Latest Updates (Newest First)
 
 
+
+### 2026-02-09 — Phase D: BTC Regime Gate Analysis Layer
+
+**Status**: ✅ IMPLEMENTED (v0 & v1)
+**Severity**: MEDIUM — Analytical governance for regime gate calibration
+
+#### Phase D Definition
+
+Phase D is a **READ-ONLY analysis layer** that studies whether the BTC regime gate is potentially over-constraining. It answers: **"Is the BTC regime gate blocking too conservatively?"** WITHOUT changing any trading behavior.
+
+Phase D runs **in the ops_agent** (not a separate job) and:
+- **v0**: Detects regime blocks and collects post-facto evidence
+- **v1**: Evaluates 5-rule eligibility framework to flag blocks as analyzable
+
+Both versions are **feature-flagged (default FALSE)** for safety and can be deployed independently.
+
+#### Phase D v0: Block Detection & Evidence Collection
+
+**What it does**:
+- Detects when regime blocks start/end from `daily_summary.jsonl`
+- Collects post-facto metrics: upside missed, drawdowns, volatility changes
+- Classifies blocks into 4 types: NOISE, COMPRESSION, SHOCK, STRUCTURAL
+- Persists all data append-only (immutable JSONL format)
+
+**Block Classification Logic** (evaluated in order):
+1. **SHOCK**: `vol_expansion >= 2.0` OR `drawdown <= -10%` → Extreme volatility/drawdown
+2. **NOISE**: `duration < 1.5x median` AND `upside < 3%` → Short, insignificant
+3. **COMPRESSION**: `duration >= p90` AND `vol < 1.2x` AND `upside < 5%` → Long, low vol
+4. **STRUCTURAL**: Default (long, high upside)
+
+**Key Components**:
+- `BlockDetector` — Reads `regime_blocked_period` field from daily summaries
+- `EvidenceCollector` — Loads price data via `crypto_price_loader`, computes metrics
+- `BlockClassifier` — Categorizes completed blocks
+- `HistoricalAnalyzer` — Provides p90, median, min/max duration statistics
+- `PhaseDPersistence` — Append-only JSONL storage (immutable)
+
+#### Phase D v1: 5-Rule Eligibility Framework
+
+**What it does**:
+- Evaluates whether a regime block is "analyzable" (worthy of study)
+- ALL 5 rules must pass for `eligible = True`
+- Auto-expires 24h (forces re-evaluation)
+- Feeds context into Phase E Telegram responses
+
+**5 Eligibility Rules**:
+1. **Evidence Sufficiency**: ≥3 completed blocks with evidence collected
+2. **Duration Anomaly**: Current block > p90 (unusually long)
+3. **Block Type**: Recent blocks are COMPRESSION or STRUCTURAL (not SHOCK)
+4. **Cost-Benefit**: Missed upside > drawdown avoided in ≥2 blocks
+5. **Regime Safety**: Regime not PANIC/SHOCK, volatility expansion normal
+
+If any rule fails → `eligible = False`.
+
+**Key Component**:
+- `EligibilityChecker` — Evaluates all 5 rules, computes auto-expiry timestamp
+
+#### Integration Points
+
+**1. Runtime Observability** (`runtime/observability.py`):
+```
+Added regime_blocked_period field to daily_summary.jsonl:
+{
+  "is_blocked": bool,
+  "block_duration_seconds": int,
+  "regime": str,
+  "strategies_eligible": int
+}
+```
+
+**2. Crypto Pipeline** (`crypto/pipeline/crypto_pipeline.py`):
+```
+Hook after strategy selection:
+get_observability().on_strategies_selected(eligible_names, regime)
+```
+
+**3. Ops Agent Responses** (`ops_agent/response_generator.py`):
+```
+When user asks "Why no trades?":
+Bot shows Phase D context if available:
+  [Phase D] Duration anomaly (>p90). Eligibility: TRUE. Expires: 18h.
+```
+
+#### Feature Flags (All Default FALSE)
+
+```bash
+# Enable v0 (block detection + evidence)
+export PHASE_D_V0_ENABLED=true
+
+# Enable v1 (eligibility evaluation)
+export PHASE_D_V1_ENABLED=true
+
+# Global kill-switch (overrides all)
+export PHASE_D_KILL_SWITCH=false
+```
+
+#### Configuration
+
+All settings in `config/phase_d_settings.py`:
+
+| Setting | Value | Purpose |
+|---------|-------|---------|
+| `NOISE_DURATION_MULTIPLIER` | 1.5 | Duration threshold for NOISE |
+| `NOISE_MAX_UPSIDE_PCT` | 3.0 | Upside threshold for NOISE |
+| `COMPRESSION_VOL_EXPANSION_MAX` | 1.2 | Vol ratio threshold for COMPRESSION |
+| `COMPRESSION_MAX_UPSIDE_PCT` | 5.0 | Upside threshold for COMPRESSION |
+| `SHOCK_VOL_EXPANSION_MIN` | 2.0 | Vol ratio threshold for SHOCK |
+| `SHOCK_MAX_DRAWDOWN_PCT` | 10.0 | Drawdown threshold for SHOCK |
+| `ELIGIBILITY_MIN_BLOCKS` | 3 | Min completed blocks for eligibility |
+| `ELIGIBILITY_MIN_POSITIVE_CB` | 2 | Min blocks with positive cost-benefit |
+| `ELIGIBILITY_EXPIRY_HOURS` | 24 | Auto-expire eligibility after 24h |
+
+#### Persistence Structure
+
+```
+persist/phase_d/crypto/
+├── blocks/
+│   └── block_events.jsonl          # Block lifecycle events (append-only)
+├── evidence/
+│   └── evidence_<block_id>.json    # Evidence metrics per block
+├── eligibility/
+│   └── eligibility_history.jsonl   # Eligibility evaluations (append-only)
+└── events/
+    └── phase_d_events.jsonl        # Event log (append-only)
+```
+
+All files use **append-only JSONL** — immutable, never modified after creation.
+
+#### Data Flow
+
+```
+daily_summary.jsonl (regime_blocked_period field)
+    ↓
+BlockDetector (detects block start/end)
+    ↓ [When block ends]
+    ├─→ EvidenceCollector (loads price data, computes metrics)
+    ├─→ BlockClassifier (assigns type: SHOCK/NOISE/COMPRESSION/STRUCTURAL)
+    ├─→ HistoricalAnalyzer (provides p90, median durations)
+    └─→ PhaseDPersistence (writes block events + evidence)
+    ↓ [If v1 enabled]
+    ├─→ EligibilityChecker (evaluates 5 rules)
+    ├─→ CompU eligibility result
+    └─→ PhaseDPersistence (writes eligibility_history)
+    ↓
+Phase E Integration (add context to "no trades" explanations)
+```
+
+#### Files Created (12 Files)
+
+**Core Implementation** (10 files):
+- `phase_d/__init__.py` — Package exports
+- `phase_d/schemas.py` — Pydantic models (BlockEvent, BlockEvidence, PhaseEligibilityResult, etc.)
+- `phase_d/persistence.py` — Append-only JSONL storage
+- `phase_d/block_detector.py` — Block start/end detection
+- `phase_d/evidence_collector.py` — Post-facto metrics collection
+- `phase_d/block_classifier.py` — Classification (4 types)
+- `phase_d/eligibility_checker.py` — 5-rule evaluation
+- `phase_d/historical_analyzer.py` — Statistics computation
+- `phase_d/phase_d_loop.py` — Main orchestration
+- `config/phase_d_settings.py` — Feature flags & thresholds
+
+**Tests & Documentation** (2 files):
+- `tests/test_phase_d/test_phase_d_integration.py` — 9 integration tests (100% passing)
+- `PHASE_D_IMPLEMENTATION.md` — Full architecture & deployment guide
+
+#### Files Modified (4 Files)
+
+| File | Changes |
+|------|---------|
+| `runtime/observability.py` | Added `regime_blocked_period` field to daily summaries; added `on_strategies_selected()` hook |
+| `crypto/pipeline/crypto_pipeline.py` | Added observability hook after strategy selection |
+| `ops_agent/response_generator.py` | Added `_add_phase_d_context()` method; shows eligibility in responses |
+| Config | `phase_d_settings.py` (NEW) with feature flags |
+
+#### Testing
+
+**9/9 Tests Passing** ✅
+
+| Test | Coverage |
+|------|----------|
+| `test_block_start_detection` | Block lifecycle detection |
+| `test_block_type_classification` | SHOCK classification |
+| `test_noise_classification` | NOISE classification |
+| `test_structural_classification` | STRUCTURAL classification |
+| `test_insufficient_evidence` | Rule 1 (evidence) |
+| `test_eligibility_expiry` | 24h auto-expiry |
+| `test_write_and_read_block_event` | Persistence (blocks) |
+| `test_write_and_read_evidence` | Persistence (evidence) |
+| `test_append_only_persistence` | Immutability guarantee |
+
+**Run Tests**:
+```bash
+python -m pytest tests/test_phase_d/ -v
+# Output: 9 passed in 0.46s ✅
+```
+
+#### Deployment Strategy
+
+**Week 1: Deploy v0 Only**
+```bash
+export PHASE_D_V0_ENABLED=true
+export PHASE_D_V1_ENABLED=false
+./run_ops_agent.sh
+```
+- Monitor: `tail -f persist/phase_d/crypto/blocks/block_events.jsonl`
+- Validate: Block detection (expect 5+ blocks/week), evidence metrics, zero trading impact
+
+**Week 2: Validate v0 Data**
+- Review block classifications (manual spot-check)
+- Verify upside/drawdown calculations
+- Check historical statistics
+- Confirm zero trading disruptions
+
+**Week 3: Enable v1**
+```bash
+export PHASE_D_V1_ENABLED=true
+./run_ops_agent.sh
+```
+- Test eligibility computation
+- Verify 24h auto-expiry
+- Check Phase E integration
+- Test Telegram responses
+
+**Ongoing: Monitor**
+- Check `persist/phase_d/crypto/blocks/block_events.jsonl` growth
+- Review `eligibility_history.jsonl` for rule patterns
+- Monitor logs for Phase D errors
+
+#### Safety Guarantees
+
+✅ **READ-ONLY** — Never trades, never modifies trading state
+✅ **FAIL-SAFE** — If Phase D crashes → trading continues unchanged
+✅ **FEATURE-FLAGGED** — Default FALSE (opt-in)
+✅ **KILL-SWITCH** — `PHASE_D_KILL_SWITCH=true` disables all logic
+✅ **AUTO-EXPIRY** — Eligibility expires every 24h
+✅ **APPEND-ONLY** — All persistence immutable (JSONL)
+✅ **BOUNDED** — Deterministic, no infinite loops
+✅ **CONSTITUTIONAL** — Studies law, never amends it
+✅ **ZERO IMPACT** — Analysis post-facto or separate tick
+✅ **ISOLATED** — Runs in ops_agent, not trading pipeline
+
+#### Phase D vs Phase C
+
+| Aspect | Phase C | Phase D |
+|--------|---------|---------|
+| Scope | Governance proposals | Regime gate analysis |
+| Runs | Weekly job (separate) | Every ops_agent tick |
+| Decision Type | Proposals | Analytics/observations |
+| AI Required | Yes (proposer) | No (rules-based) |
+| Auto-Apply | Never | Never |
+| Persistence | Proposals directory | Phase D directory |
+| Integration | Standalone job | Embedded in ops_agent |
+| Human Review | Required (72h expiry) | Optional (informational) |
+
+---
+
 ### 2026-02-09 — Step 5 Phase E: Interactive Ops & Concierge Agent
 
 **Status**: ✅ IMPLEMENTED (Phase E v1)
@@ -293,261 +549,6 @@ export OPS_DIGEST_TIME_UTC="01:00"  # 9 PM ET
 | Read-only | ✅ | ✅ |
 | Safe | ✅ | ✅ |
 | Bounded | ✅ | ✅ |
-
----
-
-### 2026-02-09 — Phase D: BTC Regime Gate Analysis Layer
-
-**Status**: ✅ IMPLEMENTED (v0 & v1)
-**Severity**: MEDIUM — Analytical governance for regime gate calibration
-
-#### Phase D Definition
-
-Phase D is a **READ-ONLY analysis layer** that studies whether the BTC regime gate is potentially over-constraining. It answers: **"Is the BTC regime gate blocking too conservatively?"** WITHOUT changing any trading behavior.
-
-Phase D runs **in the ops_agent** (not a separate job) and:
-- **v0**: Detects regime blocks and collects post-facto evidence
-- **v1**: Evaluates 5-rule eligibility framework to flag blocks as analyzable
-
-Both versions are **feature-flagged (default FALSE)** for safety and can be deployed independently.
-
-#### Phase D v0: Block Detection & Evidence Collection
-
-**What it does**:
-- Detects when regime blocks start/end from `daily_summary.jsonl`
-- Collects post-facto metrics: upside missed, drawdowns, volatility changes
-- Classifies blocks into 4 types: NOISE, COMPRESSION, SHOCK, STRUCTURAL
-- Persists all data append-only (immutable JSONL format)
-
-**Block Classification Logic** (evaluated in order):
-1. **SHOCK**: `vol_expansion >= 2.0` OR `drawdown <= -10%` → Extreme volatility/drawdown
-2. **NOISE**: `duration < 1.5x median` AND `upside < 3%` → Short, insignificant
-3. **COMPRESSION**: `duration >= p90` AND `vol < 1.2x` AND `upside < 5%` → Long, low vol
-4. **STRUCTURAL**: Default (long, high upside)
-
-**Key Components**:
-- `BlockDetector` — Reads `regime_blocked_period` field from daily summaries
-- `EvidenceCollector` — Loads price data via `crypto_price_loader`, computes metrics
-- `BlockClassifier` — Categorizes completed blocks
-- `HistoricalAnalyzer` — Provides p90, median, min/max duration statistics
-- `PhaseDPersistence` — Append-only JSONL storage (immutable)
-
-#### Phase D v1: 5-Rule Eligibility Framework
-
-**What it does**:
-- Evaluates whether a regime block is "analyzable" (worthy of study)
-- ALL 5 rules must pass for `eligible = True`
-- Auto-expires 24h (forces re-evaluation)
-- Feeds context into Phase E Telegram responses
-
-**5 Eligibility Rules**:
-1. **Evidence Sufficiency**: ≥3 completed blocks with evidence collected
-2. **Duration Anomaly**: Current block > p90 (unusually long)
-3. **Block Type**: Recent blocks are COMPRESSION or STRUCTURAL (not SHOCK)
-4. **Cost-Benefit**: Missed upside > drawdown avoided in ≥2 blocks
-5. **Regime Safety**: Regime not PANIC/SHOCK, volatility expansion normal
-
-If any rule fails → `eligible = False`.
-
-**Key Component**:
-- `EligibilityChecker` — Evaluates all 5 rules, computes auto-expiry timestamp
-
-#### Integration Points
-
-**1. Runtime Observability** (`runtime/observability.py`):
-```
-Added regime_blocked_period field to daily_summary.jsonl:
-{
-  "is_blocked": bool,
-  "block_duration_seconds": int,
-  "regime": str,
-  "strategies_eligible": int
-}
-```
-
-**2. Crypto Pipeline** (`crypto/pipeline/crypto_pipeline.py`):
-```
-Hook after strategy selection:
-get_observability().on_strategies_selected(eligible_names, regime)
-```
-
-**3. Ops Agent Responses** (`ops_agent/response_generator.py`):
-```
-When user asks "Why no trades?":
-Bot shows Phase D context if available:
-  [Phase D] Duration anomaly (>p90). Eligibility: TRUE. Expires: 18h.
-```
-
-#### Feature Flags (All Default FALSE)
-
-```bash
-# Enable v0 (block detection + evidence)
-export PHASE_D_V0_ENABLED=true
-
-# Enable v1 (eligibility evaluation)
-export PHASE_D_V1_ENABLED=true
-
-# Global kill-switch (overrides all)
-export PHASE_D_KILL_SWITCH=false
-```
-
-#### Configuration
-
-All settings in `config/phase_d_settings.py`:
-
-| Setting | Value | Purpose |
-|---------|-------|---------|
-| `NOISE_DURATION_MULTIPLIER` | 1.5 | Duration threshold for NOISE |
-| `NOISE_MAX_UPSIDE_PCT` | 3.0 | Upside threshold for NOISE |
-| `COMPRESSION_VOL_EXPANSION_MAX` | 1.2 | Vol ratio threshold for COMPRESSION |
-| `COMPRESSION_MAX_UPSIDE_PCT` | 5.0 | Upside threshold for COMPRESSION |
-| `SHOCK_VOL_EXPANSION_MIN` | 2.0 | Vol ratio threshold for SHOCK |
-| `SHOCK_MAX_DRAWDOWN_PCT` | 10.0 | Drawdown threshold for SHOCK |
-| `ELIGIBILITY_MIN_BLOCKS` | 3 | Min completed blocks for eligibility |
-| `ELIGIBILITY_MIN_POSITIVE_CB` | 2 | Min blocks with positive cost-benefit |
-| `ELIGIBILITY_EXPIRY_HOURS` | 24 | Auto-expire eligibility after 24h |
-
-#### Persistence Structure
-
-```
-persist/phase_d/crypto/
-├── blocks/
-│   └── block_events.jsonl          # Block lifecycle events (append-only)
-├── evidence/
-│   └── evidence_<block_id>.json    # Evidence metrics per block
-├── eligibility/
-│   └── eligibility_history.jsonl   # Eligibility evaluations (append-only)
-└── events/
-    └── phase_d_events.jsonl        # Event log (append-only)
-```
-
-All files use **append-only JSONL** — immutable, never modified after creation.
-
-#### Data Flow
-
-```
-daily_summary.jsonl (regime_blocked_period field)
-    ↓
-BlockDetector (detects block start/end)
-    ↓ [When block ends]
-    ├─→ EvidenceCollector (loads price data, computes metrics)
-    ├─→ BlockClassifier (assigns type: SHOCK/NOISE/COMPRESSION/STRUCTURAL)
-    ├─→ HistoricalAnalyzer (provides p90, median durations)
-    └─→ PhaseDPersistence (writes block events + evidence)
-    ↓ [If v1 enabled]
-    ├─→ EligibilityChecker (evaluates 5 rules)
-    ├─→ CompU eligibility result
-    └─→ PhaseDPersistence (writes eligibility_history)
-    ↓
-Phase E Integration (add context to "no trades" explanations)
-```
-
-#### Files Created (12 Files)
-
-**Core Implementation** (10 files):
-- `phase_d/__init__.py` — Package exports
-- `phase_d/schemas.py` — Pydantic models (BlockEvent, BlockEvidence, PhaseEligibilityResult, etc.)
-- `phase_d/persistence.py` — Append-only JSONL storage
-- `phase_d/block_detector.py` — Block start/end detection
-- `phase_d/evidence_collector.py` — Post-facto metrics collection
-- `phase_d/block_classifier.py` — Classification (4 types)
-- `phase_d/eligibility_checker.py` — 5-rule evaluation
-- `phase_d/historical_analyzer.py` — Statistics computation
-- `phase_d/phase_d_loop.py` — Main orchestration
-- `config/phase_d_settings.py` — Feature flags & thresholds
-
-**Tests & Documentation** (2 files):
-- `tests/test_phase_d/test_phase_d_integration.py` — 9 integration tests (100% passing)
-- `PHASE_D_IMPLEMENTATION.md` — Full architecture & deployment guide
-
-#### Files Modified (4 Files)
-
-| File | Changes |
-|------|---------|
-| `runtime/observability.py` | Added `regime_blocked_period` field to daily summaries; added `on_strategies_selected()` hook |
-| `crypto/pipeline/crypto_pipeline.py` | Added observability hook after strategy selection |
-| `ops_agent/response_generator.py` | Added `_add_phase_d_context()` method; shows eligibility in responses |
-| Config | `phase_d_settings.py` (NEW) with feature flags |
-
-#### Testing
-
-**9/9 Tests Passing** ✅
-
-| Test | Coverage |
-|------|----------|
-| `test_block_start_detection` | Block lifecycle detection |
-| `test_block_type_classification` | SHOCK classification |
-| `test_noise_classification` | NOISE classification |
-| `test_structural_classification` | STRUCTURAL classification |
-| `test_insufficient_evidence` | Rule 1 (evidence) |
-| `test_eligibility_expiry` | 24h auto-expiry |
-| `test_write_and_read_block_event` | Persistence (blocks) |
-| `test_write_and_read_evidence` | Persistence (evidence) |
-| `test_append_only_persistence` | Immutability guarantee |
-
-**Run Tests**:
-```bash
-python -m pytest tests/test_phase_d/ -v
-# Output: 9 passed in 0.46s ✅
-```
-
-#### Deployment Strategy
-
-**Week 1: Deploy v0 Only**
-```bash
-export PHASE_D_V0_ENABLED=true
-export PHASE_D_V1_ENABLED=false
-./run_ops_agent.sh
-```
-- Monitor: `tail -f persist/phase_d/crypto/blocks/block_events.jsonl`
-- Validate: Block detection (expect 5+ blocks/week), evidence metrics, zero trading impact
-
-**Week 2: Validate v0 Data**
-- Review block classifications (manual spot-check)
-- Verify upside/drawdown calculations
-- Check historical statistics
-- Confirm zero trading disruptions
-
-**Week 3: Enable v1**
-```bash
-export PHASE_D_V1_ENABLED=true
-./run_ops_agent.sh
-```
-- Test eligibility computation
-- Verify 24h auto-expiry
-- Check Phase E integration
-- Test Telegram responses
-
-**Ongoing: Monitor**
-- Check `persist/phase_d/crypto/blocks/block_events.jsonl` growth
-- Review `eligibility_history.jsonl` for rule patterns
-- Monitor logs for Phase D errors
-
-#### Safety Guarantees
-
-✅ **READ-ONLY** — Never trades, never modifies trading state
-✅ **FAIL-SAFE** — If Phase D crashes → trading continues unchanged
-✅ **FEATURE-FLAGGED** — Default FALSE (opt-in)
-✅ **KILL-SWITCH** — `PHASE_D_KILL_SWITCH=true` disables all logic
-✅ **AUTO-EXPIRY** — Eligibility expires every 24h
-✅ **APPEND-ONLY** — All persistence immutable (JSONL)
-✅ **BOUNDED** — Deterministic, no infinite loops
-✅ **CONSTITUTIONAL** — Studies law, never amends it
-✅ **ZERO IMPACT** — Analysis post-facto or separate tick
-✅ **ISOLATED** — Runs in ops_agent, not trading pipeline
-
-#### Phase D vs Phase C
-
-| Aspect | Phase C | Phase D |
-|--------|---------|---------|
-| Scope | Governance proposals | Regime gate analysis |
-| Runs | Weekly job (separate) | Every ops_agent tick |
-| Decision Type | Proposals | Analytics/observations |
-| AI Required | Yes (proposer) | No (rules-based) |
-| Auto-Apply | Never | Never |
-| Persistence | Proposals directory | Phase D directory |
-| Integration | Standalone job | Embedded in ops_agent |
-| Human Review | Required (72h expiry) | Optional (informational) |
 
 ---
 
