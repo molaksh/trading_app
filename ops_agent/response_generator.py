@@ -66,7 +66,31 @@ class ResponseGenerator:
         if not scope:
             return "❓ Couldn't determine scope. Try: 'live crypto', 'paper us', etc."
 
-        # Get observability state (try snapshot, fall back to daily summary)
+        # For intents that don't need observability data, route directly
+        if intent.intent_type in ["EXPLAIN_HOLDINGS", "EXPLAIN_ERRORS", "EXPLAIN_JOBS",
+                                   "EXPLAIN_GOVERNANCE", "EXPLAIN_AI_RANKING", "EXPLAIN_ML",
+                                   "EXPLAIN_RECONCILIATION", "EXPLAIN_HEALTH", "EXPLAIN_TRADES"]:
+            # Route to specific explanation (these don't need observability)
+            if intent.intent_type == "EXPLAIN_HOLDINGS":
+                return self._explain_holdings(scope)
+            elif intent.intent_type == "EXPLAIN_GOVERNANCE":
+                return self._explain_governance()
+            elif intent.intent_type == "EXPLAIN_AI_RANKING":
+                return self._explain_ai_ranking(scope)
+            elif intent.intent_type == "EXPLAIN_JOBS":
+                return self._explain_jobs(scope)
+            elif intent.intent_type == "EXPLAIN_ERRORS":
+                return self._explain_errors(scope)
+            elif intent.intent_type == "EXPLAIN_ML":
+                return self._explain_ml_status(scope)
+            elif intent.intent_type == "EXPLAIN_RECONCILIATION":
+                return self._explain_reconciliation_status(scope)
+            elif intent.intent_type == "EXPLAIN_HEALTH":
+                return self._explain_health_check(scope)
+            elif intent.intent_type == "EXPLAIN_TRADES":
+                return self._explain_trade_fills(scope)
+
+        # Get observability state (try snapshot, fall back to daily summary) - only for intents that need it
         obs = self.obs_reader.get_snapshot(scope)
         if not obs:
             # Fall back to daily summary
@@ -90,7 +114,7 @@ class ResponseGenerator:
                 data_issues=latest_summary.data_issues,
             )
 
-        # Route to specific explanation
+        # Route to specific explanation (for intents that need observability)
         if intent.intent_type == "EXPLAIN_NO_TRADES":
             return self._explain_no_trades(scope, obs)
         elif intent.intent_type == "EXPLAIN_TRADES":
@@ -101,24 +125,6 @@ class ResponseGenerator:
             return self._explain_blocks(scope, obs)
         elif intent.intent_type == "EXPLAIN_TODAY":
             return self._explain_today(scope, obs)
-        elif intent.intent_type == "EXPLAIN_GOVERNANCE":
-            return self._explain_governance()
-        elif intent.intent_type == "EXPLAIN_AI_RANKING":
-            return self._explain_ai_ranking(scope)
-        elif intent.intent_type == "EXPLAIN_JOBS":
-            return self._explain_jobs(scope)
-        elif intent.intent_type == "EXPLAIN_ERRORS":
-            return self._explain_errors(scope)
-        elif intent.intent_type == "EXPLAIN_HOLDINGS":
-            return self._explain_holdings(scope)
-        elif intent.intent_type == "EXPLAIN_TRADES":
-            return self._explain_trade_fills(scope)
-        elif intent.intent_type == "EXPLAIN_ML":
-            return self._explain_ml_status(scope)
-        elif intent.intent_type == "EXPLAIN_RECONCILIATION":
-            return self._explain_reconciliation_status(scope)
-        elif intent.intent_type == "EXPLAIN_HEALTH":
-            return self._explain_health_check(scope)
         else:  # STATUS
             return self._explain_status(scope, obs)
 
