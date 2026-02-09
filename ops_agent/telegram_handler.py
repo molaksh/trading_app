@@ -47,7 +47,7 @@ class TelegramHandler:
             params = {
                 "offset": self.last_update_id + 1,
                 "timeout": 5,
-                "allowed_updates": ["message"],
+                "allowed_updates": ["message", "callback_query"],
             }
 
             response = requests.get(url, params=params, timeout=10)
@@ -64,23 +64,58 @@ class TelegramHandler:
             for update in updates:
                 self.last_update_id = max(self.last_update_id, update.get("update_id", 0))
 
+                # Handle regular messages
                 message = update.get("message")
-                if not message:
-                    continue
+                if message:
+                    chat_id = message.get("chat", {}).get("id")
+                    text = message.get("text", "").strip()
 
-                chat_id = message.get("chat", {}).get("id")
-                text = message.get("text", "").strip()
+                    # Validate chat ID (single-user in v1)
+                    if chat_id not in self.allowed_chat_ids:
+                        logger.warning(
+                            f"Message from unauthorized chat ID: {chat_id} (text: {text[:50]})"
+                        )
+                        self.send_message(
+                            chat_id,
+                            "❌ You are not authorized to use this bot.",
+                        )
+                        continue
 
-                # Validate chat ID (single-user in v1)
-                if chat_id not in self.allowed_chat_ids:
-                    logger.warning(
-                        f"Message from unauthorized chat ID: {chat_id} (text: {text[:50]})"
-                    )
-                    self.send_message(
-                        chat_id,
-                        "❌ You are not authorized to use this bot.",
-                    )
-                    continue
+                # Handle button clicks (callback queries)
+                callback_query = update.get("callback_query")
+                if callback_query:
+                    chat_id = callback_query.get("from", {}).get("id")
+                    callback_data = callback_query.get("data", "").strip()
+
+                    # Validate chat ID (single-user in v1)
+                    if chat_id not in self.allowed_chat_ids:
+                        logger.warning(
+                            f"Callback from unauthorized chat ID: {chat_id}"
+                        )
+                        continue
+
+                    # Convert callback_data to natural language query
+                    # Map button callbacks to queries
+                    callback_to_query = {
+                        "holdings_all": "what holdings do I have in paper and live?",
+                        "health_check": "is all the pods running okay?",
+                        "errors_all": "give me recent errors all containers",
+                        "today_all": "what happened today all containers?",
+                        "rec_status": "reconciliation status all?",
+                        "ai_rankings": "what about AI ranking all?",
+                        "governance_status": "any pending governance?",
+                        "ml_status": "ML status all containers?",
+                        "scope_live_crypto": "status live crypto",
+                        "scope_paper_crypto": "status paper crypto",
+                        "scope_live_us": "status live us",
+                        "scope_paper_us": "status paper us",
+                    }
+
+                    text = callback_to_query.get(callback_data, callback_data)
+                    # Continue to process as if it was a text message
+                    message = callback_query
+                    message["text"] = text
+                    message["chat"] = {"id": chat_id}
 
                 if not text:
                     continue
