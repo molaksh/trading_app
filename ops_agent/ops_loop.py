@@ -18,6 +18,38 @@ logger = logging.getLogger(__name__)
 class OpsLoop:
     """Main operational loop for the ops agent."""
 
+    # Quick-access button queries
+    QUICK_BUTTONS = [
+        [
+            {"text": "📈 All Holdings", "callback_data": "holdings_all"},
+            {"text": "⚠️ System Health", "callback_data": "health_check"},
+        ],
+        [
+            {"text": "❌ Recent Errors", "callback_data": "errors_all"},
+            {"text": "📊 Daily Summary", "callback_data": "today_all"},
+        ],
+        [
+            {"text": "🏥 Reconciliation", "callback_data": "rec_status"},
+            {"text": "🤖 AI Rankings", "callback_data": "ai_rankings"},
+        ],
+        [
+            {"text": "⚖️ Governance", "callback_data": "governance_status"},
+            {"text": "💾 ML Status", "callback_data": "ml_status"},
+        ],
+    ]
+
+    # Scope selector buttons
+    SCOPE_BUTTONS = [
+        [
+            {"text": "🔴 Live Crypto", "callback_data": "scope_live_crypto"},
+            {"text": "📄 Paper Crypto", "callback_data": "scope_paper_crypto"},
+        ],
+        [
+            {"text": "🔴 Live US", "callback_data": "scope_live_us"},
+            {"text": "📄 Paper US", "callback_data": "scope_paper_us"},
+        ],
+    ]
+
     def __init__(
         self,
         telegram_handler: TelegramHandler,
@@ -81,8 +113,8 @@ class OpsLoop:
             response = self.generator.generate_response(intent)
             logger.info(f"Generated response for {intent.intent_type}: {response[:100]}")
 
-            # 3. Send response
-            success = self.telegram.send_message(msg.chat_id, response)
+            # 3. Send response with quick-access buttons
+            success = self.telegram.send_message(msg.chat_id, response, buttons=self.QUICK_BUTTONS)
             self.event_logger.log(
                 OpsEvent(
                     timestamp=msg.timestamp,

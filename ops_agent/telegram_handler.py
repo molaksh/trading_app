@@ -103,13 +103,14 @@ class TelegramHandler:
             logger.error(f"Error processing Telegram updates: {e}")
             return []
 
-    def send_message(self, chat_id: int, text: str) -> bool:
+    def send_message(self, chat_id: int, text: str, buttons: Optional[List[List[dict]]] = None) -> bool:
         """
-        Send a message to a chat.
+        Send a message to a chat with optional keyboard buttons.
 
         Args:
             chat_id: Telegram chat ID
             text: Message text (plain text, no Markdown)
+            buttons: Optional list of button rows. Each row is a list of {"text": "...", "callback_data": "..."} dicts
 
         Returns:
             True if successful
@@ -120,6 +121,12 @@ class TelegramHandler:
                 "chat_id": chat_id,
                 "text": text,
             }
+
+            # Add inline keyboard if buttons provided
+            if buttons:
+                payload["reply_markup"] = {
+                    "inline_keyboard": buttons
+                }
 
             response = requests.post(url, json=payload, timeout=10)
             response.raise_for_status()
