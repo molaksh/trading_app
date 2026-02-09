@@ -29,23 +29,32 @@ class PositionsReader:
         if not scope_dir:
             return None
 
+        positions = None
+
         # Try state directory first (most recent)
-        positions_path = self.logs_root / scope_dir / "state" / "open_positions.json"
+        state_path = self.logs_root / scope_dir / "state" / "open_positions.json"
+        if state_path.exists():
+            try:
+                with open(state_path) as f:
+                    data = json.load(f)
+                    if data:  # Only use if non-empty
+                        positions = data
+            except Exception as e:
+                logger.debug(f"Error reading state positions: {e}")
 
-        if not positions_path.exists():
-            # Fall back to ledger directory
-            positions_path = self.logs_root / scope_dir / "ledger" / "open_positions.json"
+        # Fall back to ledger directory if state is empty
+        if not positions:
+            ledger_path = self.logs_root / scope_dir / "ledger" / "open_positions.json"
+            if ledger_path.exists():
+                try:
+                    with open(ledger_path) as f:
+                        data = json.load(f)
+                        if data:
+                            positions = data
+                except Exception as e:
+                    logger.debug(f"Error reading ledger positions: {e}")
 
-        if not positions_path.exists():
-            return None
-
-        try:
-            with open(positions_path) as f:
-                data = json.load(f)
-                return data if data else None
-        except Exception as e:
-            logger.debug(f"Error reading positions: {e}")
-            return None
+        return positions
 
     def get_position_count(self, scope: str) -> int:
         """Get number of open positions."""
@@ -62,31 +71,36 @@ class PositionsReader:
 
         # Format positions for display
         lines = []
-        total_value = 0.0
         total_cost = 0.0
 
         for symbol, position in positions.items():
-            qty = position.get("quantity", 0)
+            # Handle both ledger and state formats
+            qty = position.get("quantity") or position.get("entry_quantity", 0)
             entry = position.get("entry_price", 0)
             current = position.get("current_price", 0)
-            value = qty * current
+
             cost = qty * entry
-            pnl = value - cost
-            pnl_pct = (pnl / cost * 100) if cost > 0 else 0
-
-            lines.append(
-                f"  {symbol}: {qty} shares @ ${entry:.2f} (now ${current:.2f}, "
-                f"value: ${value:.2f}, P&L: ${pnl:.2f} ({pnl_pct:+.1f}%))"
-            )
-
-            total_value += value
             total_cost += cost
 
-        total_pnl = total_value - total_cost
-        total_pnl_pct = (total_pnl / total_cost * 100) if total_cost > 0 else 0
+            if current > 0:
+                value = qty * current
+                pnl = value - cost
+                pnl_pct = (pnl / cost * 100) if cost > 0 else 0
+                lines.append(
+                    f"  {symbol}: {qty:.6f} shares @ ${entry:.2f} (now ${current:.2f}, "
+                    f"value: ${value:.2f}, P&L: ${pnl:.2f} ({pnl_pct:+.1f}%))"
+                )
+            else:
+                # No current price available (typical for ledger format)
+                lines.append(
+                    f"  {symbol}: {qty:.6f} shares @ ${entry:.2f} (cost: ${cost:.2f})"
+                )
+
+        if not lines:
+            return None
 
         summary = "\n".join(lines)
-        summary += f"\n  Total: ${total_value:.2f} (Cost: ${total_cost:.2f}, P&L: ${total_pnl:.2f} ({total_pnl_pct:+.1f}%))"
+        summary += f"\n  Total cost basis: ${total_cost:.2f}"
 
         return summary
 
