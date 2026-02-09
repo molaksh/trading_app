@@ -37,6 +37,7 @@ def main():
     bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
     allowed_chat_ids_str = os.getenv("TELEGRAM_ALLOWED_CHAT_IDS", "")
     persistence_root = os.getenv("PERSISTENCE_ROOT", "persist")
+    logs_root = os.getenv("LOGS_ROOT", "logs")  # Separate from persist
 
     if not bot_token:
         logger.error(
@@ -70,7 +71,7 @@ def main():
     from ops_agent.ops_loop import run_ops_loop
 
     telegram = TelegramHandler(bot_token, allowed_chat_ids)
-    generator = ResponseGenerator(logs_root=persistence_root)
+    generator = ResponseGenerator(logs_root=logs_root)  # Use logs directory, not persist
     event_logger = OpsEventLogger(logs_root=persistence_root)
 
     logger.info("✓ Components initialized")
