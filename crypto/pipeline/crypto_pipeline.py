@@ -258,6 +258,14 @@ def run_crypto_pipeline(
     )
 
     eligible = selector.get_eligible_strategies(regime_signal.regime)
+
+    # Phase D: Track regime block (hook for observability)
+    try:
+        eligible_names = [e.value for e in eligible]
+        get_observability().on_strategies_selected(eligible_names, regime_signal.regime.value)
+    except Exception as e:
+        logger.warning(f"PHASE_D_OBSERVABILITY_HOOK_FAILED | error={e}")
+
     log_pipeline_stage(
         stage="STRATEGIES_ELIGIBLE",
         scope=str(scope),

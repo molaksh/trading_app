@@ -27,6 +27,14 @@ except ImportError:
     DurationTracker = None
     HistoricalAnalyzer = None
 
+# Type hint for Phase D
+try:
+    from phase_d.persistence import PhaseDPersistence
+    from config.phase_d_settings import PHASE_D_V1_ENABLED
+except ImportError:
+    PhaseDPersistence = None
+    PHASE_D_V1_ENABLED = False
+
 
 class ResponseGenerator:
     """Generate deterministic ops explanations."""
@@ -48,6 +56,8 @@ class ResponseGenerator:
         # v2 components (optional)
         self.duration_tracker = duration_tracker
         self.historical_analyzer = historical_analyzer
+        # Phase D (optional)
+        self.phase_d_persistence = PhaseDPersistence() if PhaseDPersistence else None
 
     def generate_response(self, intent: Intent) -> str:
         """
@@ -162,6 +172,9 @@ class ResponseGenerator:
                 )
                 if has_occurred:
                     response += " (has occurred before)"
+            # Phase D: Add eligibility context if available
+            if PHASE_D_V1_ENABLED and self.phase_d_persistence:
+                response = self._add_phase_d_context(response, scope)
             return response
 
         if obs.regime == "PANIC":
@@ -173,6 +186,9 @@ class ResponseGenerator:
                 )
                 if has_occurred:
                     response += " (has occurred before)"
+            # Phase D: Add eligibility context if available
+            if PHASE_D_V1_ENABLED and self.phase_d_persistence:
+                response = self._add_phase_d_context(response, scope)
             return response
 
         if not obs.trading_active:
@@ -721,6 +737,44 @@ class ResponseGenerator:
                     return scope
 
         return None
+
+    def _add_phase_d_context(self, response: str, scope: str) -> str:
+        """Add Phase D eligibility context to a response."""
+        if not self.phase_d_persistence:
+            return response
+
+        try:
+            eligibility = self.phase_d_persistence.read_latest_eligibility(scope)
+            if not eligibility:
+                return response
+
+            # Check expiry
+            if eligibility.expiry_timestamp and datetime.utcnow() > eligibility.expiry_timestamp:
+                return response
+
+            # Add context
+            if eligibility.eligible:
+                hours_left = int((eligibility.expiry_timestamp - datetime.utcnow()).total_seconds() / 3600) if eligibility.expiry_timestamp else 0
+                phase_d_msg = f"\n[Phase D] Duration anomaly detected (>p90). Eligibility: TRUE. Expires: {hours_left}h."
+            else:
+                # List failed rules
+                failed = []
+                if not eligibility.evidence_sufficiency_passed:
+                    failed.append("insufficient evidence")
+                if not eligibility.duration_anomaly_passed:
+                    failed.append("duration normal")
+                if not eligibility.block_type_passed:
+                    failed.append("block type ineligible")
+                if not eligibility.cost_benefit_passed:
+                    failed.append("negative cost-benefit")
+                if not eligibility.regime_safety_passed:
+                    failed.append("regime unsafe")
+                phase_d_msg = f"\n[Phase D] Eligibility: FALSE ({', '.join(failed)})."
+
+            return response + phase_d_msg
+        except Exception as e:
+            logger.debug(f"PHASE_D_CONTEXT_FAILED | scope={scope} error={e}")
+            return response
 
 
 def generate_response(intent: Intent, logs_root: str = "logs") -> str:

@@ -84,3 +84,7 @@
 {"timestamp":"2026-02-09T16:18:49.418063","event_type":"INTENT_EXECUTED","chat_id":8428809396,"intent":"EXPLAIN_HOLDINGS","scope":null,"details":{"success":true,"response_length":193}}
 {"timestamp":"2026-02-09T16:18:57.595087","event_type":"INTENT_PARSED","chat_id":8428809396,"intent":"EXPLAIN_TODAY","scope":null,"details":{"text":"what happened today all containers?","confidence":0.7}}
 {"timestamp":"2026-02-09T16:18:57.595087","event_type":"INTENT_EXECUTED","chat_id":8428809396,"intent":"EXPLAIN_TODAY","scope":null,"details":{"success":true,"response_length":187}}
+{"timestamp":"2026-02-09T16:57:35.477989","event_type":"INTENT_PARSED","chat_id":8428809396,"intent":"EXPLAIN_GOVERNANCE","scope":"governance","details":{"text":"any pending governance?","confidence":0.65}}
+{"timestamp":"2026-02-09T16:57:35.477989","event_type":"INTENT_EXECUTED","chat_id":8428809396,"intent":"EXPLAIN_GOVERNANCE","scope":"governance","details":{"success":true,"response_length":45}}
+{"timestamp":"2026-02-09T16:57:52.093861","event_type":"INTENT_PARSED","chat_id":8428809396,"intent":"EXPLAIN_GOVERNANCE","scope":"governance","details":{"text":"Governance details","confidence":0.65}}
+{"timestamp":"2026-02-09T16:57:52.093861","event_type":"INTENT_EXECUTED","chat_id":8428809396,"intent":"EXPLAIN_GOVERNANCE","scope":"governance","details":{"success":true,"response_length":45}}

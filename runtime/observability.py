@@ -46,6 +46,11 @@ class ObservabilityCounters:
     ai_ranked_universe_size: Optional[int] = None
     ai_scan_coverage_count: Optional[int] = None
     signals_skipped_due_to_capacity: int = 0
+    # Phase D: Regime block tracking
+    regime_block_active: bool = False
+    regime_block_start_ts: Optional[str] = None
+    regime_block_regime: Optional[str] = None
+    regime_block_strategies_eligible: int = 0
 
 
 class RuntimeObservability:
@@ -122,6 +127,31 @@ class RuntimeObservability:
         elif action == "unblock":
             self.record_unblock(state)
         self.emit_live_status_snapshot(trigger=f"{action}:{state}")
+
+    def on_strategies_selected(self, eligible_strategies: list, regime: str) -> None:
+        """Hook called after strategy selection. Used for Phase D regime block tracking."""
+        is_blocked = len(eligible_strategies) == 0
+
+        if is_blocked and not self._counters.regime_block_active:
+            # Block started
+            self._counters.regime_block_active = True
+            self._counters.regime_block_start_ts = datetime.now(timezone.utc).isoformat()
+            self._counters.regime_block_regime = regime
+            self._counters.regime_block_strategies_eligible = 0
+            logger.debug(f"REGIME_BLOCK_STARTED | regime={regime}")
+
+        elif not is_blocked and self._counters.regime_block_active:
+            # Block ended
+            if self._counters.regime_block_start_ts:
+                duration = (datetime.now(timezone.utc) - datetime.fromisoformat(self._counters.regime_block_start_ts)).total_seconds()
+                logger.debug(f"REGIME_BLOCK_ENDED | regime={self._counters.regime_block_regime} duration={duration:.0f}s")
+            self._counters.regime_block_active = False
+            self._counters.regime_block_start_ts = None
+            self._counters.regime_block_regime = None
+
+        elif is_blocked and self._counters.regime_block_active:
+            # Block still active, update strategy count
+            self._counters.regime_block_strategies_eligible = len(eligible_strategies)
 
     def _uptime_seconds(self) -> int:
         return int((datetime.now(timezone.utc) - self._start_time).total_seconds())
@@ -275,6 +305,15 @@ class RuntimeObservability:
             self._last_summary_date = today
             return
 
+        # Compute regime block duration
+        block_duration_seconds = 0
+        if self._counters.regime_block_active and self._counters.regime_block_start_ts:
+            try:
+                block_start = datetime.fromisoformat(self._counters.regime_block_start_ts)
+                block_duration_seconds = int((datetime.now(timezone.utc) - block_start).total_seconds())
+            except Exception:
+                block_duration_seconds = 0
+
         payload = {
             "date": today,
             "env": scope.env.lower(),
@@ -299,6 +338,13 @@ class RuntimeObservability:
             "ai_ranked_universe_size": self._counters.ai_ranked_universe_size,
             "ai_scan_coverage_count": self._counters.ai_scan_coverage_count,
             "signals_skipped_due_to_capacity": self._counters.signals_skipped_due_to_capacity,
+            # Phase D: Regime block state
+            "regime_blocked_period": {
+                "is_blocked": self._counters.regime_block_active,
+                "block_duration_seconds": block_duration_seconds,
+                "regime": self._counters.regime_block_regime or "UNKNOWN",
+                "strategies_eligible": self._counters.regime_block_strategies_eligible,
+            },
         }
 
         try:
