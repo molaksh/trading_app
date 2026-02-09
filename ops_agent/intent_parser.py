@@ -24,7 +24,7 @@ class IntentParser:
     # Intent patterns (question -> intent_type)
     INTENT_PATTERNS = {
         r"why.*(?:no|not).*trade|why.*no.*signal": "EXPLAIN_NO_TRADES",
-        r"fill|what.*filled|executed.*trade": "EXPLAIN_TRADES",
+        r"fill|what.*filled|executed.*trade|buy|buys|all.*buy": "EXPLAIN_TRADES",
         r"what.*regime|what mode|current regime|regime\s*\?": "EXPLAIN_REGIME",
         r"block|what.*block": "EXPLAIN_BLOCKS",
         r"what.*happen.*today|today.*what|daily.*status": "EXPLAIN_TODAY",
