@@ -310,7 +310,14 @@ class RuntimeObservability:
             return
 
         summary_path = self._summary_path()
-        summary_path.parent.mkdir(parents=True, exist_ok=True)
+        logger.debug(f"SUMMARY_PATH | path={summary_path}")
+
+        try:
+            summary_path.parent.mkdir(parents=True, exist_ok=True)
+            logger.debug(f"SUMMARY_DIR_CREATED | path={summary_path.parent}")
+        except Exception as e:
+            logger.error(f"SUMMARY_DIR_CREATE_FAILED | path={summary_path.parent} error={e}")
+            return
 
         if self._summary_exists(summary_path, today):
             logger.error(f"SUMMARY_DUPLICATE_ATTEMPT | date={today} path={summary_path}")
@@ -373,12 +380,25 @@ class RuntimeObservability:
 
     def check_daily_summary(self) -> None:
         today = date.today().isoformat()
-        if self._last_summary_date is None:
-            self._last_summary_date = today
-            return
-        if today != self._last_summary_date:
+
+        # If this is first time OR day has changed, emit summary
+        if self._last_summary_date is None or today != self._last_summary_date:
+            logger.info(f"Daily summary trigger | date={today} last_date={self._last_summary_date}")
             self.emit_daily_summary(force=True)
             self._last_summary_date = today
+
+        # Periodic health check summary (every 12 hours) for continuous monitoring
+        # This ensures data flows even if market hours are limited
+        if hasattr(self, '_last_health_summary_time'):
+            from datetime import datetime, timedelta
+            now = datetime.now()
+            if (now - self._last_health_summary_time).total_seconds() > (12 * 3600):
+                logger.info(f"Periodic health summary | interval=12h")
+                self.emit_daily_summary(force=True)
+                self._last_health_summary_time = now
+        else:
+            from datetime import datetime
+            self._last_health_summary_time = datetime.now()
 
 
 _OBSERVABILITY: Optional[RuntimeObservability] = None
