@@ -74,10 +74,37 @@ class SmartResponder:
 
     def _build_context(self, scope: Optional[str]) -> Dict[str, Any]:
         """Build context about current trading system state."""
+        from pathlib import Path
+
         context = {
             "timestamp": str(__import__('datetime').datetime.utcnow().isoformat()),
             "scopes": {},
+            "governance": {},
         }
+
+        # Add pending governance proposals (not approved/rejected)
+        try:
+            proposals_dir = Path("/app/persist/governance/crypto/proposals")
+            if proposals_dir.exists():
+                for proposal_dir in proposals_dir.iterdir():
+                    if proposal_dir.is_dir():
+                        synthesis_file = proposal_dir / "synthesis.json"
+                        if synthesis_file.exists():
+                            with open(synthesis_file) as f:
+                                synthesis = __import__('json').load(f)
+                                # Check if approved/rejected
+                                approval_file = proposal_dir / "approval.json"
+                                if not approval_file.exists():
+                                    # Pending proposal
+                                    proposal_id = synthesis.get("proposal_id", proposal_dir.name)
+                                    context["governance"][proposal_id] = {
+                                        "summary": synthesis.get("summary", ""),
+                                        "recommendation": synthesis.get("final_recommendation", "UNKNOWN"),
+                                        "confidence": synthesis.get("confidence", 0),
+                                        "risks": synthesis.get("key_risks", []),
+                                    }
+        except Exception as e:
+            logger.debug(f"Error reading governance proposals: {e}")
         
         # If scope specified, focus on that; otherwise include all
         scopes_to_check = [scope] if scope else [
@@ -159,9 +186,12 @@ Guidelines:
 - Use data provided in context
 - Focus on factual information from the system state
 - If asked about trading decisions, explain the system's regime-based approach
-- Always mention relevant scopes (live_kraken_crypto_global, paper_kraken_crypto_global, etc.)
+- Always mention relevant scopes (live_kraken_crypto_global, paper_kraken_crypto_global, live_alpaca_swing_us, paper_alpaca_swing_us)
 - Be aware of risk management - the system prioritizes capital preservation
-- Don't speculate about future markets - stick to current system state"""
+- Don't speculate about future markets - stick to current system state
+- When asked about governance, proposals, or pending actions: check the "governance" section in context
+- Governance proposals are non-binding suggestions that require human approval
+- Proposals not in the "governance" section are either approved, rejected, or expired"""
 
     def _call_openai(self, system_prompt: str, context: str, question: str) -> Optional[str]:
         """Call OpenAI API and return response."""
