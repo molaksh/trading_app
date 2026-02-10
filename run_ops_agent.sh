@@ -56,6 +56,16 @@ docker rm -f ops-agent 2>/dev/null || true
 # Rebuild image
 rebuild_image "ops-agent"
 
+# Extract OpenAI API key from .env (CHATGPT_API_KEY)
+OPENAI_API_KEY="${OPENAI_API_KEY:-$(grep '^CHATGPT_API_KEY=' .env 2>/dev/null | cut -d'=' -f2)}"
+
+if [ -z "$OPENAI_API_KEY" ]; then
+    echo "⚠️  WARNING: OPENAI_API_KEY not found"
+    echo "   Set OPENAI_API_KEY in .env or as environment variable"
+    echo "   Smart responder will be disabled"
+    echo ""
+fi
+
 # Run container continuously
 echo "Starting ops agent container..."
 docker run -d \
@@ -65,6 +75,9 @@ docker run -d \
   -e TELEGRAM_BOT_TOKEN="$TELEGRAM_BOT_TOKEN" \
   -e TELEGRAM_ALLOWED_CHAT_IDS="$TELEGRAM_ALLOWED_CHAT_IDS" \
   -e PERSISTENCE_ROOT=/app/persist \
+  -e LOGS_ROOT=/app/persist \
+  -e OPENAI_API_KEY="${OPENAI_API_KEY}" \
+  -e OPENAI_MODEL="${OPENAI_MODEL:-gpt-4o-mini}" \
   -e PYTHONUNBUFFERED=1 \
   -e TZ=UTC \
   ops-agent \

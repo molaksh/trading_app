@@ -29,9 +29,8 @@ class IntentParser:
         r"what.*regime|what mode|current regime|regime\s*\?": "EXPLAIN_REGIME",
         r"block|what.*block": "EXPLAIN_BLOCKS",
         r"what.*happen.*today|today.*what|daily.*status": "EXPLAIN_TODAY",
-        # Detailed governance BEFORE general governance
-        r"governance.*detail|proposal.*detail|proposal.*full|show.*proposal": "EXPLAIN_GOVERNANCE_DETAILED",
-        r"governance|proposal.*pending|wait.*approv": "EXPLAIN_GOVERNANCE",
+        # Governance (always detailed to show full proposal info)
+        r"governance|proposal.*pending|wait.*approv|governance.*detail|proposal.*detail|proposal.*full|show.*proposal": "EXPLAIN_GOVERNANCE_DETAILED",
         r"ai.*rank|what.*ai|top.*symbol|symbol.*rank": "EXPLAIN_AI_RANKING",
         r"job.*health|job.*status|stale|job.*running": "EXPLAIN_JOBS",
         r"error|exception|crash|problem|fail": "EXPLAIN_ERRORS",
@@ -112,6 +111,7 @@ class IntentParser:
             condition=condition,
             ttl_hours=ttl_hours,
             confidence=confidence,
+            original_text=text,
         )
 
     def _detect_intent_type(self, text: str) -> Optional[str]:

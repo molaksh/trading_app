@@ -46,6 +46,10 @@ class ObservabilityCounters:
     ai_ranked_universe_size: Optional[int] = None
     ai_scan_coverage_count: Optional[int] = None
     signals_skipped_due_to_capacity: int = 0
+    # Current regime tracking
+    current_regime: str = "UNKNOWN"
+    regime_changed: bool = False
+    regime_change_ts: Optional[str] = None
     # Phase D: Regime block tracking
     regime_block_active: bool = False
     regime_block_start_ts: Optional[str] = None
@@ -129,7 +133,15 @@ class RuntimeObservability:
         self.emit_live_status_snapshot(trigger=f"{action}:{state}")
 
     def on_strategies_selected(self, eligible_strategies: list, regime: str) -> None:
-        """Hook called after strategy selection. Used for Phase D regime block tracking."""
+        """Hook called after strategy selection. Used for Phase D regime block tracking and current regime tracking."""
+        # Track current regime
+        if regime and regime != self._counters.current_regime:
+            self._counters.regime_changed = True
+            self._counters.regime_change_ts = datetime.now(timezone.utc).isoformat()
+            logger.debug(f"REGIME_CHANGED | from={self._counters.current_regime} to={regime}")
+        self._counters.current_regime = regime if regime else "UNKNOWN"
+
+        # Phase D block tracking
         is_blocked = len(eligible_strategies) == 0
 
         if is_blocked and not self._counters.regime_block_active:
@@ -338,6 +350,10 @@ class RuntimeObservability:
             "ai_ranked_universe_size": self._counters.ai_ranked_universe_size,
             "ai_scan_coverage_count": self._counters.ai_scan_coverage_count,
             "signals_skipped_due_to_capacity": self._counters.signals_skipped_due_to_capacity,
+            # Current regime
+            "regime": self._counters.current_regime,
+            "regime_changed": self._counters.regime_changed,
+            "regime_change_ts": self._counters.regime_change_ts,
             # Phase D: Regime block state
             "regime_blocked_period": {
                 "is_blocked": self._counters.regime_block_active,

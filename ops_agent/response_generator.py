@@ -16,6 +16,7 @@ from ops_agent.trades_reader import TradesReader
 from ops_agent.errors_reader import ErrorsReader
 from ops_agent.reconciliation_reader import ReconciliationReader
 from ops_agent.ml_reader import MLReader
+from ops_agent.smart_responder import SmartResponder
 
 logger = logging.getLogger(__name__)
 
@@ -58,13 +59,28 @@ class ResponseGenerator:
         self.historical_analyzer = historical_analyzer
         # Phase D (optional)
         self.phase_d_persistence = PhaseDPersistence() if PhaseDPersistence else None
+        # Smart responder for conversational fallback
+        self.smart_responder = SmartResponder(logs_root)
 
     def generate_response(self, intent: Intent) -> str:
         """
         Generate a concise Telegram response for an intent.
 
-        Returns plain text response (no Markdown, no speculation).
+        FULL SMART MODE: All queries go through OpenAI first for conversational responses.
+        Falls back to rule-based responses only if OpenAI is disabled or fails.
         """
+        # TRY SMART RESPONDER FIRST (Full Smart Mode)
+        if intent.original_text and self.smart_responder.enabled:
+            smart_response = self.smart_responder.answer(intent.original_text, intent.scope)
+            if smart_response:
+                logger.info(f"Smart response for: {intent.original_text[:50]}")
+                return smart_response
+            # If OpenAI fails, continue to rule-based fallback
+            logger.debug(f"Smart responder failed, falling back to rules")
+
+        # FALLBACK: Rule-based responses when OpenAI disabled or failed
+        logger.debug(f"Using rule-based response for intent: {intent.intent_type}")
+
         # If user asked for "all containers", check all scopes
         if intent.all_scopes:
             if intent.intent_type == "EXPLAIN_JOBS":
@@ -296,9 +312,9 @@ class ResponseGenerator:
             if not proposals_dir.exists():
                 return "✓ No governance activity"
 
-            # Find most recent pending proposal
+            # Find all pending proposals (not just most recent)
             pending_proposals = []
-            for proposal_dir in proposals_dir.iterdir():
+            for proposal_dir in sorted(proposals_dir.iterdir()):
                 if proposal_dir.is_dir():
                     # Skip approved/rejected
                     if (proposal_dir / "approval.json").exists() or (
@@ -324,130 +340,127 @@ class ResponseGenerator:
             if not pending_proposals:
                 return "✓ No pending governance proposals"
 
-            # Use most recent
-            pending = pending_proposals[-1]
-            proposal_dir = pending["dir"]
-            proposal = pending["proposal"]
-
             lines = []
-            lines.append("⚠️ GOVERNANCE PROPOSAL PENDING\n")
+            lines.append("=" * 60)
+            lines.append(f"⚠️ GOVERNANCE PROPOSALS: {len(pending_proposals)} PENDING")
+            lines.append("=" * 60)
 
-            # Basic info
-            proposal_id = proposal.get("proposal_id", "unknown")
-            env = proposal.get("environment", "unknown").upper()
-            prop_type = proposal.get("proposal_type", "unknown")
-            symbols = ", ".join(proposal.get("symbols", []))
+            # Process each pending proposal
+            for idx, pending in enumerate(pending_proposals, 1):
+                proposal_dir = pending["dir"]
+                proposal = pending["proposal"]
 
-            lines.append(f"📋 Type: {prop_type}")
-            lines.append(f"🎯 Symbols: {symbols}")
-            lines.append(f"🏢 Environment: {env}")
-            lines.append("")
+                # Basic info
+                proposal_id = proposal.get("proposal_id", "unknown")[:8]
+                env = proposal.get("environment", "unknown").upper()
+                prop_type = proposal.get("proposal_type", "unknown")
+                symbols = ", ".join(proposal.get("symbols", []))
 
-            # Rationale
-            rationale = proposal.get("rationale", "")
-            if rationale:
-                lines.append(f"💡 Rationale: {rationale}")
+                lines.append(f"\n#{idx} {prop_type}")
+                lines.append(f"ID: {proposal_id}... | Symbols: {symbols}")
+                lines.append("-" * 60)
 
-            # Evidence
-            evidence = proposal.get("evidence", {})
-            if evidence:
+                # What it's asking (SUMMARY)
+                rationale = proposal.get("rationale", "")
+                if rationale:
+                    lines.append(f"🎯 What: {rationale}")
+
+                # Evidence (WHY)
+                evidence = proposal.get("evidence", {})
+                if evidence:
+                    lines.append("")
+                    lines.append("Why: Current Situation")
+                    perf = evidence.get("performance_notes", "")
+                    if perf:
+                        lines.append(f"  • {perf}")
+                    missed = evidence.get("missed_signals", 0)
+                    if missed > 0:
+                        lines.append(f"  • Missed signals: {missed}")
+                    scan = evidence.get("scan_starvation", [])
+                    if scan:
+                        lines.append(f"  • Scan starvation detected: {len(scan)} symbols")
+                    dead = evidence.get("dead_symbols", [])
+                    if dead:
+                        lines.append(f"  • Dead symbols: {len(dead)}")
+
+                # Confidence level explanation
+                try:
+                    synthesis_file = proposal_dir / "synthesis.json"
+                    if synthesis_file.exists():
+                        with open(synthesis_file) as f:
+                            synthesis = json.load(f)
+                            conf = synthesis.get("confidence", 0)
+                            conf_pct = int(conf * 100)
+
+                            lines.append("")
+                            lines.append(f"📊 Confidence: {conf_pct}%")
+                            if conf_pct < 40:
+                                lines.append("   (Low - needs more data)")
+                            elif conf_pct < 70:
+                                lines.append("   (Medium - reasonable but watch closely)")
+                            else:
+                                lines.append("   (High - well-supported)")
+
+                            # Key risks
+                            risks = synthesis.get("key_risks", [])
+                            if risks:
+                                lines.append("")
+                                lines.append("⚠️ Key Risks:")
+                                for risk in risks[:2]:
+                                    lines.append(f"  • {risk}")
+                except Exception as e:
+                    logger.debug(f"Error reading synthesis: {e}")
+
+                # Approvals
+                try:
+                    audit_file = proposal_dir / "audit.json"
+                    critique_file = proposal_dir / "critique.json"
+
+                    lines.append("")
+                    lines.append("📋 Review Status:")
+
+                    if audit_file.exists():
+                        with open(audit_file) as f:
+                            audit = json.load(f)
+                            if audit.get("constitution_passed"):
+                                lines.append("  ✅ Constitutional audit: PASSED")
+                            else:
+                                lines.append("  ❌ Constitutional audit: FAILED")
+
+                    if critique_file.exists():
+                        with open(critique_file) as f:
+                            critique = json.load(f)
+                            rec = critique.get("recommendation", "UNKNOWN")
+                            lines.append(f"  🤔 Critic review: {rec}")
+                except Exception as e:
+                    logger.debug(f"Error reading reviews: {e}")
+
+                # Time remaining
+                try:
+                    # Since we don't have created_at, estimate from file mtime
+                    mtime = proposal_dir.stat().st_mtime
+                    created = datetime.fromtimestamp(mtime)
+                    expires = created + timedelta(hours=72)
+                    now = datetime.utcnow()
+                    remaining = expires - now
+
+                    if remaining.total_seconds() > 0:
+                        hours = int(remaining.total_seconds() / 3600)
+                        lines.append(f"  ⏰ Expires in: {hours} hours")
+                    else:
+                        lines.append("  ⏰ EXPIRED (auto-deferred)")
+                except Exception:
+                    pass
+
+                # Action instructions
                 lines.append("")
-                lines.append("📊 Evidence:")
-                missed = evidence.get("missed_signals", 0)
-                if missed:
-                    lines.append(f"  • Missed signals: {missed}")
-                scan = evidence.get("scan_starvation", [])
-                if scan:
-                    lines.append(f"  • Scan starvation: {len(scan)} symbols")
-                dead = evidence.get("dead_symbols", [])
-                if dead:
-                    lines.append(f"  • Dead symbols: {len(dead)}")
+                lines.append("📝 To decide:")
+                lines.append(f"  APPROVE:  python governance/approve_proposal.py --approve {proposal.get('proposal_id', 'ID')}")
+                lines.append(f"  REJECT:   python governance/approve_proposal.py --reject {proposal.get('proposal_id', 'ID')}")
+                lines.append(f"  DEFER:    python governance/approve_proposal.py --defer {proposal.get('proposal_id', 'ID')}")
 
-            # Critic analysis
-            try:
-                critique_file = proposal_dir / "critique.json"
-                if critique_file.exists():
-                    with open(critique_file) as f:
-                        critique = json.load(f)
-                        lines.append("")
-                        lines.append(
-                            f"🤔 Critic's View: {critique.get('recommendation', 'N/A')}"
-                        )
-                        criticisms = critique.get("criticisms", [])
-                        if criticisms:
-                            for crit in criticisms[:1]:  # Just first criticism
-                                lines.append(f"  ⚠️ {crit}")
-            except Exception as e:
-                logger.debug(f"Error reading critique: {e}")
-
-            # Audit
-            try:
-                audit_file = proposal_dir / "audit.json"
-                if audit_file.exists():
-                    with open(audit_file) as f:
-                        audit = json.load(f)
-                        passed = audit.get("constitution_passed", False)
-                        violations = audit.get("violations", [])
-                        lines.append("")
-                        if passed:
-                            lines.append("✅ Constitutional: PASSED")
-                        else:
-                            lines.append("❌ Constitutional: FAILED")
-                            if violations:
-                                for v in violations[:2]:
-                                    lines.append(f"  ⛔ {v}")
-            except Exception as e:
-                logger.debug(f"Error reading audit: {e}")
-
-            # Synthesis (final recommendation)
-            try:
-                synthesis_file = proposal_dir / "synthesis.json"
-                if synthesis_file.exists():
-                    with open(synthesis_file) as f:
-                        synthesis = json.load(f)
-                        lines.append("")
-                        rec = synthesis.get("final_recommendation", "UNKNOWN")
-                        conf = synthesis.get("confidence", 0)
-                        conf_pct = int(conf * 100)
-                        lines.append(f"🎯 Recommendation: {rec} ({conf_pct}% confidence)")
-
-                        # Key risks
-                        risks = synthesis.get("key_risks", [])
-                        if risks:
-                            lines.append("")
-                            lines.append("⚠️ Key Risks:")
-                            for risk in risks[:2]:  # Top 2 risks
-                                lines.append(f"  • {risk}")
-            except Exception as e:
-                logger.debug(f"Error reading synthesis: {e}")
-
-            # Time remaining (72 hours from creation)
-            try:
-                proposal_timestamp = proposal.get("created_at")
-                if proposal_timestamp:
-                    # Try to parse timestamp
-                    try:
-                        created = datetime.fromisoformat(proposal_timestamp)
-                        expires = created + timedelta(hours=72)
-                        now = datetime.utcnow()
-                        remaining = expires - now
-
-                        if remaining.total_seconds() > 0:
-                            hours = int(remaining.total_seconds() / 3600)
-                            lines.append("")
-                            lines.append(f"⏰ Time remaining: {hours} hours")
-                        else:
-                            lines.append("")
-                            lines.append("⏰ EXPIRED - Defaulted to DEFER")
-                    except Exception:
-                        pass
-            except Exception as e:
-                logger.debug(f"Error calculating expiry: {e}")
-
-            # Action prompt
             lines.append("")
-            lines.append("Actions: APPROVE | REJECT | DEFER")
-
+            lines.append("=" * 60)
             return "\n".join(lines)
 
         except Exception as e:

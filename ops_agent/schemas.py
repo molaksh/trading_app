@@ -16,6 +16,7 @@ class Intent(BaseModel):
     condition: Optional[str] = None  # For watches: regime_change, governance_pending, etc.
     ttl_hours: Optional[int] = None  # For watches: default 24
     confidence: float = Field(ge=0, le=1)  # 0-1 confidence in parsing
+    original_text: Optional[str] = None  # Original user question (for smart fallback)
 
 
 class TelegramMessage(BaseModel):
