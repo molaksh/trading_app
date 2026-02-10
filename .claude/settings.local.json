@@ -63,7 +63,8 @@
       "Bash(if [ -f \"$dir/rejection.json\" ])",
       "Bash(then echo \"Status: REJECTED\")",
       "Bash(xargs:*)",
-      "Bash(env:*)"
+      "Bash(env:*)",
+      "Bash(for container in live-kraken-crypto-global paper-kraken-crypto-global live-alpaca-swing-us paper-alpaca-swing-us)"
     ]
   }
 }
