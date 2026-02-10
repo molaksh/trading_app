@@ -103,13 +103,24 @@ class SmartResponder:
             
             # Holdings
             try:
-                holdings = self.positions_reader.get_positions(s)
+                holdings = self.positions_reader.get_open_positions(s)
                 if holdings:
+                    # Convert dict to list format for JSON serialization
+                    positions_list = [
+                        {
+                            "symbol": symbol,
+                            "quantity": position.get("quantity") or position.get("entry_quantity", 0),
+                            "entry_price": position.get("entry_price", 0),
+                            "current_price": position.get("current_price", 0),
+                        }
+                        for symbol, position in list(holdings.items())[:5]
+                    ]
                     scope_data["holdings"] = {
                         "count": len(holdings),
-                        "positions": holdings[:5],  # First 5
+                        "positions": positions_list,
                     }
-            except Exception:
+            except Exception as e:
+                logger.debug(f"Error getting holdings for {s}: {e}")
                 pass
             
             # Recent errors
