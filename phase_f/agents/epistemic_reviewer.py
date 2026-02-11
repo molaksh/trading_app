@@ -113,7 +113,7 @@ class EpistemicReviewer:
                 narrative_consistency=NarrativeConsistency.LOW,
                 num_sources_analyzed=0,
                 num_contradictions=0,
-                summary_for_governance="Analysis error. No action recommended.",
+                summary_for_governance="Analysis error. Unable to assess regime validity.",
                 reasoning_summary="Insufficient data for verdict.",
             )
 
@@ -284,18 +284,18 @@ class EpistemicReviewer:
             )
         elif verdict == VerdictType.REGIME_QUESTIONABLE:
             return (
-                f"External regime signals mixed. Consensus: {agreement_score:.0%}. "
-                f"Recommend +20% confidence penalty on regime-dependent proposals."
+                f"External regime indicators mixed. Consensus: {agreement_score:.0%}. "
+                f"Assessment suggests +20% confidence penalty on regime-dependent proposals may be warranted."
             )
         elif verdict == VerdictType.HIGH_NOISE_NO_ACTION:
             return (
-                f"High noise in external signals. Recommend deferring "
-                f"regime-sensitive governance changes until clarity improves."
+                f"High noise in external indicators. Assessment indicates "
+                f"regime-sensitive governance changes should await clarity improvement."
             )
         else:  # POSSIBLE_STRUCTURAL_SHIFT
             return (
                 f"Possible structural shift detected (Δ confidence: {confidence_change:+.2f}). "
-                f"Recommend monitoring regime evolution before major governance adjustments."
+                f"Assessment suggests monitoring regime evolution before major governance adjustments."
             )
 
     def _build_reasoning_summary(
@@ -323,6 +323,6 @@ class EpistemicReviewer:
             f"Analyzed {num_hypotheses} external hypotheses with {num_challenges} challenges. "
             f"Researcher-critic agreement: {agreement_score:.0%}. "
             f"Narrative consistency: {consistency.value}. "
-            f"Confidence change vs internal: {confidence_change:+.2f}. "
-            f"Verdict reflects conservative interpretation of mixed signals."
+            f"Confidence delta vs internal: {confidence_change:+.2f}. "
+            f"Verdict reflects conservative interpretation of mixed indicators."
         )
