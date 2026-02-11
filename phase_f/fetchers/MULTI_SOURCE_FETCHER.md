@@ -21,34 +21,42 @@ A resilient, multi-source news fetcher for Phase F epistemic intelligence that a
 
 ### Supported Sources
 
-1. **CoinTelegraph API** (Public, no auth needed)
-   - URL: `https://cointelegraph.com/api/v3`
-   - Status: FREE, unlimited
-   - Feature flag: `COINTELEGRAPH_ENABLED=true`
+**🟢 ENABLED BY DEFAULT (Use Immediately)**
 
-2. **CryptoCompare API** (Free tier with API key)
-   - URL: `https://www.cryptocompare.com/api/v1`
-   - Status: FREE tier (500 calls/day)
-   - Feature flag: Auto-enabled with `CRYPTOCOMPARE_API_KEY`
-   - Setup: Sign up at https://www.cryptocompare.com/api
-
-3. **RSS Feeds** (Public, no auth needed)
+1. **RSS Feeds** (Public, no auth needed)
    - Sources: Reddit (crypto + Bitcoin), Medium, CoinDesk, Yahoo Finance, Bitcoin Magazine
    - Status: FREE, unlimited
-   - Feature flag: `PHASE_F_RSS_ENABLED=true`
-   - Requires: `feedparser` library (`pip install feedparser`)
+   - Setup: ~1 minute (`pip install feedparser`)
+   - Feature flag: `PHASE_F_RSS_ENABLED=true` (default: enabled)
 
-4. **Web Scraper** (Light scraping, disabled by default)
+2. **Web Scraper** (Light scraping, enabled by default)
    - Sites: BeInCrypto, CoinGecko blog
-   - Status: FREE but resource-intensive
-   - Feature flag: `PHASE_F_WEB_SCRAPER_ENABLED=false` (disabled by default)
-   - Requires: `BeautifulSoup4` library (`pip install beautifulsoup4`)
+   - Status: FREE, works immediately
+   - Setup: ~2 minutes (`pip install beautifulsoup4`)
+   - Feature flag: `PHASE_F_WEB_SCRAPER_ENABLED=true` (default: enabled)
+
+**🔴 DISABLED BY DEFAULT (Add Later)**
+
+3. **CoinTelegraph API** (Public, no auth needed)
+   - URL: `https://cointelegraph.com/api/v3`
+   - Status: FREE, unlimited
+   - Setup: ~5 minutes (apply for access, then enable)
+   - Feature flag: `COINTELEGRAPH_ENABLED=false` (default: disabled)
+   - To enable: Set `COINTELEGRAPH_ENABLED=true` when ready
+
+4. **CryptoCompare API** (Free tier with API key)
+   - URL: `https://www.cryptocompare.com/api/v1`
+   - Status: FREE tier (500 calls/day)
+   - Setup: ~5 minutes (sign up, get API key)
+   - Feature flag: Auto-enabled when `CRYPTOCOMPARE_API_KEY` is set
+   - To enable: Set `CRYPTOCOMPARE_API_KEY=your_key` in .env
 
 5. **Twitter/X** (Optional with Bearer token)
    - URL: `https://api.twitter.com/2/tweets/search/recent`
    - Status: Requires Twitter API v2 access
-   - Feature flag: `TWITTER_SCRAPER_ENABLED=false` (disabled by default)
-   - Setup: Get Bearer token from https://developer.twitter.com/
+   - Setup: ~10 minutes (create developer account)
+   - Feature flag: `TWITTER_SCRAPER_ENABLED=false` (default: disabled)
+   - To enable: Set Bearer token + `TWITTER_SCRAPER_ENABLED=true`
 
 ## Configuration
 
@@ -56,23 +64,25 @@ A resilient, multi-source news fetcher for Phase F epistemic intelligence that a
 
 ```bash
 # Master switch
-PHASE_F_USE_MULTI_SOURCE_FETCHER=true    # Enable multi-source (default: true)
+PHASE_F_USE_MULTI_SOURCE_FETCHER=true      # Enable multi-source (default: true)
 
-# CoinTelegraph
-COINTELEGRAPH_ENABLED=true               # Enable (default: true)
+# CoinTelegraph (DISABLED by default - get API when ready)
+COINTELEGRAPH_ENABLED=false                # Enable (default: false)
 
-# CryptoCompare
-CRYPTOCOMPARE_API_KEY=your_api_key       # Get from https://www.cryptocompare.com/api
+# CryptoCompare (DISABLED by default - get API key when ready)
+CRYPTOCOMPARE_API_KEY=your_api_key         # Get from https://www.cryptocompare.com/api
+                                            # Auto-enabled when key is set
 
-# RSS Feeds
-PHASE_F_RSS_ENABLED=true                 # Enable (default: true)
+# RSS Feeds (ENABLED by default - works immediately)
+PHASE_F_RSS_ENABLED=true                   # Enable (default: true)
 
-# Web Scraper (disabled by default)
-PHASE_F_WEB_SCRAPER_ENABLED=false        # Enable (default: false)
+# Web Scraper (ENABLED by default - works immediately)
+PHASE_F_WEB_SCRAPER_ENABLED=true           # Enable (default: true)
+                                            # Requires: pip install beautifulsoup4
 
 # Twitter/X (disabled by default)
-TWITTER_BEARER_TOKEN=your_bearer_token   # Twitter API v2 token
-TWITTER_SCRAPER_ENABLED=false            # Enable (default: false)
+TWITTER_BEARER_TOKEN=your_bearer_token     # Twitter API v2 token
+TWITTER_SCRAPER_ENABLED=false              # Enable (default: false)
 ```
 
 ### Feature Flags in Code
@@ -241,49 +251,60 @@ pytest tests/test_phase_f/test_news_fetcher_multi_source.py --cov=phase_f.fetche
 
 For 25 articles from 5 sources: ~5-8 seconds (includes RSS parse, web scrape)
 
-## Setup Steps
+## Quick Start (5 Minutes)
 
-### 5 Minutes (No Auth)
-
-1. ✅ CoinTelegraph - Works out of the box
-2. ✅ RSS feeds - Works out of the box
-3. ✅ Web scraper (optional) - Requires BeautifulSoup4
-
+**Step 1: Install dependencies**
 ```bash
 pip install beautifulsoup4 feedparser
 ```
 
-### 10 Minutes (API Keys)
-
-1. **CryptoCompare**
-   ```bash
-   # Go to https://www.cryptocompare.com/api
-   # Sign up (free)
-   # Copy API key
-   echo "CRYPTOCOMPARE_API_KEY=your_key" >> .env
-   ```
-
-2. **Twitter/X** (optional)
-   ```bash
-   # Go to https://developer.twitter.com/
-   # Create app
-   # Get Bearer token
-   echo "TWITTER_BEARER_TOKEN=your_token" >> .env
-   echo "TWITTER_SCRAPER_ENABLED=true" >> .env
-   ```
-
-### Enable in Phase F
-
+**Step 2: Phase F will auto-use RSS + Web Scraper**
 ```bash
-# .env
-PHASE_F_USE_MULTI_SOURCE_FETCHER=true
-PHASE_F_MAX_ARTICLES_PER_AGENT=50
+# No .env changes needed - RSS & Web Scraper are enabled by default
+python phase_f_main.py --run-once
 ```
 
-Restart Phase F daemon:
+**Done!** You're now fetching from:
+- ✅ RSS feeds (Reddit, Medium, CoinDesk, etc.)
+- ✅ Web Scraper (BeInCrypto, CoinGecko)
+
+---
+
+## Add APIs Later (When Ready)
+
+### Add CoinTelegraph (5 minutes)
+```bash
+# Go to https://cointelegraph.com/api/v3 and apply for access
+# Once approved:
+echo "COINTELEGRAPH_ENABLED=true" >> .env
+```
+
+### Add CryptoCompare (5 minutes)
+```bash
+# Go to https://www.cryptocompare.com/api
+# Sign up (free) → Get API key
+echo "CRYPTOCOMPARE_API_KEY=your_api_key" >> .env
+# Auto-enabled when key is set
+```
+
+### Add Twitter/X (10 minutes, optional)
+```bash
+# Go to https://developer.twitter.com/
+# Create app → Get Bearer token
+echo "TWITTER_BEARER_TOKEN=your_token" >> .env
+echo "TWITTER_SCRAPER_ENABLED=true" >> .env
+```
+
+### Running Phase F
+
+Phase F automatically uses the multi-source fetcher. No .env changes needed to get started!
 
 ```bash
+# Start Phase F daemon (uses RSS + Web Scraper by default)
 bash run_phase_f_crypto.sh
+
+# Or run once for testing
+python phase_f_main.py --run-once
 ```
 
 ## Design Principles
@@ -326,15 +347,30 @@ bash run_phase_f_crypto.sh
    tail -f phase_f/logs/runs/*.log | grep "fetched"
    ```
 
+### Missing Dependencies
+
+If you see "feedparser not installed" or "BeautifulSoup not installed":
+
+```bash
+# Install required libraries
+pip install feedparser beautifulsoup4
+```
+
+Then restart Phase F.
+
 ### Articles from Only One Source
 
-1. Verify other sources are enabled:
+1. Verify RSS & Web Scraper are enabled (they are by default):
    ```bash
-   export COINTELEGRAPH_ENABLED=true
-   export PHASE_F_RSS_ENABLED=true
+   grep -E "PHASE_F_RSS_ENABLED|PHASE_F_WEB_SCRAPER_ENABLED" .env
    ```
 
-2. Check timeouts (increase if needed):
+2. Check logs to see which sources are active:
+   ```bash
+   tail -f phase_f/logs/runs/*.log | grep -i "enabled sources"
+   ```
+
+3. Check timeouts (increase if needed):
    ```python
    fetcher.sources[0].timeout = 20  # Increase from 10
    ```
