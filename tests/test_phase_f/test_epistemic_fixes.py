@@ -122,8 +122,10 @@ class TestDataSufficiencyGate:
             current_regime_confidence=0.5,
             market_signals_available=True,
             source_metadata={
-                "categories": ["crypto", "macro", "market"],
-                "num_articles": 8
+                "categories": ["crypto-news", "macro", "market-microstructure"],
+                "num_articles": 8,
+                "num_unique_sources": 8,
+                "actual_sources": ["Bloomberg", "Reuters", "CoinDesk", "Medium", "Reddit", "BeInCrypto", "CoinGecko", "Kraken"]
             }
         )
 

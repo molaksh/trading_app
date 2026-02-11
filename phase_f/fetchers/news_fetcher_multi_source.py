@@ -1,12 +1,10 @@
 """
 Multi-source crypto news fetcher for Phase F epistemic intelligence.
 
-Sources:
-1. CoinTelegraph API (public, no auth needed)
-2. CryptoCompare API (free tier with API key)
-3. RSS Feeds (Reddit, Medium, CoinDesk, Yahoo Finance, etc.)
-4. Web Scraper (light - BeInCrypto, CoinGecko blog)
-5. Twitter/X (optional - requires Bearer token)
+Simplified sources (3 core):
+1. NewsAPI (50+ outlets - Bloomberg, Reuters, CoinDesk, etc.)
+2. RSS Feeds (Reddit, Medium, CoinDesk, Bitcoin Magazine, etc.)
+3. Web Scraper (BeInCrypto, CoinGecko blog - requires BeautifulSoup4)
 
 All sources return normalized NewsArticle dataclasses for downstream claim extraction.
 Fail-safe: Errors in one source don't block others.
@@ -107,136 +105,86 @@ class NewsSourceFetcher(ABC):
         return clean[:max_length]
 
 
-class CoinTelegraphFetcher(NewsSourceFetcher):
-    """Fetch from CoinTelegraph API (public, no auth required)."""
+
+
+class NewsAPIFetcher(NewsSourceFetcher):
+    """Fetch news from NewsAPI (50+ outlets)."""
 
     def __init__(self):
-        """Initialize CoinTelegraph fetcher."""
-        self.enabled = os.getenv("COINTELEGRAPH_ENABLED", "true").lower() == "true"
-        self.base_url = os.getenv("COINTELEGRAPH_BASE_URL", "https://cointelegraph.com/api/v3")
-        self.timeout = 10
-
-    def is_enabled(self) -> bool:
-        """Check if enabled."""
-        return self.enabled
-
-    def fetch(self, lookback_hours: int = 24, limit: int = 10) -> List[NewsArticle]:
-        """Fetch from CoinTelegraph."""
-        if not self.enabled:
-            return []
-
-        articles = []
-        try:
-            # CoinTelegraph API v3 - get latest articles
-            params = {
-                "limit": min(limit, 50),
-            }
-
-            resp = requests.get(
-                f"{self.base_url}/news",
-                params=params,
-                timeout=self.timeout,
-                headers={"User-Agent": "Mozilla/5.0"}
-            )
-            resp.raise_for_status()
-            data = resp.json()
-
-            for item in data.get("data", [])[:limit]:
-                try:
-                    article = NewsArticle(
-                        title=self._sanitize_title(item.get("title", "")),
-                        description=self._sanitize_description(
-                            item.get("description", "") or item.get("summary", "")
-                        ),
-                        source="CoinTelegraph",
-                        source_url=item.get("url", "https://cointelegraph.com"),
-                        published_at=self._normalize_timestamp(item.get("published_at", "")),
-                        content=item.get("content"),
-                        url=item.get("url"),
-                    )
-                    articles.append(article)
-                except Exception as e:
-                    logger.debug(f"Error parsing CoinTelegraph article: {e}")
-                    continue
-
-            logger.info(f"CoinTelegraph: fetched {len(articles)} articles")
-            return articles
-
-        except Exception as e:
-            logger.warning(f"CoinTelegraph fetch error: {e}")
-            return []
-
-
-class CryptoCompareFetcher(NewsSourceFetcher):
-    """Fetch from CryptoCompare API (free tier, requires API key)."""
-
-    def __init__(self):
-        """Initialize CryptoCompare fetcher."""
-        self.api_key = os.getenv("CRYPTOCOMPARE_API_KEY", "").strip()
+        """Initialize with API key from config."""
+        self.api_key = os.getenv("NEWSAPI_KEY", "").strip()
+        self.base_url = os.getenv("NEWSAPI_BASE_URL", "https://newsapi.org/v2")
         self.enabled = bool(self.api_key)
-        self.base_url = os.getenv("CRYPTOCOMPARE_BASE_URL", "https://www.cryptocompare.com/api/v1")
         self.timeout = 10
 
         if not self.enabled:
-            logger.debug("CryptoCompareFetcher disabled: CRYPTOCOMPARE_API_KEY not set")
+            logger.warning("NewsAPIFetcher disabled: NEWSAPI_KEY not set")
 
     def is_enabled(self) -> bool:
         """Check if enabled."""
         return self.enabled
 
     def fetch(self, lookback_hours: int = 24, limit: int = 10) -> List[NewsArticle]:
-        """Fetch from CryptoCompare."""
+        """Fetch from NewsAPI."""
         if not self.enabled:
             return []
 
         articles = []
         try:
-            # CryptoCompare news endpoint
-            params = {
-                "limit": min(limit, 100),
-                "feeds": "cointelegraph,coindesk,cryptocompare",  # Multiple feeds
-                "lang": "EN",
-            }
+            # Search for crypto/market keywords with different search strategies
+            keywords = [
+                "Bitcoin market",
+                "Ethereum trading",
+                "cryptocurrency news",
+                "blockchain regulation",
+                "crypto volatility"
+            ]
 
-            headers = {
-                "authorization": f"Apikey {self.api_key}",
-                "User-Agent": "Mozilla/5.0",
-            }
-
-            resp = requests.get(
-                f"{self.base_url}/news/list",
-                params=params,
-                headers=headers,
-                timeout=self.timeout
-            )
-            resp.raise_for_status()
-            data = resp.json()
-
-            for item in data.get("Data", [])[:limit]:
+            for keyword in keywords:
                 try:
-                    article = NewsArticle(
-                        title=self._sanitize_title(item.get("title", "")),
-                        description=self._sanitize_description(item.get("body", "")),
-                        source=item.get("source", "CryptoCompare"),
-                        source_url=item.get("url", "https://www.cryptocompare.com"),
-                        published_at=self._normalize_timestamp(
-                            str(item.get("published_on", ""))
-                        ),
-                        content=item.get("body"),
-                        url=item.get("url"),
+                    # NOTE: Removed 'from' parameter as it filters out free tier results
+                    # Use sortBy relevancy instead of publishedAt for better results
+                    params = {
+                        "q": keyword,
+                        "sortBy": "relevancy",
+                        "language": "en",
+                        "apiKey": self.api_key,
+                    }
+
+                    resp = requests.get(
+                        f"{self.base_url}/everything",
+                        params=params,
+                        timeout=self.timeout
                     )
-                    articles.append(article)
+                    resp.raise_for_status()
+                    data = resp.json()
+
+                    # Take top articles from this keyword search
+                    for item in data.get("articles", [])[:limit // len(keywords) + 1]:
+                        try:
+                            article = NewsArticle(
+                                title=self._sanitize_title(item.get("title", "")),
+                                description=self._sanitize_description(item.get("description", "")),
+                                source=item.get("source", {}).get("name", "NewsAPI"),
+                                source_url=item.get("url", "https://newsapi.org"),
+                                published_at=self._normalize_timestamp(item.get("publishedAt", "")),
+                                content=item.get("content"),
+                                url=item.get("url"),
+                            )
+                            articles.append(article)
+                        except Exception as e:
+                            logger.debug(f"Error parsing NewsAPI article: {e}")
+                            continue
                 except Exception as e:
-                    logger.debug(f"Error parsing CryptoCompare article: {e}")
+                    logger.debug(f"NewsAPI keyword search failed for '{keyword}': {e}")
                     continue
 
-            logger.info(f"CryptoCompare: fetched {len(articles)} articles")
-            return articles
+            logger.info(f"NewsAPI: fetched {len(articles)} articles")
+            return articles[:limit]
 
         except Exception as e:
-            logger.warning(f"CryptoCompare fetch error: {e}")
+            logger.warning(f"NewsAPI fetch error: {e}")
             return []
-
 
 class RSSSiteFetcher(NewsSourceFetcher):
     """Fetch from RSS feeds."""
@@ -323,30 +271,41 @@ class WebScraperFetcher(NewsSourceFetcher):
 
     SITES = [
         {
-            "name": "BeInCrypto",
-            "url": "https://beincrypto.com/latest/",
+            "name": "Crypto.com Blog",
+            "url": "https://blog.crypto.com/",
             "selectors": {
-                "article": "article.post",
-                "title": "h2 a, h3 a",
-                "link": "a",
-                "time": "time",
+                # a.group elements contain blog posts with h2 titles
+                "article": "a.group[href*='product-news'], a.group[href*='blog']",
+                "title": "h2",
+                "link": "a",  # The article container itself
+                "time": "span, time, div",  # Time/date text within the link
             },
         },
         {
-            "name": "CoinGecko Blog",
-            "url": "https://www.coingecko.com/blog",
+            "name": "CoinDesk News",
+            "url": "https://www.coindesk.com/news/",
             "selectors": {
-                "article": "div.blog-card",
-                "title": "h2, h3",
-                "link": "a",
-                "time": "span.date",
+                "article": "div[data-article], article, div[class*='story-card']",
+                "title": "h2, h3, h4, span[class*='title']",
+                "link": "a[href*='/news/']",
+                "time": "time, span[class*='date'], span[class*='time']",
+            },
+        },
+        {
+            "name": "Bitcoin Magazine",
+            "url": "https://bitcoinmagazine.com/",
+            "selectors": {
+                "article": "article, div[class*='post'], div[class*='article-card']",
+                "title": "h2, h3, h1, span[class*='title']",
+                "link": "a[href*='article'], a[href*='news']",
+                "time": "time, span[class*='date']",
             },
         },
     ]
 
     def __init__(self):
         """Initialize web scraper."""
-        self.enabled = os.getenv("PHASE_F_WEB_SCRAPER_ENABLED", "false").lower() == "true"
+        self.enabled = os.getenv("PHASE_F_WEB_SCRAPER_ENABLED", "true").lower() == "true"
         self.timeout = 15
 
         try:
@@ -383,7 +342,13 @@ class WebScraperFetcher(NewsSourceFetcher):
                     for article_elem in soup.select(selectors["article"])[:limit // 2]:
                         try:
                             title_elem = article_elem.select_one(selectors["title"])
-                            link_elem = article_elem.select_one(selectors["link"])
+
+                            # Handle case where article_elem itself might be an <a> tag
+                            if article_elem.name == "a":
+                                link_elem = article_elem
+                            else:
+                                link_elem = article_elem.select_one(selectors["link"])
+
                             time_elem = article_elem.select_one(selectors["time"])
 
                             if not title_elem or not link_elem:
@@ -419,79 +384,6 @@ class WebScraperFetcher(NewsSourceFetcher):
             return []
 
 
-class TwitterFetcher(NewsSourceFetcher):
-    """Fetch from Twitter/X (requires Bearer token, optional)."""
-
-    def __init__(self):
-        """Initialize Twitter fetcher."""
-        self.bearer_token = os.getenv("TWITTER_BEARER_TOKEN", "").strip()
-        self.enabled = bool(
-            self.bearer_token
-            and os.getenv("TWITTER_SCRAPER_ENABLED", "false").lower() == "true"
-        )
-        self.timeout = 10
-
-        if not self.enabled:
-            logger.debug("TwitterFetcher disabled: TWITTER_BEARER_TOKEN not set or disabled")
-
-    def is_enabled(self) -> bool:
-        """Check if enabled."""
-        return self.enabled
-
-    def fetch(self, lookback_hours: int = 24, limit: int = 10) -> List[NewsArticle]:
-        """Fetch recent tweets about crypto."""
-        if not self.enabled:
-            return []
-
-        articles = []
-
-        try:
-            headers = {
-                "Authorization": f"Bearer {self.bearer_token}",
-                "User-Agent": "Mozilla/5.0",
-            }
-
-            # Search for tweets (requires v2 API)
-            query = "crypto OR bitcoin OR ethereum lang:en"
-            params = {
-                "query": query,
-                "max_results": min(limit, 100),
-                "tweet.fields": "created_at,author_id,public_metrics",
-            }
-
-            resp = requests.get(
-                "https://api.twitter.com/2/tweets/search/recent",
-                headers=headers,
-                params=params,
-                timeout=self.timeout
-            )
-            resp.raise_for_status()
-            data = resp.json()
-
-            for tweet in data.get("data", [])[:limit]:
-                try:
-                    article = NewsArticle(
-                        title=tweet.get("text", "")[:200],
-                        description=tweet.get("text", ""),
-                        source="Twitter",
-                        source_url=f"https://twitter.com/i/web/status/{tweet.get('id', '')}",
-                        published_at=self._normalize_timestamp(tweet.get("created_at", "")),
-                        url=f"https://twitter.com/i/web/status/{tweet.get('id', '')}",
-                    )
-                    articles.append(article)
-
-                except Exception as e:
-                    logger.debug(f"Error parsing tweet: {e}")
-                    continue
-
-            logger.info(f"Twitter: fetched {len(articles)} tweets")
-            return articles
-
-        except Exception as e:
-            logger.warning(f"Twitter fetch error: {e}")
-            return []
-
-
 class MultiSourceNewsFetcher:
     """
     Unified multi-source news fetcher.
@@ -513,11 +405,9 @@ class MultiSourceNewsFetcher:
     def __init__(self):
         """Initialize multi-source fetcher with all available sources."""
         self.sources: List[NewsSourceFetcher] = [
-            CoinTelegraphFetcher(),
-            CryptoCompareFetcher(),
-            RSSSiteFetcher(),
-            WebScraperFetcher(),
-            TwitterFetcher(),
+            NewsAPIFetcher(),      # 50+ outlets (primary source)
+            RSSSiteFetcher(),      # Reddit, Medium, CoinDesk, etc.
+            WebScraperFetcher(),   # BeInCrypto, CoinGecko (requires BeautifulSoup4)
         ]
 
         enabled_count = sum(1 for s in self.sources if s.is_enabled())

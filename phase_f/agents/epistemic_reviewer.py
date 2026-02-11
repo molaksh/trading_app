@@ -201,7 +201,8 @@ class EpistemicReviewer:
             Dict with "passed" (bool), "reason" (str), and details
         """
         issues = []
-        total_sources = len(researcher_hypotheses) if researcher_hypotheses else 0
+        # Use actual unique sources from metadata, not hypothesis count
+        total_sources = source_metadata.get("num_unique_sources", 0) if source_metadata else 0
 
         # Check: Minimum number of sources
         if total_sources < MINIMUM_SOURCES_FOR_VERDICT:

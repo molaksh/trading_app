@@ -121,12 +121,26 @@ class PhaseFJob:
 
             researcher_hypotheses = self.hypothesis_builder.build_hypotheses(all_claims)
 
+            # Extract actual sources from articles (not the fetcher name)
+            # Handle both dict and object article types
+            unique_sources = []
+            for article in articles:
+                if isinstance(article, dict):
+                    source = article.get('source')
+                else:
+                    source = getattr(article, 'source', None)
+                if source:
+                    unique_sources.append(source)
+            unique_sources = sorted(set(unique_sources))
+
             logger.info(f"Stage 1 complete: {len(articles)} articles, {len(all_claims)} claims, {len(researcher_hypotheses)} hypotheses")
+            logger.info(f"Actual sources used: {unique_sources}")
             self.logger.log_stage_complete("researcher", {
                 "articles_fetched": len(articles),
                 "claims_extracted": len(all_claims),
                 "hypotheses_generated": len(researcher_hypotheses),
-                "data_sources": ["NewsAPI (narrative)"]
+                "data_sources": unique_sources,
+                "num_unique_sources": len(unique_sources)
             })
 
             # Stage 1b: Fetch Market Signals (Kraken microstructure)
@@ -172,9 +186,39 @@ class PhaseFJob:
             current_regime, regime_confidence = self._get_current_regime()
 
             # Prepare source metadata for data sufficiency check
+            # Determine categories based on actual article sources
+            categories = set()
+
+            # Infer categories from actual source names in articles
+            for source in unique_sources:
+                source_lower = source.lower()
+                # Social/sentiment sources
+                if any(x in source_lower for x in ['reddit', 'medium', 'twitter', 'social', 'x.com']):
+                    categories.add("social-sentiment")
+                # Crypto-specific news
+                if any(x in source_lower for x in ['coindesk', 'cointelegraph', 'crypto', 'bitcoin', 'ethereum', 'blockchain', 'beincrypto']):
+                    categories.add("crypto-news")
+                # Macro/general financial news
+                if any(x in source_lower for x in ['bloomberg', 'reuters', 'wsj', 'ft.', 'bbc', 'cnbc', 'financial times', 'yahoo finance', 'marketwatch']):
+                    categories.add("macro-news")
+                # Tech news (tangentially related to crypto)
+                if any(x in source_lower for x in ['verge', 'gizmodo', 'slashdot', 'wired', 'techcrunch']):
+                    categories.add("tech-sentiment")
+
+            # Market signals add microstructure category
+            if market_signals_available:
+                categories.add("market-microstructure")
+
+            # Ensure we have at least crypto-news if any crypto sources found
+            if "crypto-news" not in categories and unique_sources:
+                # Default to crypto-news if we have sources but didn't categorize
+                categories.add("crypto-news")
+
             source_metadata = {
-                "categories": ["crypto-news"],  # TODO: expand based on actual fetcher
+                "categories": sorted(list(categories)),
                 "num_articles": len(articles),
+                "num_unique_sources": len(unique_sources),
+                "actual_sources": unique_sources,
             }
 
             verdict = self.reviewer.produce_verdict(
