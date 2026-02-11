@@ -16,6 +16,7 @@ from ops_agent.summary_reader import SummaryReader
 from ops_agent.positions_reader import PositionsReader
 from ops_agent.errors_reader import ErrorsReader
 from ops_agent.observability_reader import ObservabilityReader
+from governance.verdict_reader import VerdictReader
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +34,8 @@ class SmartResponder:
         self.positions_reader = PositionsReader(logs_root)
         self.errors_reader = ErrorsReader(logs_root)
         self.obs_reader = ObservabilityReader(logs_root)
-        
+        self.verdict_reader = VerdictReader()  # For market-correspondent context
+
         self.enabled = bool(self.api_key)
 
     def answer(self, question: str, scope: Optional[str] = None) -> Optional[str]:
@@ -80,7 +82,22 @@ class SmartResponder:
             "timestamp": str(__import__('datetime').datetime.utcnow().isoformat()),
             "scopes": {},
             "governance": {},
+            "market_intelligence": {},  # market-correspondent verdicts
         }
+
+        # Add market-correspondent (Phase F) intelligence
+        try:
+            verdict = self.verdict_reader.read_latest_verdict("crypto")
+            if verdict:
+                context["market_intelligence"] = {
+                    "source": "market-correspondent",
+                    "verdict": verdict.get("verdict", {}).get("verdict"),
+                    "regime_confidence": verdict.get("verdict", {}).get("regime_confidence"),
+                    "summary": verdict.get("verdict", {}).get("summary_for_governance", ""),
+                    "timestamp": verdict.get("timestamp"),
+                }
+        except Exception as e:
+            logger.debug(f"Error reading market-correspondent verdict: {e}")
 
         # Add pending governance proposals (not approved/rejected)
         try:
@@ -191,7 +208,12 @@ Guidelines:
 - Don't speculate about future markets - stick to current system state
 - When asked about governance, proposals, or pending actions: check the "governance" section in context
 - Governance proposals are non-binding suggestions that require human approval
-- Proposals not in the "governance" section are either approved, rejected, or expired"""
+- Proposals not in the "governance" section are either approved, rejected, or expired
+- When asked about market intelligence or regime validation: reference "market_intelligence" section (this is the market-correspondent)
+- market-correspondent is an independent epistemic agent that analyzes external market signals and news
+- market-correspondent verdicts may influence governance proposal confidence
+- Use market-correspondent context to explain "why did governance apply a confidence penalty?"
+- Market-correspondent sources: news APIs, market signals, regime analysis"""
 
     def _call_openai(self, system_prompt: str, context: str, question: str) -> Optional[str]:
         """Call OpenAI API and return response."""

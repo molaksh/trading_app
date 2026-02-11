@@ -20,14 +20,55 @@
 | **Phase F Phase 1: Core Infrastructure** | **✅ COMPLETE** | **75/75** | Schemas, persistence, safety validators, agent identities |
 | **Phase F Phase 2: Researcher Agent** | **✅ COMPLETE** | **25/25** | NewsAPI fetcher, claim extraction, hypothesis formation |
 | **Phase F Phase 3: Critic & Reviewer Agents** | **✅ COMPLETE** | **14/14** | Adversarial critic, conservative reviewer, verdicts |
+| **Phase F Phase 4: Job Scheduling & Governance Integration** | **✅ COMPLETE** | **55/55** | Scheduler, job orchestrator, logging, verdict reader, deployment |
 
-**Overall Progress**: Constitutional governance + epistemic intelligence stack (Phases C, D, E v1/v2, F Phase 1-3) fully implemented, tested, and integrated. **114/114 tests passing**. Production-ready with feature flags for safe rollout.
+**Overall Progress**: Constitutional governance + epistemic intelligence stack (Phases C, D, E v1/v2, F Phase 1-4) fully implemented, tested, and integrated. **169/169 Phase F tests passing**. Production-ready with feature flags for safe rollout.
 
 ---
 
 ## �🔔 Latest Updates (Newest First)
 
 
+
+### 2026-02-11 — Phase F Phase 4: Job Scheduling & Governance Integration (Complete Pipeline Execution)
+
+**Status**: ✅ COMPLETE (Phase 4)
+**Severity**: CRITICAL FEATURE — Epistemic market intelligence pipeline automation + governance integration
+
+#### Phase F Phase 4: Scheduler, Job Orchestration & Governance Integration ✅ COMPLETE
+
+**7 New Files Implemented**:
+1. **phase_f/scheduler.py** — Daily 03:00 UTC scheduler with state persistence
+2. **phase_f/phase_f_job.py** — Pipeline orchestrator (Researcher → Critic → Reviewer → Verdict)
+3. **phase_f/logging.py** — Three-layer transparency logging (pipeline, governance, audit)
+4. **governance/verdict_reader.py** — Reads Phase F verdicts for Phase C consumption
+5. **phase_f_main.py** — CLI entry point with `--daemon` and `--run-once` modes
+6. **run_market_correspondent_crypto.sh** — Docker deployment script
+7. **Dockerfile.phase_f** — Container definition for market-correspondent-crypto
+
+**Test Suite**: 55/55 tests passing ✅
+- test_scheduler.py: 15 tests (state persistence, graceful shutdown, kill switch)
+- test_phase_f_job.py: 11 tests (pipeline execution, error handling, regime integration)
+- test_logging.py: 12 tests (three-layer logging, event tracking)
+- test_verdict_reader.py: 17 tests (reading verdicts, confidence penalties, metadata)
+
+**Key Features**:
+- ✅ Daily 03:00 UTC automated runs with state persistence
+- ✅ Full pipeline: Researcher → Critic → Reviewer → Verdicts
+- ✅ Three-layer logging (pipeline, governance, audit)
+- ✅ Phase C integration with confidence penalty application (0.7x-1.0x multipliers)
+- ✅ Container renamed: market-correspondent-crypto
+- ✅ Ops-agent integration with market intelligence context
+- ✅ Graceful degradation (Phase F failures don't impact trading)
+- ✅ Feature-flagged with PHASE_F_KILL_SWITCH
+
+**Integration Points**:
+1. **Phase F → Phase C**: Confidence penalties applied to governance proposals
+2. **Phase F → Phase E**: Market intelligence available in ops-agent SmartResponder
+3. **Scheduler**: Daily automated runs during crypto downtime (03:00 UTC)
+4. **Logging**: Three layers ensure monitoring, governance, and human oversight
+
+---
 
 ### 2026-02-11 — Phase F Phase 3: Epistemic Critic & Reviewer Agents (Adversarial Analysis)
 

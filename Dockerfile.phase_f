@@ -1,0 +1,26 @@
+FROM python:3.9-slim
+
+WORKDIR /app
+
+# Install dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy Phase F code
+COPY config/ config/
+COPY phase_f/ phase_f/
+COPY governance/ governance/
+COPY ops_agent/ ops_agent/
+COPY phase_f_main.py .
+
+# Create persistence directories
+RUN mkdir -p persist/phase_f/crypto/logs \
+    persist/phase_f/crypto/verdicts \
+    persist/phase_f/crypto/episodic \
+    persist/phase_f/crypto/semantic/summaries
+
+# Run as non-root
+RUN useradd -m appuser && chown -R appuser:appuser /app
+USER appuser
+
+CMD ["python", "phase_f_main.py", "--daemon"]

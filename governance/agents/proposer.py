@@ -7,10 +7,14 @@ Generates non-binding proposals for AI-driven changes.
 
 import json
 import uuid
+import logging
 from typing import Dict, Any, List, Optional
 from datetime import datetime
 
 from governance.schemas import ProposalSchema, ProposalEvidence
+from governance.verdict_reader import VerdictReader
+
+logger = logging.getLogger(__name__)
 
 
 class Proposer:
@@ -26,6 +30,7 @@ class Proposer:
         """
         self.ai_model = ai_model
         self.ai_temperature = ai_temperature
+        self.verdict_reader = VerdictReader()  # For Phase F verdict integration
 
     def generate_proposal(
         self,
@@ -99,6 +104,27 @@ class Proposer:
             performance_notes=self._generate_performance_notes(performance),
         )
 
+        # Phase F Integration: Apply epistemic verdict confidence penalty if applicable
+        proposal_metadata = {}
+        try:
+            scope = "crypto" if environment == "paper" else "crypto"
+            phase_f_verdict = self.verdict_reader.read_latest_verdict(scope)
+
+            if phase_f_verdict:
+                verdict_type = phase_f_verdict["verdict"].get("verdict")
+                penalty_factor = self.verdict_reader.get_penalty_factor(scope)
+
+                # Apply confidence penalty
+                if penalty_factor < 1.0:
+                    logger.info(f"Phase F verdict {verdict_type}: applying {(1-penalty_factor)*100:.0f}% confidence penalty")
+                    confidence *= penalty_factor
+
+                # Add verdict context to metadata
+                proposal_metadata.update(self.verdict_reader.get_verdict_metadata(scope))
+                logger.info(f"Phase F verdict integrated into proposal: {verdict_type}")
+        except Exception as e:
+            logger.warning(f"Failed to integrate Phase F verdict: {e}")
+
         proposal = ProposalSchema(
             proposal_id=proposal_id,
             environment=environment,
@@ -110,6 +136,12 @@ class Proposer:
             confidence=confidence,
             non_binding=True,  # Constitutional requirement
         )
+
+        # Add Phase F metadata if available
+        if proposal_metadata:
+            if not hasattr(proposal, "metadata"):
+                proposal.metadata = {}
+            proposal.metadata.update(proposal_metadata)
 
         return proposal
 

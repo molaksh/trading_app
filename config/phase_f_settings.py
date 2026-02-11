@@ -21,6 +21,9 @@ PHASE_F_ENABLED = os.getenv("PHASE_F_ENABLED", "true").lower() == "true"
 # Daily run at fixed UTC time (03:00 UTC = overnight)
 PHASE_F_RUN_SCHEDULE_UTC = os.getenv("PHASE_F_RUN_SCHEDULE_UTC", "03:00")
 
+# Kill switch to disable Phase F entirely
+PHASE_F_KILL_SWITCH = os.getenv("PHASE_F_KILL_SWITCH", "false").lower() == "true"
+
 # Weekly semantic summary (optional, default True)
 PHASE_F_MONTHLY_SYNTHESIS_ENABLED = os.getenv("PHASE_F_MONTHLY_SYNTHESIS_ENABLED", "true").lower() == "true"
 PHASE_F_SYNTHESIS_DAY_OF_WEEK = os.getenv("PHASE_F_SYNTHESIS_DAY_OF_WEEK", "0")  # 0=Sunday
