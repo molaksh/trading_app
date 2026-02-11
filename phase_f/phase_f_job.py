@@ -15,6 +15,7 @@ from datetime import datetime, timezone
 from typing import Optional, Tuple
 
 from phase_f.fetchers.news_api_fetcher import NewsAPIFetcher
+from phase_f.fetchers.kraken_signals_fetcher import KrakenSignalsFetcher
 from phase_f.extractors.claim_extractor import ClaimExtractor
 from phase_f.hypothesis_builder import HypothesisBuilder
 from phase_f.agents.epistemic_critic import EpistemicCritic
@@ -59,7 +60,8 @@ class PhaseFJob:
         self.logger = PhaseFLogger(scope=scope)
 
         # Initialize components (all load config from environment)
-        self.fetcher = NewsAPIFetcher()
+        self.fetcher = NewsAPIFetcher()  # Narrative source
+        self.kraken_fetcher = KrakenSignalsFetcher()  # Market microstructure source
         self.claim_extractor = ClaimExtractor()
         self.hypothesis_builder = HypothesisBuilder()
         self.critic = EpistemicCritic()
@@ -109,8 +111,26 @@ class PhaseFJob:
             self.logger.log_stage_complete("researcher", {
                 "articles_fetched": len(articles),
                 "claims_extracted": len(all_claims),
-                "hypotheses_generated": len(researcher_hypotheses)
+                "hypotheses_generated": len(researcher_hypotheses),
+                "data_sources": ["NewsAPI (narrative)"]
             })
+
+            # Stage 1b: Fetch Market Signals (Kraken microstructure)
+            logger.info("Stage 1b: Market Signals (fetch Kraken ticker, order book, trades)")
+            market_signals = self.kraken_fetcher.get_market_signals("BTC")
+
+            if market_signals:
+                logger.info(f"Market signals fetched: {market_signals.get('overall_signal', 'UNKNOWN')}")
+                self.logger.log_stage_complete("market_signals", {
+                    "symbol": market_signals.get("symbol"),
+                    "volume_24h": market_signals.get("ticker", {}).get("volume_24h", 0),
+                    "bid_ask_spread": market_signals.get("ticker", {}).get("bid_ask_spread_pct", 0),
+                    "order_book_imbalance": market_signals.get("order_book", {}).get("imbalance_ratio", 0),
+                    "recent_trades": len(market_signals.get("trades", [])),
+                    "overall_signal": market_signals.get("overall_signal", "UNKNOWN")
+                })
+            else:
+                logger.warning("Could not fetch market signals (Kraken API may be unavailable)")
 
             if not researcher_hypotheses:
                 logger.warning("No hypotheses generated. Skipping run.")
