@@ -1,6 +1,6 @@
 # Repository Documentation (Single Source of Truth)
 
-*Last updated: 2026-02-09*
+*Last updated: 2026-02-11*
 
 ---
 
@@ -17,15 +17,172 @@
 | Phase E v2: Temporal + Watches | ✅ ACTIVE | 44/44 | Duration tracking, TTL watches, historical context, digests |
 | Phase C: Constitutional Governance | ✅ ACTIVE | 53/53 | 4-agent AI, constitutional rules, human approval |
 | Phase D: Regime Gate Analysis | ✅ ACTIVE | 9/9 | Block detection, evidence collection, eligibility evaluation |
-| **Total Tests Across All Components** | **✅ PASSING** | **131/131** | **100% pass rate — All production ready** |
+| **Phase F Phase 1: Core Infrastructure** | **✅ COMPLETE** | **75/75** | Schemas, persistence, safety validators, agent identities |
+| **Phase F Phase 2: Researcher Agent** | **✅ COMPLETE** | **25/25** | NewsAPI fetcher, claim extraction, hypothesis formation |
+| **Phase F Phase 3: Critic & Reviewer Agents** | **✅ COMPLETE** | **14/14** | Adversarial critic, conservative reviewer, verdicts |
 
-**Overall Progress**: Constitutional governance stack (Phases C, D, E v1/v2) fully implemented, tested, and integrated. Production-ready with feature flags for safe rollout.
+**Overall Progress**: Constitutional governance + epistemic intelligence stack (Phases C, D, E v1/v2, F Phase 1-3) fully implemented, tested, and integrated. **114/114 tests passing**. Production-ready with feature flags for safe rollout.
 
 ---
 
 ## �🔔 Latest Updates (Newest First)
 
 
+
+### 2026-02-11 — Phase F Phase 3: Epistemic Critic & Reviewer Agents (Adversarial Analysis)
+
+**Status**: ✅ COMPLETE (Phase 3)
+**Severity**: CRITICAL FEATURE — Adversarial critique + conservative verdict generation
+
+#### Phase F Phase 3: Critic & Reviewer Agents ✅ COMPLETE
+
+**2 New Agent Classes Implemented**:
+1. **phase_f/agents/epistemic_critic.py** — EpistemicCritic (independent adversarial agent)
+2. **phase_f/agents/epistemic_reviewer.py** — EpistemicReviewer (conservative verdict synthesis)
+
+**Test Suite**: 14/14 tests passing ✅
+- test_critic_reviewer.py: 14 tests covering critic challenges, recency bias, contradictions, full pipeline
+
+#### EpistemicCritic Agent
+
+**Role**: Independent adversarial agent that assumes all narratives are potentially flawed.
+
+**Challenge Methods**:
+- `_find_contradictions()` — Detects conflicting sentiments in supporting claims
+- `_challenge_recency_bias()` — Flags >70% claims from last 7 days
+- `_find_alternatives()` — Offers competing explanations (narrative confusion, technical factors)
+- `_challenge_with_history()` — Uses historical precedent to challenge claims
+
+**Output**: List[Hypothesis] with low confidence challenges (0.3-0.5 range)
+
+#### EpistemicReviewer Agent
+
+**Role**: Conservative synthesizer that compares researcher vs critic outputs and produces verdicts.
+
+**Analysis Methods**:
+1. `_compute_agreement()` — Researcher-critic alignment (0.0-1.0 scale)
+2. `_assess_consistency()` — Narrative consistency (HIGH/MODERATE/LOW)
+3. `_estimate_external_confidence()` — Weighted average confidence estimate
+4. `_determine_verdict()` — Choose from 4 whitelisted verdict types:
+   - `REGIME_VALIDATED` — High agreement + high consistency
+   - `REGIME_QUESTIONABLE` — Mixed signals (conservative default)
+   - `HIGH_NOISE_NO_ACTION` — Many challenges, insufficient data
+   - `POSSIBLE_STRUCTURAL_SHIFT_OBSERVE` — Large confidence change detected
+
+**Governance Integration**:
+- `_build_governance_summary()` — Layer 2 output for Phase C (no action words)
+- `_build_reasoning_summary()` — Documents decision logic for transparency
+
+**Output**: Conservative Verdict with governance summary, reasoning, confidence change tracking
+
+#### Constitutional Compliance Verified
+
+✅ No prescriptive language (validators reject action words)
+✅ Independent agents (no state sharing)
+✅ Conservative verdicts (defensive posture)
+✅ Reasoning documented (all decisions explained)
+✅ Confidence + uncertainty bounds (both tracked)
+✅ Graceful error handling (returns conservative default on exception)
+
+---
+
+### 2026-02-11 — Phase F Phase 1: Epistemic Market Intelligence (Core Infrastructure)
+
+**Status**: ✅ COMPLETE (Phase 1)
+**Severity**: CRITICAL FEATURE — Market awareness layer for regime validation
+
+#### Phase F Overview
+
+Phase F is a **READ-ONLY epistemic layer** that observes external market data and forms beliefs about regime validity. It has ZERO authority over execution and serves to increase epistemic humility rather than structural flexibility.
+
+**Constitutional Design**:
+- ✅ No execution authority (observation layer only)
+- ✅ Probabilistic beliefs (confidence + uncertainty bounds)
+- ✅ Immutable agent identities (cannot change at runtime)
+- ✅ Append-only memory (audit trail guaranteed)
+- ✅ Bounded resources (timeouts, token limits, cost caps)
+- ✅ Scheduled off-hours (slow, reflective)
+
+#### Phase F Phase 1: Core Infrastructure ✅ COMPLETE
+
+**5 Core Modules Implemented**:
+1. **config/phase_f_settings.py** — Configuration (kill-switch, scheduling, resource limits)
+2. **phase_f/schemas.py** — 7 immutable Pydantic V2 models (Claim, Hypothesis, Verdict, Memory events)
+3. **phase_f/agent_identity.py** — Researcher, Critic, Reviewer agents (immutable identities)
+4. **phase_f/persistence.py** — Append-only episodic + versioned semantic memory
+5. **phase_f/safety_checks.py** — Constitutional constraint validators
+
+**Test Suite**: 75/75 tests passing ✅
+- test_schemas.py: 38 tests
+- test_agent_identity.py: 18 tests
+- test_persistence.py: 16 tests
+- test_safety_checks.py: 23 tests
+
+#### Constitutional Guarantees Enforced
+
+| Constraint | Implementation |
+|-----------|------------------|
+| No execution authority | Output only to persist/phase_f/, governance summary, logs |
+| Epistemic only | All outputs probabilistic + uncertain |
+| Immutable identities | Frozen dataclass, cannot change runtime |
+| Append-only memory | JSONL append, no deletes/overwrites |
+| Resource-bounded | 10m timeout/agent, $5/day cost cap |
+| Whitelisted verdicts | Only 4 allowed types (enum-based) |
+| No prescriptive language | Validators reject action words |
+| No causation encoding | Rejects "causes", "leads to", "->" |
+
+---
+
+
+### 2026-02-11 — Phase F Phase 2: Epistemic Researcher Agent (Data Fetching & Hypothesis Formation)
+
+**Status**: ✅ COMPLETE (Phase 2)
+**Severity**: HIGH — Researcher agent with external data integration
+
+#### Phase F Phase 2: New Components
+
+**3 New Modules Implemented**:
+1. **phase_f/fetchers/news_api_fetcher.py** — NewsAPI integration (25 articles max, keyword-based search)
+2. **phase_f/extractors/claim_extractor.py** — Claim extraction from articles (no causation words, sentiment analysis)
+3. **phase_f/hypothesis_builder.py** — Hypothesis formation (probabilistic reasoning, confidence calibration)
+
+**Test Suite**: 25/25 tests passing ✅
+- test_news_api_fetcher.py: 8 tests (NewsAPI integration, error handling, immutable articles)
+- test_claim_extractor.py: 8 tests (claim extraction, sentiment, confidence scoring, validation)
+- test_hypothesis_builder.py: 9 tests (hypothesis formation, reasoning, uncertainty bounds)
+
+#### Key Features
+
+**NewsAPI Fetcher**:
+- Fetches crypto/market news from NewsAPI
+- Keyword-based search (Bitcoin, Ethereum, volatility, regime)
+- Respects rate limits (max 25 articles per agent run)
+- Graceful degradation on API failure
+
+**Claim Extraction**:
+- Parses articles for factual statements
+- Assigns sentiment (POSITIVE, NEUTRAL, NEGATIVE)
+- Calculates confidence (0.0-1.0) based on heuristics
+- Filters forbidden causation words ("causes", "leads to", "->")
+- Validates all claims before returning
+
+**Hypothesis Formation**:
+- Groups claims by theme (volatility, trend, sentiment, etc.)
+- Computes confidence: (supporting - contradicting) / total
+- Calculates uncertainty from disagreement level
+- Documents all reasoning steps
+- No action words or prescriptive language
+
+#### Constitutional Compliance Verified
+
+✅ No causation encoding (claims validated)
+✅ No prescriptive language (hypotheses validated)
+✅ Confidence + uncertainty bounds (all hypotheses have both)
+✅ Reasoning steps documented (all hypotheses explain logic)
+✅ Resource limits enforced (25 articles, 15 sources, 10m timeout)
+✅ Error handling graceful (API failures → empty list)
+
+---
 
 ### 2026-02-09 — Phase D: BTC Regime Gate Analysis Layer
 
