@@ -103,6 +103,27 @@ OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 NEWSAPI_KEY = os.getenv("NEWSAPI_KEY", "").strip()
 NEWSAPI_BASE_URL = os.getenv("NEWSAPI_BASE_URL", "https://newsapi.org/v2")
 
+# Multi-source news fetcher (NEW)
+PHASE_F_USE_MULTI_SOURCE_FETCHER = os.getenv("PHASE_F_USE_MULTI_SOURCE_FETCHER", "true").lower() == "true"
+
+# CoinTelegraph API (public, no key needed)
+COINTELEGRAPH_ENABLED = os.getenv("COINTELEGRAPH_ENABLED", "true").lower() == "true"
+COINTELEGRAPH_BASE_URL = os.getenv("COINTELEGRAPH_BASE_URL", "https://cointelegraph.com/api/v3")
+
+# CryptoCompare API (free tier with API key)
+CRYPTOCOMPARE_API_KEY = os.getenv("CRYPTOCOMPARE_API_KEY", "").strip()
+CRYPTOCOMPARE_BASE_URL = os.getenv("CRYPTOCOMPARE_BASE_URL", "https://www.cryptocompare.com/api/v1")
+
+# RSS Feeds (public, no auth)
+PHASE_F_RSS_ENABLED = os.getenv("PHASE_F_RSS_ENABLED", "true").lower() == "true"
+
+# Web Scraper (optional, disabled by default)
+PHASE_F_WEB_SCRAPER_ENABLED = os.getenv("PHASE_F_WEB_SCRAPER_ENABLED", "false").lower() == "true"
+
+# Twitter/X (optional, disabled by default)
+TWITTER_BEARER_TOKEN = os.getenv("TWITTER_BEARER_TOKEN", "").strip()
+TWITTER_SCRAPER_ENABLED = os.getenv("TWITTER_SCRAPER_ENABLED", "false").lower() == "true"
+
 # Glassnode API (on-chain data)
 GLASSNODE_API_KEY = os.getenv("GLASSNODE_API_KEY", "").strip()
 GLASSNODE_BASE_URL = os.getenv("GLASSNODE_BASE_URL", "https://api.glassnode.com")

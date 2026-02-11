@@ -47,6 +47,7 @@ class TestPipelineExecution:
 
     @patch('phase_f.phase_f_job.PHASE_F_ENABLED', True)
     @patch('phase_f.phase_f_job.PHASE_F_KILL_SWITCH', False)
+    @patch('phase_f.phase_f_job.PHASE_F_USE_MULTI_SOURCE_FETCHER', False)
     def test_run_executes_full_pipeline(self):
         """Test that run() executes all pipeline stages."""
         job = PhaseFJob(scope="crypto")
@@ -87,6 +88,7 @@ class TestPipelineExecution:
 
     @patch('phase_f.phase_f_job.PHASE_F_ENABLED', True)
     @patch('phase_f.phase_f_job.PHASE_F_KILL_SWITCH', False)
+    @patch('phase_f.phase_f_job.PHASE_F_USE_MULTI_SOURCE_FETCHER', False)
     def test_run_returns_false_on_no_articles(self):
         """Test that run returns False when no articles are fetched."""
         job = PhaseFJob(scope="crypto")
@@ -98,6 +100,7 @@ class TestPipelineExecution:
 
     @patch('phase_f.phase_f_job.PHASE_F_ENABLED', True)
     @patch('phase_f.phase_f_job.PHASE_F_KILL_SWITCH', False)
+    @patch('phase_f.phase_f_job.PHASE_F_USE_MULTI_SOURCE_FETCHER', False)
     def test_run_returns_false_on_no_hypotheses(self):
         """Test that run returns False when no hypotheses are generated."""
         job = PhaseFJob(scope="crypto")
@@ -113,6 +116,7 @@ class TestPipelineExecution:
 
     @patch('phase_f.phase_f_job.PHASE_F_ENABLED', True)
     @patch('phase_f.phase_f_job.PHASE_F_KILL_SWITCH', False)
+    @patch('phase_f.phase_f_job.PHASE_F_USE_MULTI_SOURCE_FETCHER', False)
     def test_run_handles_exception_gracefully(self):
         """Test that run handles exceptions gracefully."""
         job = PhaseFJob(scope="crypto")
@@ -150,6 +154,7 @@ class TestRegimeIntegration:
 
     @patch('phase_f.phase_f_job.PHASE_F_ENABLED', True)
     @patch('phase_f.phase_f_job.PHASE_F_KILL_SWITCH', False)
+    @patch('phase_f.phase_f_job.PHASE_F_USE_MULTI_SOURCE_FETCHER', False)
     def test_run_gets_current_regime(self):
         """Test that run calls produce_verdict with regime parameters."""
         job = PhaseFJob(scope="crypto")
@@ -214,6 +219,7 @@ class TestPersistenceIntegration:
 
     @patch('phase_f.phase_f_job.PHASE_F_ENABLED', True)
     @patch('phase_f.phase_f_job.PHASE_F_KILL_SWITCH', False)
+    @patch('phase_f.phase_f_job.PHASE_F_USE_MULTI_SOURCE_FETCHER', False)
     def test_run_persists_verdict(self):
         """Test that verdict is persisted."""
         job = PhaseFJob(scope="crypto")

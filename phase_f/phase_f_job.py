@@ -15,6 +15,7 @@ from datetime import datetime, timezone
 from typing import Optional, Tuple
 
 from phase_f.fetchers.news_api_fetcher import NewsAPIFetcher
+from phase_f.fetchers.news_fetcher_multi_source import MultiSourceNewsFetcher
 from phase_f.fetchers.kraken_signals_fetcher import KrakenSignalsFetcher
 from phase_f.extractors.claim_extractor import ClaimExtractor
 from phase_f.hypothesis_builder import HypothesisBuilder
@@ -27,6 +28,7 @@ from config.phase_f_settings import (
     PHASE_F_ENABLED,
     PHASE_F_KILL_SWITCH,
     PHASE_F_MAX_ARTICLES_PER_AGENT,
+    PHASE_F_USE_MULTI_SOURCE_FETCHER,
 )
 
 logger = logging.getLogger(__name__)
@@ -60,7 +62,14 @@ class PhaseFJob:
         self.logger = PhaseFLogger(scope=scope)
 
         # Initialize components (all load config from environment)
-        self.fetcher = NewsAPIFetcher()  # Narrative source
+        # Use multi-source fetcher if enabled, otherwise fall back to NewsAPI
+        if PHASE_F_USE_MULTI_SOURCE_FETCHER:
+            self.fetcher = MultiSourceNewsFetcher()
+            logger.info(f"Using multi-source news fetcher: {self.fetcher.get_enabled_sources()}")
+        else:
+            self.fetcher = NewsAPIFetcher()
+            logger.info("Using single-source NewsAPI fetcher")
+
         self.kraken_fetcher = KrakenSignalsFetcher()  # Market microstructure source
         self.claim_extractor = ClaimExtractor()
         self.hypothesis_builder = HypothesisBuilder()
@@ -93,7 +102,12 @@ class PhaseFJob:
         try:
             # Stage 1: Researcher - Fetch & Analyze
             logger.info("Stage 1: Researcher (fetch news, extract claims, build hypotheses)")
-            articles = self.fetcher.fetch_crypto_news(limit=PHASE_F_MAX_ARTICLES_PER_AGENT)
+
+            # Fetch articles (method depends on fetcher type)
+            if isinstance(self.fetcher, MultiSourceNewsFetcher):
+                articles = self.fetcher.fetch_all(limit=PHASE_F_MAX_ARTICLES_PER_AGENT)
+            else:
+                articles = self.fetcher.fetch_crypto_news(limit=PHASE_F_MAX_ARTICLES_PER_AGENT)
 
             if not articles:
                 logger.warning("No articles fetched. Skipping run.")
