@@ -73,7 +73,8 @@ ALLOWED_VERDICTS: List[str] = [
     "REGIME_VALIDATED",
     "REGIME_QUESTIONABLE",
     "HIGH_NOISE_NO_ACTION",
-    "POSSIBLE_STRUCTURAL_SHIFT_OBSERVE"
+    "POSSIBLE_STRUCTURAL_SHIFT_OBSERVE",
+    "INSUFFICIENT_DATA"
 ]
 
 # ============================================================================

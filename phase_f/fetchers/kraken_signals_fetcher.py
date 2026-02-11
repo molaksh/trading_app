@@ -250,7 +250,7 @@ class KrakenSignalsFetcher:
             "XRP": "XRPUSD",
         }
         return mapping.get(symbol.upper())
-    
+
     @staticmethod
     def _map_to_kraken_pairs(symbols: List[str]) -> List[str]:
         """Map list of canonical symbols to Kraken pairs"""
@@ -260,16 +260,26 @@ class KrakenSignalsFetcher:
             if pair:
                 kraken_pairs.append(pair)
         return kraken_pairs
-    
+
     @staticmethod
     def _map_from_kraken_pair(kraken_pair: str) -> Optional[str]:
-        """Map Kraken pair back to canonical symbol"""
+        """Map Kraken pair back to canonical symbol
+
+        NOTE: Kraken API returns pairs with prefixes like XXBTZUSD (not XBTUSD)
+        Handle both formats for compatibility
+        """
+        # Exact mappings
         mapping = {
             "XBTUSD": "BTC",
+            "XXBTZUSD": "BTC",  # Kraken API format
             "ETHUSD": "ETH",
+            "XETHUSD": "ETH",   # Alternative format
             "ADAUSD": "ADA",
+            "XADAUSD": "ADA",
             "SOLUSD": "SOL",
+            "XSOLUSD": "SOL",
             "XRPUSD": "XRP",
+            "XXRPUSD": "XRP",   # Kraken API format
         }
         return mapping.get(kraken_pair)
     

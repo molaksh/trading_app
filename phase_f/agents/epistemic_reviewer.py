@@ -222,7 +222,7 @@ class EpistemicReviewer:
 
         # Check: Market signals availability
         if not market_signals_available:
-            issues.append("Market signals (Kraken API) unavailable")
+            issues.append("Market data (Kraken API) unavailable")
 
         passed = len(issues) == 0
 
@@ -292,7 +292,7 @@ class EpistemicReviewer:
             summary_for_governance=(
                 f"Insufficient external data for regime assessment. "
                 f"Reason: {sufficiency['reason']}. "
-                f"Assessment: Defer regime-dependent governance adjustments until clarity improves."
+                f"Assessment: Defer regime-sensitive governance adjustments until clarity improves."
             ),
             reasoning_summary=(
                 f"Data insufficiency: {sufficiency['reason']}. "
