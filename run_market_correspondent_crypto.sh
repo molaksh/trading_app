@@ -15,17 +15,18 @@ IMAGE_NAME="market-correspondent-crypto"
 PERSISTENCE_ROOT_HOST="${PWD}/persist"
 LOGS_ROOT_HOST="${PWD}/logs"
 
-# Extract API keys
+# Extract API keys & config
 NEWSAPI_KEY="${NEWSAPI_KEY:-}"
 OPENAI_API_KEY="${OPENAI_API_KEY:-}"
+CRYPTOCOMPARE_API_KEY="${CRYPTOCOMPARE_API_KEY:-}"
+TWITTER_BEARER_TOKEN="${TWITTER_BEARER_TOKEN:-}"
 
-if [ -z "$NEWSAPI_KEY" ]; then
-    echo "WARNING: NEWSAPI_KEY not set in .env - NewsAPI will be disabled"
-fi
-
-if [ -z "$OPENAI_API_KEY" ]; then
-    echo "WARNING: OPENAI_API_KEY not set in .env - Some features may be limited"
-fi
+echo "Phase F Multi-Source News Fetcher Configuration:"
+echo "  RSS Feeds: ${PHASE_F_RSS_ENABLED:-true}"
+echo "  Web Scraper: ${PHASE_F_WEB_SCRAPER_ENABLED:-true}"
+echo "  CoinTelegraph: ${COINTELEGRAPH_ENABLED:-false}"
+echo "  CryptoCompare: $([ -n "$CRYPTOCOMPARE_API_KEY" ] && echo 'configured' || echo 'not configured')"
+echo "  Twitter: ${TWITTER_SCRAPER_ENABLED:-false}"
 
 # Build image
 echo "Building Phase F image..."
@@ -45,9 +46,16 @@ docker run -d \
   -v "$LOGS_ROOT_HOST:/app/logs" \
   -e PHASE_F_ENABLED="${PHASE_F_ENABLED:-true}" \
   -e PHASE_F_KILL_SWITCH="${PHASE_F_KILL_SWITCH:-false}" \
+  -e PHASE_F_USE_MULTI_SOURCE_FETCHER="${PHASE_F_USE_MULTI_SOURCE_FETCHER:-true}" \
   -e PHASE_F_RUN_SCHEDULE_UTC="${PHASE_F_RUN_SCHEDULE_UTC:-03:00}" \
   -e NEWSAPI_KEY="$NEWSAPI_KEY" \
   -e OPENAI_API_KEY="$OPENAI_API_KEY" \
+  -e PHASE_F_RSS_ENABLED="${PHASE_F_RSS_ENABLED:-true}" \
+  -e PHASE_F_WEB_SCRAPER_ENABLED="${PHASE_F_WEB_SCRAPER_ENABLED:-true}" \
+  -e COINTELEGRAPH_ENABLED="${COINTELEGRAPH_ENABLED:-false}" \
+  -e CRYPTOCOMPARE_API_KEY="$CRYPTOCOMPARE_API_KEY" \
+  -e TWITTER_BEARER_TOKEN="$TWITTER_BEARER_TOKEN" \
+  -e TWITTER_SCRAPER_ENABLED="${TWITTER_SCRAPER_ENABLED:-false}" \
   "$IMAGE_NAME" \
   python phase_f_main.py --daemon
 

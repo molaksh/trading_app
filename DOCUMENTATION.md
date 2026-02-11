@@ -21,14 +21,59 @@
 | **Phase F Phase 2: Researcher Agent** | **✅ COMPLETE** | **25/25** | NewsAPI fetcher, claim extraction, hypothesis formation |
 | **Phase F Phase 3: Critic & Reviewer Agents** | **✅ COMPLETE** | **14/14** | Adversarial critic, conservative reviewer, verdicts |
 | **Phase F Phase 4: Job Scheduling & Governance Integration** | **✅ COMPLETE** | **55/55** | Scheduler, job orchestrator, logging, verdict reader, deployment |
+| **Phase F Phase 5: Multi-Source News Fetcher** | **✅ COMPLETE** | **46/46** | RSS feeds, web scraper, CoinTelegraph, CryptoCompare, Twitter integration |
 
-**Overall Progress**: Constitutional governance + epistemic intelligence stack (Phases C, D, E v1/v2, F Phase 1-4) fully implemented, tested, and integrated. **169/169 Phase F tests passing**. Production-ready with feature flags for safe rollout.
+**Overall Progress**: Constitutional governance + epistemic intelligence stack (Phases C, D, E v1/v2, F Phase 1-5) fully implemented, tested, and integrated. **215/215 Phase F tests passing** (169 + 46). Production-ready with feature flags for safe rollout.
 
 ---
 
 ## �🔔 Latest Updates (Newest First)
 
 
+
+### 2026-02-11 — Phase F Phase 5: Multi-Source News Fetcher (5 Independent Sources)
+
+**Status**: ✅ COMPLETE (Phase 5)
+**Severity**: CRITICAL FEATURE — Diversified news aggregation for epistemic intelligence
+**Test Suite**: 46/46 tests passing ✅
+
+#### Phase F Phase 5: Multi-Source News Fetcher ✅ COMPLETE
+
+**3 New Components**:
+1. **phase_f/fetchers/news_fetcher_multi_source.py** (600 lines) — 5 independent news sources
+2. **tests/test_phase_f/test_news_fetcher_multi_source.py** (46 tests) — Comprehensive test coverage
+3. **MULTI_SOURCE_QUICKSTART.md** — 5-minute setup guide
+
+**5 News Sources** (Prioritized by Default):
+- ✅ **RSS Feeds** (ENABLED) — Reddit, Medium, CoinDesk, Bitcoin Magazine, Yahoo Finance
+- ✅ **Web Scraper** (ENABLED) — BeInCrypto, CoinGecko (requires BeautifulSoup4)
+- 🔴 **CoinTelegraph API** (DISABLED) — Enable when API access acquired
+- 🔴 **CryptoCompare API** (DISABLED) — Enable when API key obtained
+- 🔴 **Twitter/X** (DISABLED) — Enable when Bearer token configured
+
+**Key Features**:
+- ✅ Fail-safe design — One source failing doesn't block others
+- ✅ Intelligent deduplication — Removes duplicates by URL/title
+- ✅ Timestamp normalization — Handles ISO, RFC2822, Unix formats
+- ✅ HTML sanitization — Removes tags, decodes entities
+- ✅ Feature flags — Enable/disable each source via environment variables
+- ✅ Immutable data model — Returns frozen dataclasses
+- ✅ Graceful degradation — Returns empty list on errors
+- ✅ Seamless integration — Phase F job uses multi-source automatically
+
+**Test Coverage** (46 tests): NewsArticle (2), CoinTelegraph (6), CryptoCompare (4), RSS (4), WebScraper (3), Twitter (4), Timestamps (4), HTML sanitization (4), Multi-source aggregation (8), Error handling (2), Integration (5)
+
+**Quick Start** (5 minutes):
+\`\`\`bash
+pip install feedparser beautifulsoup4
+python phase_f_main.py --run-once
+\`\`\`
+
+**Performance**: Fetch 50 articles ~5-8 seconds | Per-source timeout 10-15 seconds | Rate limits respected
+
+**Configuration**: RSS & Web Scraper ENABLED by default | CoinTelegraph/CryptoCompare/Twitter DISABLED | Enable later when you have API keys
+
+---
 
 ### 2026-02-11 — Phase F Phase 4: Job Scheduling & Governance Integration (Complete Pipeline Execution)
 
