@@ -31,6 +31,7 @@ class VerdictType(str, Enum):
     REGIME_QUESTIONABLE = "REGIME_QUESTIONABLE"
     HIGH_NOISE_NO_ACTION = "HIGH_NOISE_NO_ACTION"
     POSSIBLE_STRUCTURAL_SHIFT_OBSERVE = "POSSIBLE_STRUCTURAL_SHIFT_OBSERVE"
+    INSUFFICIENT_DATA = "INSUFFICIENT_DATA"
 
 
 # ============================================================================

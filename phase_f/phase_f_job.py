@@ -132,6 +132,7 @@ class PhaseFJob:
             # Stage 1b: Fetch Market Signals (Kraken microstructure)
             logger.info("Stage 1b: Market Signals (fetch Kraken ticker, order book, trades)")
             market_signals = self.kraken_fetcher.get_market_signals("BTC")
+            market_signals_available = market_signals is not None
 
             if market_signals:
                 logger.info(f"Market signals fetched: {market_signals.get('overall_signal', 'UNKNOWN')}")
@@ -170,11 +171,19 @@ class PhaseFJob:
             # Get current regime from latest daily summary
             current_regime, regime_confidence = self._get_current_regime()
 
+            # Prepare source metadata for data sufficiency check
+            source_metadata = {
+                "categories": ["crypto-news"],  # TODO: expand based on actual fetcher
+                "num_articles": len(articles),
+            }
+
             verdict = self.reviewer.produce_verdict(
                 researcher_hypotheses,
                 all_challenges,
                 current_regime=current_regime,
-                current_regime_confidence=regime_confidence
+                current_regime_confidence=regime_confidence,
+                market_signals_available=market_signals_available,
+                source_metadata=source_metadata
             )
 
             # Validate verdict

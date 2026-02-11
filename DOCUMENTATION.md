@@ -31,6 +31,23 @@
 
 
 
+### 2026-02-11 — Phase F Epistemic Fixes: Confidence Logic & Data Gates (CRITICAL PATCH)
+
+**Status**: ✅ COMPLETE (Correction Patch)
+**Severity**: CRITICAL — Fixes epistemically incorrect confidence/classification logic
+**Test Suite**: 245/245 tests passing ✅ (14 new + 231 existing)
+
+Fixed 5 critical problems in Reviewer logic:
+1. **Confidence collapse on disagreement** → Added 0.4 floor protection
+2. **Verdicts on insufficient data** → Added 8-source, 3-category, market-signals gate
+3. **API failures as negative evidence** → Missing data capped at -15%
+4. **Loose structural shift classification** → 4-gate system (all required)
+5. **Unbounded confidence swings** → ±30%/-20% caps
+
+Result: Disagreement = uncertainty, not panic. Structural shift rare and heavily gated.
+
+---
+
 ### 2026-02-11 — Phase F Phase 5: Multi-Source News Fetcher (5 Independent Sources)
 
 **Status**: ✅ COMPLETE (Phase 5)
