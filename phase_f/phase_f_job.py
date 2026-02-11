@@ -91,7 +91,7 @@ class PhaseFJob:
         try:
             # Stage 1: Researcher - Fetch & Analyze
             logger.info("Stage 1: Researcher (fetch news, extract claims, build hypotheses)")
-            articles = self.fetcher.fetch_crypto_news(max_articles=PHASE_F_MAX_ARTICLES_PER_AGENT)
+            articles = self.fetcher.fetch_crypto_news(limit=PHASE_F_MAX_ARTICLES_PER_AGENT)
 
             if not articles:
                 logger.warning("No articles fetched. Skipping run.")

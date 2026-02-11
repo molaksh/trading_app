@@ -18,8 +18,8 @@ PHASE_F_ENABLED = os.getenv("PHASE_F_ENABLED", "true").lower() == "true"
 # Scheduling (CRITICAL: OFF-HOURS ONLY)
 # ============================================================================
 
-# Daily run at fixed UTC time (03:00 UTC = overnight)
-PHASE_F_RUN_SCHEDULE_UTC = os.getenv("PHASE_F_RUN_SCHEDULE_UTC", "03:00")
+# Daily run at fixed UTC time (08:00 UTC = 3 AM ET, crypto downtime)
+PHASE_F_RUN_SCHEDULE_UTC = os.getenv("PHASE_F_RUN_SCHEDULE_UTC", "08:00")
 
 # Kill switch to disable Phase F entirely
 PHASE_F_KILL_SWITCH = os.getenv("PHASE_F_KILL_SWITCH", "false").lower() == "true"
