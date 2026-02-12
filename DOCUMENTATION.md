@@ -61,6 +61,19 @@ The liquidation manager sold far too many positions to resolve an 8% heat limit.
 | `broker/account_reconciliation.py` | Fixes #1, #3, #5, #6: correct `risk_amount`, load cash reserve on startup, `liquidity_resolved` SAFE_MODE filter, pass `trade_ledger` to `LiquidityManager` |
 | `broker/crypto_reconciliation.py` | Fixes #1, #3, #6: correct `risk_amount`, load cash reserve on startup, pass `trade_ledger` to `LiquidityManager` |
 
+#### Trading-State Counter Preservation
+
+Liquidation is a risk-management action, not a trading decision. The sell loop now saves and restores these counters so forced exits don't poison the ML entry gates:
+
+| Counter | Gate it feeds | What would happen without fix |
+|---------|--------------|-------------------------------|
+| `consecutive_losses` | `MAX_CONSECUTIVE_LOSSES = 3` | 3+ losing liquidation sells → all entries blocked → deadlock (no winning trade can reset counter) |
+| `daily_pnl` | `DAILY_LOSS_LIMIT = 0.02` | Realized losses > 2% of equity → entries blocked for the day |
+| `last_trade_return` | Feeds `consecutive_losses` | Overwritten by last liquidation sell return |
+| `daily_trades_closed` | Informational | Inflated by liquidation count |
+
+`current_equity` is intentionally **not** restored — it must reflect the real post-liquidation account value.
+
 #### Expected Behavior After Fix
 
 - Heat computes as ~22% (not ~95%) → only ~7 positions sold to reach ≤8%
@@ -70,6 +83,7 @@ The liquidation manager sold far too many positions to resolve an 8% heat limit.
 - Status shows `READY` (not `SAFE_MODE`) after successful liquidation
 - `trades.jsonl` contains `LIQUIDITY_EXIT` entries (no `EXTERNAL_CLOSE` noise on restart)
 - `state/cash_reserve.json` survives container restarts
+- ML entries not blocked by liquidation losses (`consecutive_losses` and `daily_pnl` preserved)
 
 ---
 

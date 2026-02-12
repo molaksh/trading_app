@@ -214,6 +214,16 @@ class LiquidityManager:
         # Fix #2: Dynamic violation recheck after each sell.
         # Instead of comparing deficit (risk units) against cash_freed (notional),
         # recheck all violations with updated portfolio state after each sell.
+        #
+        # Preserve trading-state counters across the sell loop.
+        # Liquidation is a risk-management action, not a trading decision —
+        # forced sells must not inflate consecutive_losses or daily_pnl,
+        # which would block tonight's ML entries via the kill-switch gates.
+        saved_consecutive_losses = self.portfolio.consecutive_losses
+        saved_last_trade_return = self.portfolio.last_trade_return
+        saved_daily_pnl = self.portfolio.daily_pnl
+        saved_daily_trades_closed = self.portfolio.daily_trades_closed
+
         cash_freed = 0.0
         running_cash = account_cash
         for sp in eligible:
@@ -235,6 +245,19 @@ class LiquidityManager:
                     sp.symbol, sp.score, sp.notional_value,
                     sp.unrealized_pnl_pct, cash_freed, remaining_deficit,
                 )
+
+        # Restore trading-state counters — liquidation sells are not trades.
+        # current_equity is intentionally NOT restored (reflects real account value).
+        self.portfolio.consecutive_losses = saved_consecutive_losses
+        self.portfolio.last_trade_return = saved_last_trade_return
+        self.portfolio.daily_pnl = saved_daily_pnl
+        self.portfolio.daily_trades_closed = saved_daily_trades_closed
+        if cash_freed > 0:
+            logger.info(
+                "LIQUIDATION_COUNTERS_PRESERVED | consecutive_losses=%d | daily_pnl=$%.2f | "
+                "daily_trades_closed=%d (not incremented by liquidation sells)",
+                saved_consecutive_losses, saved_daily_pnl, saved_daily_trades_closed,
+            )
 
         result.cash_freed = cash_freed
         result.cash_after = account_cash + cash_freed
