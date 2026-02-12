@@ -51,6 +51,29 @@ def run_crypto_pipeline(
     if run_id is None:
         run_id = str(uuid.uuid4())
 
+    # CRITICAL FIX: Reset daily trades counter at start of each pipeline run
+    # This ensures the counter resets each day and prevents capacity deadlock
+    current_date = pd.Timestamp.now()
+    portfolio = runtime.risk_manager.portfolio
+    old_counter = portfolio.daily_trades_opened
+    portfolio.update_equity_at_date(current_date)
+    new_counter = portfolio.daily_trades_opened
+
+    logger.info(
+        f"DAILY_COUNTER_RESET | date={current_date.date()} | "
+        f"old_value={old_counter} | new_value={new_counter} | "
+        f"start_date={portfolio.daily_start_date}"
+    )
+
+    # Defensive check: if counter is stuck, reset it
+    if new_counter > MAX_TRADES_PER_DAY:
+        logger.warning(
+            f"DAILY_COUNTER_STUCK | counter={new_counter} exceeds MAX={MAX_TRADES_PER_DAY}, "
+            f"forcing reset to 0"
+        )
+        portfolio.daily_trades_opened = 0
+        new_counter = 0
+
     # Config: lookbacks and intervals
     execution_interval = str(crypto_config.get("EXECUTION_CANDLE_INTERVAL", "5m"))
     regime_interval = str(crypto_config.get("REGIME_CANDLE_INTERVAL", "4h"))
@@ -144,10 +167,23 @@ def run_crypto_pipeline(
 
     primary_block = permission.get_primary_block()
     capacity_blocked = False
-    if runtime.risk_manager.portfolio.daily_trades_opened >= MAX_TRADES_PER_DAY:
+    daily_trades = runtime.risk_manager.portfolio.daily_trades_opened
+
+    # Diagnostic logging for capacity check
+    logger.info(
+        f"CAPACITY_CHECK | daily_trades_opened={daily_trades} | MAX={MAX_TRADES_PER_DAY} | "
+        f"open_positions={len([p for ps in runtime.risk_manager.portfolio.open_positions.values() for p in ps])} | "
+        f"primary_block={primary_block.state if primary_block else None}"
+    )
+
+    if daily_trades >= MAX_TRADES_PER_DAY:
         capacity_blocked = True
+        logger.warning(
+            f"CAPACITY_BLOCKED | trades_opened={daily_trades} >= MAX={MAX_TRADES_PER_DAY}"
+        )
     if primary_block is not None and primary_block.state == "RISK_LIMIT_BLOCKED":
         capacity_blocked = True
+        logger.warning(f"RISK_LIMIT_BLOCKED | reason={primary_block.reason}")
 
     if capacity_blocked:
         scanned_symbols = []
@@ -164,8 +200,9 @@ def run_crypto_pipeline(
 
     if skipped_symbols:
         logger.warning(
-            "SIGNAL_SKIPPED_DUE_TO_CAPACITY | count=%s symbols=%s",
+            "SIGNAL_SKIPPED_DUE_TO_CAPACITY | count=%s capacity_blocked=%s symbols=%s",
             len(skipped_symbols),
+            capacity_blocked,
             ",".join(skipped_symbols),
         )
         log_pipeline_stage(

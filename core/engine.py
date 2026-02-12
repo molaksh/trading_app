@@ -13,7 +13,7 @@ NO STRATEGY bypasses this flow.
 
 import logging
 from typing import List, Dict, Any, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 
 from strategies.base import Strategy, TradeIntent, IntentType, IntentUrgency
 from instruments.base import Instrument
@@ -123,7 +123,12 @@ class TradingEngine:
                 portfolio_state.get("positions", []),
                 strategy.name,
             )
-            exit_intents = strategy.generate_exit_intents(strategy_positions, market_data)
+
+            # CRITICAL: Enrich positions with required fields for exit logic
+            # Broker reconciliation positions lack entry_date, current_date, current_price
+            enriched_positions = self._enrich_positions(strategy_positions, market_data)
+
+            exit_intents = strategy.generate_exit_intents(enriched_positions, market_data)
             results["exit_intents"] += len(exit_intents)
             
             # Process entry intents
@@ -342,7 +347,77 @@ class TradingEngine:
             pos for pos in all_positions
             if pos.get("strategy") == strategy_name
         ]
-    
+
+    def _enrich_positions(
+        self,
+        positions: List[Dict],
+        market_data: Dict[str, Any],
+    ) -> List[Dict]:
+        """
+        Enrich positions with fields required by exit logic.
+
+        Broker reconciliation positions come with entry_timestamp but lack:
+        - entry_date: parsed from entry_timestamp
+        - current_date: set to current time
+        - current_price: from market_data or fallback to entry_price
+
+        Args:
+            positions: List of positions (may be from broker reconciliation)
+            market_data: Market data with prices
+
+        Returns:
+            Enriched positions with all required fields
+        """
+        enriched = []
+        current_time = datetime.now(timezone.utc)
+        current_prices = market_data.get("prices", {})
+
+        for pos in positions:
+            enriched_pos = pos.copy()
+
+            # Transform entry_timestamp → entry_date (if needed)
+            if "entry_date" not in enriched_pos and "entry_timestamp" in enriched_pos:
+                try:
+                    timestamp_str = enriched_pos["entry_timestamp"]
+                    if isinstance(timestamp_str, str):
+                        enriched_pos["entry_date"] = datetime.fromisoformat(timestamp_str).replace(tzinfo=timezone.utc)
+                    else:
+                        enriched_pos["entry_date"] = timestamp_str
+                    logger.debug(f"Enriched {enriched_pos.get('symbol')}: entry_timestamp → entry_date")
+                except Exception as e:
+                    logger.warning(f"Failed to parse entry_timestamp for {enriched_pos.get('symbol')}: {e}")
+                    enriched_pos["entry_date"] = current_time
+
+            # Add current_date (required for holding_days calculation)
+            if "current_date" not in enriched_pos:
+                enriched_pos["current_date"] = current_time
+                logger.debug(f"Enriched {enriched_pos.get('symbol')}: added current_date")
+
+            # Add current_price (required for return_pct calculation)
+            if "current_price" not in enriched_pos:
+                symbol = enriched_pos.get("symbol")
+                if symbol and symbol in current_prices:
+                    enriched_pos["current_price"] = current_prices[symbol]
+                    logger.debug(f"Enriched {symbol}: current_price from market_data")
+                else:
+                    # Fallback to entry_price if market data unavailable
+                    enriched_pos["current_price"] = enriched_pos.get("entry_price", 0)
+                    logger.warning(
+                        f"Enriched {symbol}: current_price missing, using entry_price as fallback"
+                    )
+
+            enriched.append(enriched_pos)
+
+        if enriched:
+            logger.info(
+                f"POSITION_ENRICHMENT | count={len(enriched)} | "
+                f"with_entry_date={sum(1 for p in enriched if 'entry_date' in p)} | "
+                f"with_current_date={sum(1 for p in enriched if 'current_date' in p)} | "
+                f"with_current_price={sum(1 for p in enriched if 'current_price' in p)}"
+            )
+
+        return enriched
+
     def _map_intent_to_exit_reason(self, intent: TradeIntent) -> ExitReason:
         """
         Map trade intent to exit reason for guard.
