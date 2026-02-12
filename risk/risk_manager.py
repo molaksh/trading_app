@@ -23,6 +23,7 @@ from config.settings import (
     DAILY_LOSS_LIMIT,
     CONFIDENCE_RISK_MULTIPLIER,
     ENABLE_ML_SIZING,
+    CASH_ONLY_TRADING,
 )
 from risk.portfolio_state import PortfolioState
 
@@ -151,7 +152,20 @@ class RiskManager:
             reason = f"Invalid position size calculation (size={position_size})"
             self._record_rejection("invalid_position", reason)
             return TradeDecision(False, 0.0, 0.0, reason)
-        
+
+        # Check 5b: Cash-only trading enforcement
+        if CASH_ONLY_TRADING:
+            position_value = position_size * entry_price
+            available_capital = self.portfolio.get_available_capital()
+            if position_value > available_capital:
+                reason = (
+                    f"Cash-only enforcement: position value "
+                    f"(${position_value:.2f}) exceeds available capital "
+                    f"(${available_capital:.2f})"
+                )
+                self._record_rejection("cash_only_enforcement", reason)
+                return TradeDecision(False, 0.0, 0.0, reason)
+
         # Check 6: Per-symbol exposure limit (RISK-based, not notional)
         # Safety: Calculate risk exposure, not position value
         # Get current risk amount for symbol (sum of all open positions' risk)

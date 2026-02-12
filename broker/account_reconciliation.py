@@ -23,7 +23,7 @@ from pathlib import Path
 from broker.adapter import BrokerAdapter, Position
 from broker.trade_ledger import TradeLedger
 from risk.risk_manager import RiskManager
-from config.settings import CASH_ONLY_TRADING, RECONCILIATION_ENGINE
+from config.settings import CASH_ONLY_TRADING, RECONCILIATION_ENGINE, RISK_PER_TRADE, CONFIDENCE_RISK_MULTIPLIER
 
 logger = logging.getLogger(__name__)
 
@@ -153,7 +153,10 @@ class AccountReconciler:
             
             # STEP 4: Validate positions
             self._validate_positions()
-            
+
+            # STEP 4c: Liquidity check (after hydration, before risk validation)
+            self._check_and_liquidate()
+
             # STEP 5: Validate buying power and risk
             self._validate_buying_power_and_risk()
             
@@ -358,19 +361,18 @@ class AccountReconciler:
                 self.alpaca_orders = []
                 return
             
-            # Try different possible API methods for fetching orders
-            orders = None
-            
-            # Try method 1: list_orders (newer alpaca-py)
-            if hasattr(self.broker.client, 'list_orders'):
-                orders = self.broker.client.list_orders(status="open")
-            # Try method 2: get_orders (alternative)
-            elif hasattr(self.broker.client, 'get_orders'):
-                orders = self.broker.client.get_orders(status="open")
-            else:
-                logger.warning("Could not find order listing method in Alpaca client")
+            try:
+                from alpaca.trading.requests import GetOrdersRequest
+                from alpaca.trading.enums import QueryOrderStatus
+                request = GetOrdersRequest(status=QueryOrderStatus.OPEN)
+                orders = self.broker.client.get_orders(filter=request)
+            except ImportError:
+                logger.warning("alpaca.trading.requests not available, skipping order fetch")
                 orders = []
-            
+            except Exception as e:
+                logger.warning(f"Failed to fetch orders via GetOrdersRequest: {e}")
+                orders = []
+
             self.alpaca_orders = orders or []
             
             logger.info(f"Found {len(self.alpaca_orders)} open order(s)")
@@ -529,9 +531,16 @@ class AccountReconciler:
                 entry_date=entry_date,
                 entry_price=entry_price,
                 position_size=qty,
-                risk_amount=0.0,
+                risk_amount=portfolio.current_equity * RISK_PER_TRADE * CONFIDENCE_RISK_MULTIPLIER.get(confidence, 0.75),
                 confidence=confidence,
             )
+
+            # Update current price from broker (critical for P&L scoring)
+            current_price = float(getattr(pos, "current_price", 0))
+            if current_price > 0 and symbol in portfolio.open_positions:
+                for open_pos in portfolio.open_positions[symbol]:
+                    open_pos.update_price(current_price)
+
             hydrated += 1
 
         if hydrated:
@@ -539,6 +548,131 @@ class AccountReconciler:
                 f"PORTFOLIO_HYDRATED | count={hydrated} | "
                 f"total_positions={sum(len(v) for v in portfolio.open_positions.values())}"
             )
+
+    # ========================================================================
+    # STEP 4c: Liquidity Check (Autonomous Position Liquidation)
+    # ========================================================================
+
+    def _check_and_liquidate(self) -> None:
+        """
+        Check for liquidity violations and autonomously sell positions if needed.
+
+        Runs after portfolio hydration and before risk validation.
+        Skipped for daytrade mode (positions close EOD).
+        """
+        import os
+        from config.scope import get_scope
+        from config.scope_paths import get_scope_path
+
+        try:
+            scope = get_scope()
+        except Exception:
+            scope = None
+
+        mode = scope.mode if scope else "swing"
+
+        # Skip for daytrade mode
+        if mode == "daytrade":
+            logger.debug("Liquidity check skipped: daytrade mode")
+            return
+
+        # Skip if no account snapshot
+        if not self.account_snapshot:
+            logger.debug("Liquidity check skipped: no account snapshot")
+            return
+
+        account_cash = self.account_snapshot.get("cash", 0.0)
+        account_equity = self.account_snapshot.get("equity", 0.0)
+
+        # Resolve state_dir for cash reserve persistence
+        state_dir = None
+        if scope:
+            try:
+                state_dir = get_scope_path(scope, "state")
+            except Exception:
+                pass
+
+        # Load persisted cash reserve (before violation check)
+        from risk.liquidity_manager import LiquidityManager
+        if state_dir:
+            LiquidityManager.load_cash_reserve(state_dir, self.risk_manager.portfolio)
+
+        # Read manual target
+        target_cash = None
+        env_target = os.getenv("LIQUIDITY_TARGET_CASH")
+        if env_target:
+            try:
+                target_cash = float(env_target)
+            except ValueError:
+                pass
+
+        # Quick-check: is there a violation?
+        has_negative_cash = CASH_ONLY_TRADING and account_cash < 0
+        has_target = target_cash is not None and account_cash < target_cash
+        has_heat_violation = self._heat_exceeds_limit(account_equity)
+
+        if not (has_negative_cash or has_target or has_heat_violation):
+            logger.info(
+                "LIQUIDITY_CHECK_OK | cash=%.2f equity=%.2f | no liquidation needed",
+                account_cash, account_equity,
+            )
+            return
+
+        logger.warning(
+            "LIQUIDITY_CHECK_TRIGGERED | cash=%.2f equity=%.2f | "
+            "negative_cash=%s target=%s heat_violation=%s",
+            account_cash, account_equity,
+            has_negative_cash, target_cash, has_heat_violation,
+        )
+
+        # Instantiate LiquidityManager and run
+        lm = LiquidityManager(
+            portfolio_state=self.risk_manager.portfolio,
+            broker=self.broker,
+            state_dir=state_dir,
+            trade_ledger=self.trade_ledger,
+        )
+        result = lm.assess_and_liquidate(
+            account_cash=account_cash,
+            account_equity=account_equity,
+            target_cash=target_cash,
+        )
+
+        # Record results
+        if result.triggered:
+            if result.positions_sold:
+                msg = (
+                    f"LIQUIDITY_RESOLVED: sold {len(result.positions_sold)} positions "
+                    f"({', '.join(result.positions_sold)}), "
+                    f"freed ${result.cash_freed:,.2f}"
+                )
+                logger.info(msg)
+                self.validation_warnings.append(msg)
+            else:
+                msg = (
+                    f"LIQUIDITY_UNRESOLVED: {result.trigger_reason}, "
+                    f"no positions sold (errors: {result.errors})"
+                )
+                logger.warning(msg)
+                self.validation_warnings.append(msg)
+
+            if result.errors:
+                for err in result.errors:
+                    self.validation_warnings.append(f"Liquidation error: {err}")
+
+    def _heat_exceeds_limit(self, equity: float) -> bool:
+        """Check if portfolio heat exceeds MAX_PORTFOLIO_HEAT."""
+        from config.settings import MAX_PORTFOLIO_HEAT
+
+        if equity <= 0:
+            return False
+
+        total_risk = sum(
+            pos.risk_amount
+            for positions in self.risk_manager.portfolio.open_positions.values()
+            for pos in positions
+        )
+        return (total_risk / equity) > MAX_PORTFOLIO_HEAT
 
     # ========================================================================
     # STEP 5: Validate Buying Power & Risk
@@ -804,6 +938,9 @@ class AccountReconciler:
         for warning in self.validation_warnings:
             # Skip external position warnings - handled via self.external_symbols
             if "external position" in warning.lower():
+                continue
+            # Skip liquidity_resolved - the problem was fixed, cash reserve prevents redeployment
+            if "liquidity_resolved" in warning.lower():
                 continue
             # Other warnings are serious
             serious_warnings.append(warning)

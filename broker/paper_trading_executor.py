@@ -380,7 +380,7 @@ class TradingExecutor:
                                 entry_date=pd.Timestamp(fill_time),
                                 entry_price=fill_price,
                                 position_size=order_result.filled_qty,
-                                risk_amount=0.0,  # Unknown at this point
+                                risk_amount=order_result.filled_qty * fill_price,
                                 confidence=3,  # Default confidence
                             )
                     except Exception as e:

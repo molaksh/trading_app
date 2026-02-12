@@ -104,6 +104,9 @@ class PortfolioState:
         # History tracking
         self.equity_history: List[Tuple[pd.Timestamp, float]] = [(pd.Timestamp.now(), initial_equity)]
         self.trades_closed: List[Dict] = []
+
+        # Cash reserve set by LiquidityManager after selling positions
+        self.cash_reserve = None
         
         logger.info(f"Portfolio initialized with equity: ${initial_equity:,.2f}")
 
@@ -307,8 +310,16 @@ class PortfolioState:
             for positions in self.open_positions.values()
             for pos in positions
         )
-        
-        return max(0.0, self.current_equity - total_open_value)
+
+        available = max(0.0, self.current_equity - total_open_value)
+
+        # Subtract active cash reserve (set by LiquidityManager)
+        if self.cash_reserve is not None:
+            reserved = self.cash_reserve.get_reserved_amount()
+            if reserved > 0:
+                available = max(0.0, available - reserved)
+
+        return available
     
     def get_open_positions_count(self) -> int:
         """Get total number of open positions."""
@@ -373,6 +384,7 @@ class PortfolioState:
             'consecutive_losses': self.consecutive_losses,
             'total_trades_closed': len(self.trades_closed),
             'win_rate': self.get_win_rate_from_trades(),
+            'cash_reserve': self.cash_reserve.get_reserved_amount() if self.cash_reserve else 0.0,
         }
     
     def log_summary(self) -> None:

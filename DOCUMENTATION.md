@@ -1,6 +1,6 @@
 # Repository Documentation (Single Source of Truth)
 
-*Last updated: 2026-02-11*
+*Last updated: 2026-02-12*
 
 ---
 
@@ -22,6 +22,7 @@
 | **Phase F Phase 3: Critic & Reviewer Agents** | **✅ COMPLETE** | **14/14** | Adversarial critic, conservative reviewer, verdicts |
 | **Phase F Phase 4: Job Scheduling & Governance Integration** | **✅ COMPLETE** | **55/55** | Scheduler, job orchestrator, logging, verdict reader, deployment |
 | **Phase F Phase 5: Multi-Source News Fetcher** | **✅ COMPLETE** | **46/46** | RSS feeds, web scraper, CoinTelegraph, CryptoCompare, Twitter integration |
+| **Liquidity Manager v2 (6 Fixes)** | **✅ COMPLETE** | — | Correct risk_amount, dynamic sell loop, reserve persistence, ledger writes |
 
 **Overall Progress**: Constitutional governance + epistemic intelligence stack (Phases C, D, E v1/v2, F Phase 1-5) fully implemented, tested, and integrated. **215/215 Phase F tests passing** (169 + 46). Production-ready with feature flags for safe rollout.
 
@@ -29,7 +30,48 @@
 
 ## �🔔 Latest Updates (Newest First)
 
+### 2026-02-12 — Liquidity Manager v2: 6 Critical Fixes (Over-Liquidation Prevention)
 
+**Status**: ✅ COMPLETE (Production Patch)
+**Severity**: CRITICAL — Prevented over-liquidation (20 of 29 positions sold instead of ~7)
+
+#### Root Cause
+
+The liquidation manager sold far too many positions to resolve an 8% heat limit. Two compounding bugs inflated apparent heat from ~22% to ~95%:
+
+1. `risk_amount` was set to full notional value (`qty * entry_price` ≈ $5k/position) during hydration instead of the actual risk allocation (~$750/position)
+2. The sell loop compared a risk-unit deficit against notional-unit cash freed, so it never converged properly
+
+#### 6 Fixes Applied
+
+| # | Fix | File(s) | Description |
+|---|-----|---------|-------------|
+| 1 | **risk_amount inflated** | `account_reconciliation.py`, `crypto_reconciliation.py` | Replaced `qty * entry_price` with `equity * RISK_PER_TRADE * CONFIDENCE_RISK_MULTIPLIER` during hydration |
+| 2 | **Sell loop unit mismatch** | `liquidity_manager.py` | Replaced static `cash_freed >= deficit` with dynamic `_detect_violations()` recheck after each sell; stops when heat ≤ 8% |
+| 3 | **Cash reserve not persisted** | `liquidity_manager.py`, both reconciliation files | Added `CashReserve.to_dict()`/`from_dict()`, persist to `state/cash_reserve.json`, load on startup before violation check |
+| 4 | **Pending orders silent** | `liquidity_manager.py` | Split `is_filled()`/`is_pending()` branch: filled → `LIQUIDATION_FILLED` (INFO), pending → `LIQUIDATION_PENDING` (WARNING) |
+| 5 | **SAFE_MODE false trigger** | `account_reconciliation.py` | Added `"liquidity_resolved"` filter in `_determine_startup_status` (resolved = problem fixed, not a warning) |
+| 6 | **Ledger not updated** | `liquidity_manager.py`, both reconciliation files | Added `trade_ledger` param; creates `LIQUIDITY_EXIT` trades via `create_trade_from_fills()`; removes from `_open_positions` to prevent `EXTERNAL_CLOSE` noise |
+
+#### Files Modified
+
+| File | Changes |
+|------|---------|
+| `risk/liquidity_manager.py` | Fixes #2, #3, #4, #6: dynamic sell loop, reserve persistence (`to_dict`/`from_dict`/`load_cash_reserve`/`_save_cash_reserve`), filled vs pending logging, ledger trade recording |
+| `broker/account_reconciliation.py` | Fixes #1, #3, #5, #6: correct `risk_amount`, load cash reserve on startup, `liquidity_resolved` SAFE_MODE filter, pass `trade_ledger` to `LiquidityManager` |
+| `broker/crypto_reconciliation.py` | Fixes #1, #3, #6: correct `risk_amount`, load cash reserve on startup, pass `trade_ledger` to `LiquidityManager` |
+
+#### Expected Behavior After Fix
+
+- Heat computes as ~22% (not ~95%) → only ~7 positions sold to reach ≤8%
+- Scoring table shows real P&L% (broker `current_price` was already fixed prior)
+- Sell loop stops dynamically when heat ≤ 8% (no unit mismatch)
+- `LIQUIDATION_PENDING` log visible for each non-filled order
+- Status shows `READY` (not `SAFE_MODE`) after successful liquidation
+- `trades.jsonl` contains `LIQUIDITY_EXIT` entries (no `EXTERNAL_CLOSE` noise on restart)
+- `state/cash_reserve.json` survives container restarts
+
+---
 
 ### 2026-02-11 — Phase F Epistemic Fixes: Confidence Logic & Data Gates (CRITICAL PATCH)
 

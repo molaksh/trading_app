@@ -643,7 +643,7 @@ class LedgerReconciliationHelper:
             # In production, you'd fetch the last known price
             exit_price = metadata['entry_price']  # Pessimistic: assume breakeven
             
-            trade = create_trade(
+            trade = create_trade_from_fills(
                 symbol=symbol,
                 entry_order_id=metadata['entry_order_id'],
                 entry_fill_timestamp=metadata['entry_timestamp'],
