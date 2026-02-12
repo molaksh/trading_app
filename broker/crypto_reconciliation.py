@@ -41,6 +41,9 @@ class CryptoAccountReconciler:
                 len(positions),
             )
 
+            # Hydrate portfolio.open_positions from broker positions
+            self._hydrate_portfolio_positions(positions)
+
             return {
                 "status": "READY",
                 "safe_mode": False,
@@ -67,3 +70,62 @@ class CryptoAccountReconciler:
                 "errors": [str(e)],
                 "reconciliation_adapter": self.broker.__class__.__name__,
             }
+
+    def _hydrate_portfolio_positions(self, positions) -> None:
+        """
+        Populate risk_manager.portfolio.open_positions from broker positions.
+
+        Without this, the exit evaluator sees an empty portfolio after restart
+        and skips all exit evaluations.
+        """
+        import pandas as pd
+
+        portfolio = self.risk_manager.portfolio
+        hydrated = 0
+
+        if not positions or not isinstance(positions, dict):
+            return
+
+        for symbol, pos_data in positions.items():
+            # Skip if already in portfolio state
+            if symbol in portfolio.open_positions and portfolio.open_positions[symbol]:
+                continue
+
+            # Extract fields from broker position dict
+            if isinstance(pos_data, dict):
+                entry_price = float(pos_data.get("entry_price", pos_data.get("cost", 0)))
+                qty = float(pos_data.get("vol", pos_data.get("quantity", 0)))
+            else:
+                entry_price = float(getattr(pos_data, "entry_price", 0))
+                qty = float(getattr(pos_data, "quantity", getattr(pos_data, "vol", 0)))
+
+            if qty <= 0:
+                continue
+
+            # Resolve entry_date from ledger or fallback
+            entry_date = pd.Timestamp.now(tz="UTC")
+            if hasattr(self.trade_ledger, "_open_positions"):
+                ledger_meta = self.trade_ledger._open_positions.get(symbol, {})
+                ts = ledger_meta.get("entry_timestamp")
+                if ts:
+                    try:
+                        entry_date = pd.Timestamp(ts, tz="UTC")
+                    except Exception:
+                        pass
+
+            portfolio.open_trade(
+                symbol=symbol,
+                entry_date=entry_date,
+                entry_price=entry_price,
+                position_size=qty,
+                risk_amount=0.0,
+                confidence=3,
+            )
+            hydrated += 1
+
+        if hydrated:
+            logger.info(
+                "PORTFOLIO_HYDRATED | count=%d | total_positions=%d",
+                hydrated,
+                sum(len(v) for v in portfolio.open_positions.values()),
+            )

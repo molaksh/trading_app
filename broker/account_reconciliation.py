@@ -16,7 +16,7 @@ Philosophy:
 
 import logging
 from typing import Optional, Dict, List, Tuple
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
 
@@ -470,8 +470,76 @@ class AccountReconciler:
                     reason="Position not found on broker during reconciliation"
                 )
         
+        # CRITICAL FIX: Hydrate portfolio.open_positions from broker positions
+        # Without this, the exit evaluator sees an empty portfolio and skips all exits
+        self._hydrate_portfolio_positions()
+
         logger.info("=" * 80)
-    
+
+    # ========================================================================
+    # STEP 4b: Hydrate Portfolio State from Broker Positions
+    # ========================================================================
+
+    def _hydrate_portfolio_positions(self) -> None:
+        """
+        Populate risk_manager.portfolio.open_positions from broker positions.
+
+        The exit evaluator requires positions in portfolio state to evaluate
+        exits. Without this step, all broker positions are skipped because
+        they fail the 'symbol not in portfolio_positions' check.
+        """
+        import pandas as pd
+
+        hydrated = 0
+        portfolio = self.risk_manager.portfolio
+
+        for pos in self.alpaca_positions:
+            symbol = pos.symbol
+            qty = float(pos.qty)
+            entry_price = float(
+                getattr(pos, "avg_entry_price",
+                        getattr(pos, "avg_fill_price",
+                                getattr(pos, "entered_avg_fill_price", 0)))
+            )
+
+            # Skip if already in portfolio state
+            if symbol in portfolio.open_positions and portfolio.open_positions[symbol]:
+                continue
+
+            # Resolve entry_date from ledger metadata or fallback to now
+            entry_date = pd.Timestamp.now(tz="UTC")
+            if hasattr(self.trade_ledger, "_open_positions"):
+                ledger_meta = self.trade_ledger._open_positions.get(symbol, {})
+                ts = ledger_meta.get("entry_timestamp")
+                if ts:
+                    try:
+                        entry_date = pd.Timestamp(ts, tz="UTC")
+                    except Exception:
+                        pass
+
+            # Resolve confidence from ledger or default
+            confidence = 3
+            trades = self.trade_ledger.get_trades_for_symbol(symbol)
+            if trades:
+                last_trade = trades[-1]
+                confidence = getattr(last_trade, "confidence", None) or last_trade.get("confidence", 3) if isinstance(last_trade, dict) else 3
+
+            portfolio.open_trade(
+                symbol=symbol,
+                entry_date=entry_date,
+                entry_price=entry_price,
+                position_size=qty,
+                risk_amount=0.0,
+                confidence=confidence,
+            )
+            hydrated += 1
+
+        if hydrated:
+            logger.info(
+                f"PORTFOLIO_HYDRATED | count={hydrated} | "
+                f"total_positions={sum(len(v) for v in portfolio.open_positions.values())}"
+            )
+
     # ========================================================================
     # STEP 5: Validate Buying Power & Risk
     # ========================================================================
