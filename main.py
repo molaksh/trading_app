@@ -104,6 +104,19 @@ def _is_crypto_scope(scope) -> bool:
 
 
 def _get_symbols_for_scope(scope):
+    # Phase G: If enabled, load active universe from persistence
+    from universe.governance.config import PHASE_G_ENABLED
+    if PHASE_G_ENABLED:
+        from universe.governance.persistence import UniverseGovernancePersistence
+        persistence = UniverseGovernancePersistence(str(scope))
+        active = persistence.load_active_universe()
+        if active:
+            logger.info("PHASE_G_UNIVERSE_LOADED | symbols=%s", active)
+            if _is_crypto_scope(scope):
+                return validate_crypto_universe_symbols(active)
+            return active
+        logger.info("PHASE_G_UNIVERSE_FALLBACK | no active universe, using default")
+
     if _is_crypto_scope(scope):
         from config.crypto.loader import load_crypto_config
         from crypto.universe import CryptoUniverse

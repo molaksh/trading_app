@@ -160,7 +160,12 @@ def run_crypto_pipeline(
         },
     )
 
-    ordered_symbols = get_ai_runner().get_ranked_symbols(symbols)
+    from universe.governance.config import PHASE_G_ENABLED as _phase_g_on
+    if _phase_g_on:
+        # Phase G: universe is already selected by governance; use as-is
+        ordered_symbols = list(symbols)
+    else:
+        ordered_symbols = get_ai_runner().get_ranked_symbols(symbols)
     max_scanned = int(crypto_config.get("MAX_SYMBOLS_SCANNED_PER_CYCLE", len(ordered_symbols) or 1))
     if max_scanned <= 0:
         max_scanned = len(ordered_symbols)

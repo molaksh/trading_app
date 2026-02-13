@@ -495,8 +495,13 @@ def run_daemon():
     if guard.is_live():
         observability.emit_live_status_snapshot(trigger="startup")
 
-    get_ai_runner().trigger_ranking_from_market_data(trigger="startup")
-    
+    from universe.governance.config import PHASE_G_ENABLED as _phase_g_on
+    if _phase_g_on:
+        _run_universe_governance(runtime, trigger="startup")
+        _run_regime_validation(runtime, trigger="startup")
+    else:
+        get_ai_runner().trigger_ranking_from_market_data(trigger="startup")
+
     # Register tasks
     # Each task closure captures runtime and updates it after execution
     def make_trading_tick():
@@ -520,7 +525,13 @@ def run_daemon():
 
     def make_ai_daily_ranking():
         get_ai_runner().trigger_ranking_from_market_data(trigger="daily")
-    
+
+    def make_universe_governance():
+        _run_universe_governance(runtime, trigger="daily")
+
+    def make_regime_validation():
+        _run_regime_validation(runtime, trigger="scheduled")
+
     scheduler.register_task(CryptoSchedulerTask(
         name="trading_tick",
         func=make_trading_tick,
@@ -557,15 +568,35 @@ def run_daemon():
     ))
 
     ai_daily_run_time = _offset_time_utc(CRYPTO_DOWNTIME_END_UTC, minutes=-5)
-    scheduler.register_task(CryptoSchedulerTask(
-        name="ai_daily_ranking",
-        func=make_ai_daily_ranking,
-        daily=True,
-        run_at_utc=ai_daily_run_time,
-        run_window_minutes=5,
-        allowed_state=TradingState.DOWNTIME,
-    ))
+    if _phase_g_on:
+        scheduler.register_task(CryptoSchedulerTask(
+            name="universe_governance",
+            func=make_universe_governance,
+            daily=True,
+            run_at_utc=ai_daily_run_time,
+            run_window_minutes=5,
+            allowed_state=TradingState.DOWNTIME,
+        ))
+    else:
+        # Legacy AI advisor (to be removed after Phase G validation)
+        scheduler.register_task(CryptoSchedulerTask(
+            name="ai_daily_ranking",
+            func=make_ai_daily_ranking,
+            daily=True,
+            run_at_utc=ai_daily_run_time,
+            run_window_minutes=5,
+            allowed_state=TradingState.DOWNTIME,
+        ))
     
+    # Phase G: Periodic regime validation (every 2 hours)
+    if _phase_g_on:
+        scheduler.register_task(CryptoSchedulerTask(
+            name="regime_validation",
+            func=make_regime_validation,
+            interval_minutes=120,
+            # No state restriction: regime can drift anytime
+        ))
+
     # Run daemon loop
     logger.info("Starting daemon loop (Ctrl+C to stop)...")
     try:
@@ -573,6 +604,76 @@ def run_daemon():
     except KeyboardInterrupt:
         logger.info("Shutdown requested by user")
         sys.exit(0)
+
+
+def _run_universe_governance(runtime, trigger: str):
+    """Run Phase G universe governance cycle."""
+    from universe.governance.governor import UniverseGovernor
+    from universe.governance.scorer import UniverseScorer
+    from universe.governance.guardrails import UniverseGuardrails
+    from universe.governance.persistence import UniverseGovernancePersistence
+    from universe.governance.logging import PhaseGLogger
+    from universe.governance.config import PHASE_G_DRY_RUN
+    from governance.verdict_reader import VerdictReader
+
+    scope = get_scope()
+    crypto_config = load_crypto_config(scope)
+
+    candidate_pool = crypto_config.get("UNIVERSE_CANDIDATE_POOL",
+                                       crypto_config.get("CRYPTO_UNIVERSE", []))
+    current_universe = crypto_config.get("CRYPTO_UNIVERSE", [])
+
+    # Load active universe from persistence (may differ from config)
+    persistence = UniverseGovernancePersistence(str(scope))
+    persisted = persistence.load_active_universe()
+    if persisted:
+        current_universe = persisted
+
+    governor = UniverseGovernor(
+        scope=scope,
+        scorer=UniverseScorer(),
+        guardrails=UniverseGuardrails(),
+        persistence=persistence,
+        phase_g_logger=PhaseGLogger(str(scope)),
+        trade_ledger=runtime.trade_ledger,
+        regime_provider=getattr(runtime, "crypto_regime_engine", None),
+        verdict_reader=VerdictReader(),
+    )
+
+    decision = governor.run_governance_cycle(
+        candidate_pool=candidate_pool,
+        current_universe=current_universe,
+        trigger=trigger,
+        dry_run=PHASE_G_DRY_RUN,
+    )
+
+    logger.info(
+        "UNIVERSE_GOVERNANCE_COMPLETE | trigger=%s | adds=%s | removes=%s | "
+        "final=%s | dry_run=%s",
+        trigger, decision.additions, decision.removals,
+        decision.final_universe, decision.dry_run,
+    )
+
+
+def _run_regime_validation(runtime, trigger: str):
+    """Run Phase G periodic regime validation cycle."""
+    from phase_g_regime.regime_orchestrator import RegimeOrchestrator
+    from governance.verdict_reader import VerdictReader
+
+    scope = get_scope()
+
+    orchestrator = RegimeOrchestrator(
+        scope=scope,
+        runtime=runtime,
+        verdict_reader=VerdictReader(),
+    )
+
+    result = orchestrator.run_validation_cycle(trigger=trigger)
+
+    logger.info(
+        "REGIME_VALIDATION_COMPLETE | trigger=%s | outcome=%s | duration_ms=%.1f",
+        trigger, result.outcome, result.duration_ms,
+    )
 
 
 if __name__ == "__main__":

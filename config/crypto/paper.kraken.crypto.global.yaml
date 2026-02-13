@@ -170,3 +170,10 @@ REGIME_HYSTERESIS_COUNT = 2
 # Strategy selector limits (configurable per regime)
 STRATEGY_MAX_POSITION_COUNT = 5
 STRATEGY_MAX_RISK_PER_TRADE = 0.02
+
+# ============================================================================
+# UNIVERSE GOVERNANCE (Phase G)
+# ============================================================================
+PHASE_G_ENABLED = false
+PHASE_G_DRY_RUN = true
+UNIVERSE_CANDIDATE_POOL = ["BTC", "ETH", "SOL", "LINK", "AVAX", "ADA", "XRP", "DOT", "DOGE", "LTC", "BCH", "MATIC", "UNI", "ATOM", "NEAR"]

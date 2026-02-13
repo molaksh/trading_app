@@ -23,12 +23,59 @@
 | **Phase F Phase 4: Job Scheduling & Governance Integration** | **✅ COMPLETE** | **55/55** | Scheduler, job orchestrator, logging, verdict reader, deployment |
 | **Phase F Phase 5: Multi-Source News Fetcher** | **✅ COMPLETE** | **46/46** | RSS feeds, web scraper, CoinTelegraph, CryptoCompare, Twitter integration |
 | **Liquidity Manager v2 (6 Fixes)** | **✅ COMPLETE** | — | Correct risk_amount, dynamic sell loop, reserve persistence, ledger writes |
+| **Phase G: Universe Governance** | **✅ COMPLETE** | — | Deterministic 5-dimension scoring, autonomous add/remove, replaces AI advisor |
+| **Phase G: Regime Autonomy** | **✅ COMPLETE** | — | Periodic regime validation, 5-condition drift detection, non-binding proposals |
 
-**Overall Progress**: Constitutional governance + epistemic intelligence stack (Phases C, D, E v1/v2, F Phase 1-5) fully implemented, tested, and integrated. **215/215 Phase F tests passing** (169 + 46). Production-ready with feature flags for safe rollout.
+**Overall Progress**: Constitutional governance + epistemic intelligence stack (Phases C, D, E v1/v2, F Phase 1-5, G) fully implemented, tested, and integrated. **215/215 Phase F tests passing** (169 + 46). Phase G gated behind `PHASE_G_ENABLED` feature flag (default off). Production-ready with feature flags for safe rollout.
 
 ---
 
 ## �🔔 Latest Updates (Newest First)
+
+### 2026-02-12 — Phase G: Unified Autonomous Universe Governance + Regime Autonomy
+
+**Status**: ✅ COMPLETE (Feature-flagged, default OFF)
+**Feature Flags**: `PHASE_G_ENABLED` (default false), `PHASE_G_DRY_RUN` (default true)
+
+#### Phase G Universe Governance (`universe/governance/`)
+
+Replaces the legacy OpenAI-based AI advisor (`runtime/ai_advisor.py`) with a deterministic, scope-aware scoring system for autonomous universe selection.
+
+| Module | Purpose |
+|--------|---------|
+| `config.py` | Feature flags, scoring weights, guardrail constants |
+| `scorer.py` | 5-dimension scoring engine (performance 0.45, regime 0.25, liquidity 0.15, volatility 0.10, sentiment 0.05) |
+| `governor.py` | Full pipeline orchestrator: score → rank → guardrails → persist |
+| `guardrails.py` | Constitutional constraints: max 2 adds/removes per cycle, universe size 5-15, cooldown 7d, open position protection |
+| `persistence.py` | Append-only JSONL: `persist/{scope}/universe/` — decisions.jsonl, active_universe.json, cooldowns.json, scoring_history.jsonl |
+| `logging.py` | 3-layer transparency: pipeline.jsonl, audit_trail.jsonl, scoring_detail.jsonl |
+| `regime_proxy.py` | SPY-based regime proxy for swing scope |
+
+**Integration points**:
+- `crypto_main.py`: Runs at startup + daily scheduler (replaces `ai_daily_ranking`)
+- `main.py`: `_get_symbols_for_scope()` loads from `active_universe.json` when Phase G is on
+- `crypto_pipeline.py`: Skips AI ranking when Phase G is on (universe already selected)
+- YAML configs: `UNIVERSE_CANDIDATE_POOL` (15-symbol superset) added to paper + live configs
+
+#### Phase G Regime Autonomy (`phase_g_regime/`)
+
+Periodic regime validation and drift detection. Constitutional: never flips regime directly, only proposes non-binding changes.
+
+| Module | Purpose |
+|--------|---------|
+| `regime_validator.py` | Stage 1: Computes 4 validation scores (internal, external, drift, cross-asset) → verdict |
+| `regime_alignment.py` | Helpers: regime distance, duration percentile, volatility band/shift detection |
+| `regime_drift_detector.py` | Stage 2: 5-condition AND logic (all must hold for drift: confidence delta > 0.25, dwell met, duration anomaly > 80th percentile, volatility shift, >= 5 sources) |
+| `regime_guardrails.py` | Stage 4: Cooldown, liquidity, Phase F data sufficiency, disagreement < 40%, max 2 flips/week |
+| `regime_orchestrator.py` | Full pipeline + persistence + 3-layer logging + 90s timeout + idempotency |
+
+**Scheduling**: Crypto runs every 2 hours (any trading state). Emergency drawdown override at < -25% bypasses dwell.
+
+**Persistence**: `persist/phase_g/{scope}/regime/` — validation_runs.jsonl, proposals.jsonl, drift_history.jsonl, audit_trail.jsonl, run_state.json
+
+**Fail-safe**: Timeout at 90s, defaults to current regime on failure, never blocks trading.
+
+---
 
 ### 2026-02-12 — Liquidity Manager v2: 6 Critical Fixes (Over-Liquidation Prevention)
 
