@@ -250,6 +250,9 @@ class DatasetBuilder:
         """
         Collect closed trades from a ledger with metadata.
         
+        Only includes trades with ML features (strategy-opened positions).
+        Excludes reconciliation-discovered positions that lack entry_features.
+        
         Args:
             ledger: TradeLedger instance
             source_tag: 'paper' or 'live'
@@ -263,7 +266,15 @@ class DatasetBuilder:
         
         try:
             all_trades = ledger.get_all_trades()
-            closed_trades = [t for t in all_trades if t.exit_timestamp is not None]
+            # Filter to closed trades with valid ML features
+            # Exclude trades without entry_features (reconciliation-discovered positions)
+            closed_trades = [
+                t for t in all_trades 
+                if t.exit_timestamp is not None 
+                and hasattr(t, 'entry_features') 
+                and t.entry_features is not None
+                and len(t.entry_features) > 0
+            ]
             return [(trade, source_tag, weight) for trade in closed_trades]
         except Exception as e:
             logger.warning(f"Could not collect trades from {source_tag} ledger: {e}")
@@ -295,12 +306,18 @@ class DatasetBuilder:
         except Exception:
             holding_days = 0
         
+        # Handle missing confidence (e.g., liquidation exits)
+        confidence = trade.confidence if trade.confidence is not None else 0.0
+        
+        # Handle quantity field (Trade uses entry_quantity, not quantity)
+        quantity = getattr(trade, 'quantity', trade.entry_quantity)
+        
         return TradeDataRow(
             symbol=trade.symbol,
             decision_timestamp=trade.entry_timestamp,
-            rule_confidence=float(trade.confidence),
+            rule_confidence=float(confidence),
             rule_features=trade.entry_features.copy() if hasattr(trade, "entry_features") else {},
-            position_size=trade.quantity,
+            position_size=quantity,
             entry_price=trade.entry_price,
             exit_price=trade.exit_price,
             exit_timestamp=trade.exit_timestamp,

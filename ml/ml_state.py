@@ -200,6 +200,15 @@ class MLStateManager:
         return True
 
 
+def _trade_field(trade, key: str, default=None):
+    """Get a field from Trade (dataclass) or dict."""
+    if hasattr(trade, "to_dict"):
+        trade = trade.to_dict()
+    if isinstance(trade, dict):
+        return trade.get(key, default)
+    return getattr(trade, key, default)
+
+
 def compute_dataset_fingerprint(trades: List[dict]) -> str:
     """
     Compute SHA256 fingerprint of training data.
@@ -223,14 +232,14 @@ def compute_dataset_fingerprint(trades: List[dict]) -> str:
     content = ""
     
     # Sort by entry timestamp for determinism
-    sorted_trades = sorted(trades, key=lambda t: t.get("entry_timestamp", ""))
+    sorted_trades = sorted(trades, key=lambda t: _trade_field(t, "entry_timestamp", ""))
     
     for trade in sorted_trades:
-        symbol = trade.get("symbol", "")
-        entry_price = trade.get("entry_price", 0)
-        exit_price = trade.get("exit_price", 0)
-        entry_ts = trade.get("entry_timestamp", "")
-        exit_ts = trade.get("exit_timestamp", "")
+        symbol = _trade_field(trade, "symbol", "")
+        entry_price = _trade_field(trade, "entry_price", 0)
+        exit_price = _trade_field(trade, "exit_price", 0)
+        entry_ts = _trade_field(trade, "entry_timestamp", "")
+        exit_ts = _trade_field(trade, "exit_timestamp", "")
         
         content += f"{symbol}|{entry_price}|{exit_price}|{entry_ts}|{exit_ts}\n"
     

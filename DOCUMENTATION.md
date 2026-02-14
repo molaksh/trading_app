@@ -1,6 +1,6 @@
 # Repository Documentation (Single Source of Truth)
 
-*Last updated: 2026-02-12*
+*Last updated: 2026-02-14*
 
 ---
 
@@ -31,6 +31,61 @@
 ---
 
 ## �🔔 Latest Updates (Newest First)
+
+### 2026-02-14 — ML Training Pipeline: Reconciliation Trade Filtering Fix
+
+**Status**: ✅ COMPLETE (Production Patch)
+**Severity**: HIGH — ML training blocked by incompatible trade data
+**Root Cause**: Reconciliation-discovered positions lack ML features (`entry_features`)
+
+#### Problem Discovery
+
+After Feb 12 liquidation event, ML training attempted to use 120 trades but failed with cascading errors:
+1. **First failure**: `'Trade' object has no attribute 'get'` — ML fingerprinting expected dicts, got Trade dataclasses
+2. **Second failure**: `float() argument must be a string or a real number, not 'NoneType'` — Liquidation trades had `confidence=None`
+3. **Third failure**: `Found array with 0 feature(s) (shape=(120, 0))` — All trades lacked `entry_features` dictionary
+
+#### Root Cause Analysis
+
+The 120 closed trades came from **reconciliation-discovered positions** (opened before tracking was in place):
+- These positions were correctly hydrated from broker state during reconciliation
+- When closed, they created valid Trade records with exit data
+- However, they had **no strategy entry context**: no `entry_features`, no `confidence`, no ML signals
+- ML training requires `entry_features` to build the feature matrix for training
+
+**Key insight**: Not all trades are ML-trainable. Only strategy-opened positions capture the decision-time features needed for learning.
+
+#### 3 Fixes Applied
+
+| # | Fix | File | Description |
+|---|-----|------|-------------|
+| 1 | **Trade/dict compatibility** | `ml/ml_state.py` (lines 203-238) | Added `_trade_field()` helper to handle both Trade dataclasses and dicts in fingerprinting |
+| 2 | **None confidence handling** | `ml/dataset_builder.py` (lines 290-310) | Added None-safe confidence handling (`confidence if confidence is not None else 0.0`), fixed quantity field mapping |
+| 3 | **Entry features filter** | `ml/dataset_builder.py` (lines 249-277) | Filter trades to require valid `entry_features`: `hasattr(t, 'entry_features') and t.entry_features is not None and len(t.entry_features) > 0` |
+
+#### Files Modified
+
+| File | Changes |
+|------|---------|
+| `ml/ml_state.py` | Added `_trade_field()` helper for dict/dataclass compatibility in `compute_dataset_fingerprint()` |
+| `ml/dataset_builder.py` | Filter `_collect_trades_from_ledger()` to require entry_features; handle None confidence; map quantity field |
+
+#### Expected Behavior After Fix
+
+- ML training correctly skips when no strategy-based trades exist: `"Dataset is empty. Skipping training."`
+- Reconciliation trades (120) filtered out — they lack ML features by design
+- ML will train once the system opens new strategy-based positions that capture `entry_features` at entry
+- No crashes on Trade dataclass operations or None values
+- Container validates and runs normally
+
+#### Dataset State
+
+- **Before fix**: 40 rows in dataset from old reconciliation trades (invalid for ML)
+- **After fix**: 0 rows (dataset cleared and rebuilt with correct filter)
+- **Current**: Paper swing has no strategy trades yet (expected — waiting for new positions)
+- **Paper crypto**: 0 trades (regime is PANIC, no trading)
+
+---
 
 ### 2026-02-12 — Phase G: Unified Autonomous Universe Governance + Regime Autonomy
 
