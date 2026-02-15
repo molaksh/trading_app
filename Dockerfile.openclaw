@@ -1,0 +1,41 @@
+# ============================================================================
+# OpenClaw Ops Agent - Dockerfile
+# ============================================================================
+#
+# PURPOSE:
+#   Run OpenClaw gateway as the trading ops assistant.
+#   READ-ONLY access to persist/ and logs/ via mounted volumes.
+#   No code execution, no internet except OpenAI + Telegram APIs.
+#
+# USAGE:
+#   Build: docker build -f Dockerfile.openclaw -t ops-agent .
+#   Run:   ./run_ops_agent.sh
+#
+# ============================================================================
+
+FROM node:22-slim
+
+WORKDIR /app
+
+# Install git + ca-certificates (required by openclaw npm dependency)
+RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Use HTTPS instead of SSH for GitHub (no SSH keys in build)
+RUN git config --global url."https://github.com/".insteadOf ssh://git@github.com/
+
+# Install OpenClaw globally
+RUN npm install -g openclaw@latest
+
+# Create mount points (will be read-only volumes)
+RUN mkdir -p /data/logs /data/persist
+
+# Copy OpenClaw configuration and skill
+COPY openclaw/openclaw.json /root/.openclaw/openclaw.json
+COPY openclaw/skills/trading-ops/SKILL.md /root/.openclaw/workspace/skills/trading-ops/SKILL.md
+
+ENV NODE_ENV=production
+ENV TZ=UTC
+
+# OpenClaw gateway as entry point
+CMD ["openclaw", "gateway", "--port", "18789"]

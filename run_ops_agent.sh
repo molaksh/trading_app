@@ -1,9 +1,10 @@
 #!/bin/bash
 #
-# Run Phase E: Interactive Ops & Concierge Agent (24/7)
+# Run Phase E: OpenClaw Ops Agent (24/7)
 #
 # The ops agent handles Telegram inquiries about system state.
 # READ-ONLY, SAFE, BOUNDED.
+# Uses OpenClaw gateway with a trading-ops skill.
 #
 
 set -e
@@ -13,11 +14,8 @@ cd "$SCRIPT_DIR"
 
 source "$SCRIPT_DIR/scripts/docker_utils.sh"
 
-PERSISTENCE_ROOT_HOST="${PERSISTENCE_ROOT_HOST:-$SCRIPT_DIR/logs}"
-mkdir -p "$PERSISTENCE_ROOT_HOST"
-
 echo "==========================================="
-echo "Phase E: Ops Agent (24/7)"
+echo "Phase E: OpenClaw Ops Agent (24/7)"
 echo "==========================================="
 echo ""
 
@@ -27,7 +25,7 @@ fi
 
 # Check for Telegram token
 if [ -z "$TELEGRAM_BOT_TOKEN" ]; then
-    echo "❌ ERROR: TELEGRAM_BOT_TOKEN not set"
+    echo "ERROR: TELEGRAM_BOT_TOKEN not set"
     echo ""
     echo "Steps to set up:"
     echo "1. Talk to @BotFather on Telegram"
@@ -39,7 +37,7 @@ if [ -z "$TELEGRAM_BOT_TOKEN" ]; then
 fi
 
 if [ -z "$TELEGRAM_ALLOWED_CHAT_IDS" ]; then
-    echo "❌ ERROR: TELEGRAM_ALLOWED_CHAT_IDS not set"
+    echo "ERROR: TELEGRAM_ALLOWED_CHAT_IDS not set"
     echo ""
     echo "Steps to get your chat ID:"
     echo "1. Message the bot any text"
@@ -53,38 +51,41 @@ fi
 # Stop and remove old container
 docker rm -f ops-agent 2>/dev/null || true
 
-# Rebuild image
-rebuild_image "ops-agent"
+# Rebuild image from OpenClaw Dockerfile
+rebuild_image "ops-agent" "Dockerfile.openclaw"
 
 # Extract OpenAI API key from .env (CHATGPT_API_KEY)
 OPENAI_API_KEY="${OPENAI_API_KEY:-$(grep '^CHATGPT_API_KEY=' .env 2>/dev/null | cut -d'=' -f2)}"
 
 if [ -z "$OPENAI_API_KEY" ]; then
-    echo "⚠️  WARNING: OPENAI_API_KEY not found"
-    echo "   Set OPENAI_API_KEY in .env or as environment variable"
-    echo "   Smart responder will be disabled"
+    echo "WARNING: OPENAI_API_KEY / CHATGPT_API_KEY not found"
+    echo "   Set OPENAI_API_KEY or CHATGPT_API_KEY in .env"
     echo ""
+    exit 1
 fi
 
 # Run container continuously
-echo "Starting ops agent container..."
+# Mounts logs/ and persist/ as READ-ONLY volumes
+echo "Starting OpenClaw ops agent container..."
 docker run -d \
   --name ops-agent \
   --restart unless-stopped \
-  -v "$PERSISTENCE_ROOT_HOST:/app/persist" \
+  -v "$SCRIPT_DIR/logs:/data/logs:ro" \
+  -v "$SCRIPT_DIR/persist:/data/persist:ro" \
   -e TELEGRAM_BOT_TOKEN="$TELEGRAM_BOT_TOKEN" \
   -e TELEGRAM_ALLOWED_CHAT_IDS="$TELEGRAM_ALLOWED_CHAT_IDS" \
-  -e PERSISTENCE_ROOT=/app/persist \
-  -e LOGS_ROOT=/app/persist \
   -e OPENAI_API_KEY="${OPENAI_API_KEY}" \
-  -e OPENAI_MODEL="${OPENAI_MODEL:-gpt-4o-mini}" \
-  -e PYTHONUNBUFFERED=1 \
+  -e OPENCLAW_MODEL="${OPENCLAW_MODEL:-openai/gpt-4o-mini}" \
   -e TZ=UTC \
-  ops-agent \
-  python ops_main.py
+  ops-agent
 
-echo "✓ Ops agent started"
 echo ""
-echo "View logs: docker logs -f ops-agent"
-echo "Stop: docker stop ops-agent"
+echo "Ops agent started (OpenClaw gateway)"
+echo ""
+echo "View logs:  docker logs -f ops-agent"
+echo "Stop:       docker stop ops-agent"
+echo ""
+
+echo "To add daily digest cron (optional):"
+echo "  docker exec ops-agent openclaw cron add --name daily-digest --cron '0 22 * * *' --tz America/New_York --channel telegram --message 'Generate daily trading digest for all scopes.'"
 echo ""

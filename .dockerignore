@@ -62,9 +62,16 @@ htmlcov/
 # Docker
 # ============================================================================
 Dockerfile
+Dockerfile.openclaw
+Dockerfile.phase_f
 docker-compose.yml
 docker-compose.override.yml
 .dockerignore
+
+# ============================================================================
+# OpenClaw config (DO NOT EXCLUDE - copied into ops-agent image)
+# ============================================================================
+# openclaw/  <-- intentionally NOT ignored
 
 # ============================================================================
 # Documentation (Optional - include if needed)

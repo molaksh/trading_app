@@ -1,6 +1,6 @@
 # Repository Documentation (Single Source of Truth)
 
-*Last updated: 2026-02-14*
+*Last updated: 2026-02-15*
 
 ---
 
@@ -25,12 +25,67 @@
 | **Liquidity Manager v2 (6 Fixes)** | **✅ COMPLETE** | — | Correct risk_amount, dynamic sell loop, reserve persistence, ledger writes |
 | **Phase G: Universe Governance** | **✅ COMPLETE** | — | Deterministic 5-dimension scoring, autonomous add/remove, replaces AI advisor |
 | **Phase G: Regime Autonomy** | **✅ COMPLETE** | — | Periodic regime validation, 5-condition drift detection, non-binding proposals |
+| **Phase E v3: OpenClaw Ops Agent** | **✅ COMPLETE** | — | OpenClaw gateway in Docker, reads persist/ + logs/ read-only, Telegram channel, daily digest cron |
 
-**Overall Progress**: Constitutional governance + epistemic intelligence stack (Phases C, D, E v1/v2, F Phase 1-5, G) fully implemented, tested, and integrated. **215/215 Phase F tests passing** (169 + 46). Phase G gated behind `PHASE_G_ENABLED` feature flag (default off). Production-ready with feature flags for safe rollout.
+**Overall Progress**: Constitutional governance + epistemic intelligence stack (Phases C, D, E v1/v2/v3, F Phase 1-5, G) fully implemented, tested, and integrated. **215/215 Phase F tests passing** (169 + 46). Phase G gated behind `PHASE_G_ENABLED` feature flag (default off). Production-ready with feature flags for safe rollout. Phase E v3 (OpenClaw) replaces stale bespoke ops agent with LLM-native Telegram assistant.
 
 ---
 
 ## �🔔 Latest Updates (Newest First)
+
+### 2026-02-15 — Phase E v3: OpenClaw Ops Agent
+
+**Status**: ✅ COMPLETE
+**Goal**: Replace the bespoke Phase E ops agent with an OpenClaw-based agent that reads all persisted data via filesystem tools and answers questions via Telegram with zero staleness.
+
+#### Problems Solved
+
+The old ops agent (`ops_agent/`, Python) responded with stale/incorrect data due to 7 issues: `latest_snapshot.json` never written, `daily_summary.jsonl` 12-24h behind, missing crypto positions, hardcoded paths, no Phase F/G awareness, grammar-based intent parser, and GPT-4o-mini fallback with no memory. OpenClaw replaces all of this with an LLM that reads files on-demand at query time.
+
+#### Architecture
+
+```
+Docker Container (ops-agent, node:22-slim)
+├── OpenClaw Gateway (:18789)
+│   ├── Telegram Channel (inbound/outbound, allowlist-restricted)
+│   └── trading-ops Skill (SKILL.md teaches data model)
+├── /data/logs/:ro    ← host logs/ mounted read-only
+├── /data/persist/:ro ← host persist/ mounted read-only
+└── Cron: Daily digest at 10:00 PM ET
+```
+
+**Model**: Configurable via `OPENCLAW_MODEL` env var (default: `openai/gpt-4o-mini`, uses existing `CHATGPT_API_KEY`)
+
+#### Security & Isolation
+
+| Concern | Enforcement |
+|---------|-------------|
+| No host filesystem access | Docker: only `logs/` and `persist/` mounted as read-only volumes |
+| No internet except OpenAI + Telegram | Tools locked: `profile: minimal`, only `group:fs` allowed |
+| No code execution | `group:runtime`, `group:web`, `group:sessions`, `group:messaging`, `group:nodes`, `group:ui`, `group:automation` all denied |
+| No secrets in image | All credentials via env vars at runtime |
+
+#### Files Created/Modified
+
+| File | Action | Description |
+|------|--------|-------------|
+| `Dockerfile.openclaw` | NEW | Node 22-slim + OpenClaw image, copies config + skill |
+| `openclaw/openclaw.json` | NEW | Gateway config: Telegram channel, model, locked-down tools, cron |
+| `openclaw/skills/trading-ops/SKILL.md` | NEW | Core skill: data locations, file reference, JSONL parsing, response guidelines |
+| `run_ops_agent.sh` | MODIFIED | Builds from `Dockerfile.openclaw`, mounts both volumes `:ro`, passes OpenAI key |
+| `.dockerignore` | MODIFIED | Added `Dockerfile.openclaw` to exclusions, ensured `openclaw/` not ignored |
+
+#### Key Design: Auto-Discovery
+
+New scopes (India swing, daytrade, options) require **zero changes**: they write to `logs/{scope}/` and `persist/{scope}/` following the same layout. The SKILL.md instructs the agent to list directories to discover all active scopes. No config changes, no image rebuild needed.
+
+#### Migration
+
+1. `docker stop ops-agent && docker rm ops-agent`
+2. `./run_ops_agent.sh` (builds new image, starts OpenClaw)
+3. Old `ops_agent/` Python code remains in repo as fallback
+
+---
 
 ### 2026-02-14 — ML Training Pipeline: Reconciliation Trade Filtering Fix
 

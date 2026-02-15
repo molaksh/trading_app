@@ -1,0 +1,38 @@
+{
+  "gateway": {
+    "mode": "local"
+  },
+  "agents": {
+    "defaults": {
+      "model": {
+        "primary": "${OPENCLAW_MODEL}"
+      },
+      "workspace": "/root/.openclaw/workspace"
+    }
+  },
+  "channels": {
+    "telegram": {
+      "enabled": true,
+      "botToken": "${TELEGRAM_BOT_TOKEN}",
+      "dmPolicy": "allowlist",
+      "allowFrom": ["${TELEGRAM_ALLOWED_CHAT_IDS}"]
+    }
+  },
+  "tools": {
+    "profile": "minimal",
+    "allow": ["group:fs"],
+    "deny": [
+      "group:runtime",
+      "group:web",
+      "group:sessions",
+      "group:messaging",
+      "group:nodes",
+      "group:ui",
+      "group:automation"
+    ]
+  },
+  "cron": {
+    "enabled": true,
+    "maxConcurrentRuns": 1
+  }
+}
