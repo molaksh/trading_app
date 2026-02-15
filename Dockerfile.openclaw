@@ -30,8 +30,10 @@ RUN npm install -g openclaw@latest
 # Create mount points (will be read-only volumes)
 RUN mkdir -p /data/logs /data/persist
 
-# Copy OpenClaw configuration, soul, and skill
+# Copy OpenClaw configuration, agents, soul, and skill
+# AGENTS.md overrides OpenClaw's default (disables heartbeats, memory search, etc.)
 COPY openclaw/openclaw.json /root/.openclaw/openclaw.json
+COPY openclaw/AGENTS.md /root/.openclaw/workspace/AGENTS.md
 COPY openclaw/SOUL.md /root/.openclaw/workspace/SOUL.md
 COPY openclaw/skills/trading-ops/SKILL.md /root/.openclaw/workspace/skills/trading-ops/SKILL.md
 
