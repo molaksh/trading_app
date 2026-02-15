@@ -66,6 +66,43 @@ The "market correspondent" / "researcher" is the Phase F pipeline.
 - `/data/logs/{scope}/state/scheduler_state.json` — Job last-run times
 - `/data/logs/{scope}/logs/errors.jsonl` — Error events
 
+## System Architecture (How Things Work)
+
+IMPORTANT: When asked "how does X work", answer from THIS section. NEVER make up generic finance explanations.
+
+### Regime Calculation
+The crypto regime (RISK_ON, NEUTRAL, RISK_OFF, PANIC) is calculated by the **CryptoRegimeEngine** using BTC 4-hour candles and technical indicators (moving averages, volatility bands, momentum). It is NOT based on news or sentiment — it is purely technical/quantitative. The regime gates which trading strategies are allowed to run.
+
+### Phase F: Epistemic Intelligence (Market Correspondent)
+A 3-agent AI pipeline that runs daily at ~03:00 UTC:
+1. **Researcher** — Fetches articles from 5 sources (NewsAPI, RSS, CoinTelegraph, CryptoCompare, Twitter), extracts claims, forms hypotheses
+2. **Critic** — Adversarial review of the researcher's claims, challenges weak evidence
+3. **Reviewer** — Produces final regime verdict with confidence score, narrative consistency check
+
+Phase F verdicts are *advisory* — they inform but don't directly control the regime. Data: `/data/persist/phase_f/crypto/verdicts/verdicts.jsonl`
+
+### Phase G: Autonomous Governance
+Two subsystems, both gated behind `PHASE_G_ENABLED` feature flag (default OFF):
+
+**Universe Governance** — Deterministic scoring (no AI) across 5 dimensions: performance (0.45), regime alignment (0.25), liquidity (0.15), volatility (0.10), sentiment (0.05). Scores symbols 0-100, adds/removes up to 2 per cycle. Guardrails: universe size 5-15, 7-day cooldown, open position protection.
+
+**Regime Autonomy** — Periodic validation (crypto: every 2h, swing: daily). 5-condition AND logic for drift detection: confidence delta > 0.25, dwell time met, duration anomaly > 80th percentile, volatility shift, >= 5 data sources. Constitutional: never flips regime directly, only proposes non-binding changes. Data: `/data/persist/phase_g/{scope}/regime/`
+
+### Phase C: Constitutional Governance
+A 4-agent AI pipeline for governance proposals (add/remove symbols, parameter changes):
+1. **Proposer** — Generates proposal with rationale and evidence
+2. **Critic** — Adversarial review, challenges assumptions
+3. **Auditor** — Constitutional compliance check against system rules
+4. **Synthesizer** — Final recommendation with confidence and key risks
+
+All proposals require human approval. Data: `/data/persist/governance/crypto/proposals/`
+
+### Trading Pipeline
+Each scope runs independently: regime check → universe selection → strategy execution → risk management → position management. Crypto runs every 5 minutes (5m execution timeframe, 4h regime timeframe). Swing runs daily at market open.
+
+### Liquidity Manager
+Monitors portfolio heat (max 8%). When violated, scores positions 0-100 (lower = sell first) across P&L, staleness, confidence, and size. Sells lowest-scored positions until heat ≤ 8%.
+
 ## Terminology Map
 
 Users may use informal names. Map them to data:
