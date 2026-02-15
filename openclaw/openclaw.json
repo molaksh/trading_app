@@ -19,16 +19,13 @@
     }
   },
   "tools": {
-    "profile": "minimal",
-    "allow": ["group:fs"],
+    "profile": "coding",
     "deny": [
-      "group:runtime",
-      "group:web",
-      "group:sessions",
-      "group:messaging",
-      "group:nodes",
-      "group:ui",
-      "group:automation"
+      "Bash",
+      "WebFetch",
+      "WebSearch",
+      "Task",
+      "NotebookEdit"
     ]
   },
   "cron": {

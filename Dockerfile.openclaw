@@ -30,8 +30,9 @@ RUN npm install -g openclaw@latest
 # Create mount points (will be read-only volumes)
 RUN mkdir -p /data/logs /data/persist
 
-# Copy OpenClaw configuration and skill
+# Copy OpenClaw configuration, soul, and skill
 COPY openclaw/openclaw.json /root/.openclaw/openclaw.json
+COPY openclaw/SOUL.md /root/.openclaw/workspace/SOUL.md
 COPY openclaw/skills/trading-ops/SKILL.md /root/.openclaw/workspace/skills/trading-ops/SKILL.md
 
 ENV NODE_ENV=production
