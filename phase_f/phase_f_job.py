@@ -12,7 +12,7 @@ Pattern: Mirrors governance/crypto_governance_job.py but for Phase F epistemic p
 import logging
 import os
 from datetime import datetime, timezone
-from typing import Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 from phase_f.fetchers.news_api_fetcher import NewsAPIFetcher
 from phase_f.fetchers.news_fetcher_multi_source import MultiSourceNewsFetcher
@@ -169,8 +169,10 @@ class PhaseFJob:
             # Stage 2: Critic - Challenge
             logger.info("Stage 2: Critic (challenge hypotheses)")
             all_challenges = []
-            for hypothesis in researcher_hypotheses:
+            challenge_groups: Dict[int, List] = {}
+            for hyp_idx, hypothesis in enumerate(researcher_hypotheses):
                 challenges = self.critic.challenge_hypothesis(hypothesis)
+                challenge_groups[hyp_idx] = challenges
                 all_challenges.extend(challenges)
 
             logger.info(f"Stage 2 complete: {len(all_challenges)} challenges generated")
@@ -244,6 +246,17 @@ class PhaseFJob:
             logger.info("Stage 4: Persisting verdict")
             self.persistence.append_verdict(verdict, run_id)
 
+            # Stage 5: Persist reasoning chain (non-fatal)
+            try:
+                chain = self._build_reasoning_chain(
+                    run_id, articles, all_claims,
+                    researcher_hypotheses, all_challenges,
+                    challenge_groups, verdict, unique_sources,
+                )
+                self.persistence.append_reasoning_chain(chain)
+            except Exception:
+                logger.warning("Failed to persist reasoning chain", exc_info=True)
+
             # Layer 3: Human audit logging
             self.logger.log_verdict_reasoning(run_id, verdict)
 
@@ -256,6 +269,105 @@ class PhaseFJob:
             logger.error(f"Phase F run {run_id} failed: {e}", exc_info=True)
             self.logger.log_run_complete(run_id, success=False, error=str(e))
             return False
+
+    def _build_reasoning_chain(
+        self,
+        run_id: str,
+        articles: list,
+        all_claims: list,
+        hypotheses: list,
+        all_challenges: list,
+        challenge_groups: Dict[int, List],
+        verdict,
+        unique_sources: list,
+    ) -> dict:
+        """
+        Build a complete reasoning chain record for persistence.
+
+        Serializes articles (minimal), claims, hypotheses (with claim index
+        references), challenges (with hypothesis index), and verdict type.
+        """
+        # Articles: minimal metadata only (omit full content)
+        serialized_articles = []
+        for article in articles:
+            if isinstance(article, dict):
+                serialized_articles.append({
+                    "title": article.get("title", ""),
+                    "source": article.get("source", ""),
+                    "source_url": article.get("source_url", article.get("url", "")),
+                    "published_at": article.get("published_at", ""),
+                })
+            else:
+                serialized_articles.append({
+                    "title": getattr(article, "title", ""),
+                    "source": getattr(article, "source", ""),
+                    "source_url": getattr(article, "source_url", getattr(article, "url", "")),
+                    "published_at": getattr(article, "published_at", ""),
+                })
+
+        # Claims: full model dump
+        serialized_claims = []
+        for claim in all_claims:
+            if hasattr(claim, "model_dump"):
+                serialized_claims.append(claim.model_dump(mode="json"))
+            else:
+                serialized_claims.append(dict(claim) if hasattr(claim, "__dict__") else str(claim))
+
+        # Build claim text -> index lookup for hypothesis references
+        claim_index = {}
+        for idx, claim in enumerate(all_claims):
+            text = claim.claim_text if hasattr(claim, "claim_text") else str(claim)
+            claim_index[id(claim)] = idx
+
+        # Hypotheses: with claim index references
+        serialized_hypotheses = []
+        for hypothesis in hypotheses:
+            supporting_indices = [
+                claim_index[id(c)] for c in hypothesis.supporting_claims
+                if id(c) in claim_index
+            ]
+            contradicting_indices = [
+                claim_index[id(c)] for c in hypothesis.contradicting_claims
+                if id(c) in claim_index
+            ]
+            serialized_hypotheses.append({
+                "hypothesis_text": hypothesis.hypothesis_text,
+                "confidence": hypothesis.confidence,
+                "uncertainty": hypothesis.uncertainty,
+                "supporting_claim_indices": supporting_indices,
+                "contradicting_claim_indices": contradicting_indices,
+                "reasoning_steps": list(hypothesis.reasoning_steps),
+            })
+
+        # Challenges: with challenged_hypothesis_index
+        serialized_challenges = []
+        for hyp_idx, challenges in challenge_groups.items():
+            for challenge in challenges:
+                serialized_challenges.append({
+                    "hypothesis_text": challenge.hypothesis_text,
+                    "confidence": challenge.confidence,
+                    "uncertainty": challenge.uncertainty,
+                    "challenged_hypothesis_index": hyp_idx,
+                    "reasoning_steps": list(challenge.reasoning_steps),
+                })
+
+        return {
+            "run_id": run_id,
+            "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+            "scope": self.scope,
+            "articles": serialized_articles,
+            "claims": serialized_claims,
+            "hypotheses": serialized_hypotheses,
+            "challenges": serialized_challenges,
+            "verdict_type": verdict.verdict.value,
+            "stats": {
+                "num_articles": len(articles),
+                "num_claims": len(all_claims),
+                "num_hypotheses": len(hypotheses),
+                "num_challenges": len(all_challenges),
+                "unique_sources": unique_sources,
+            },
+        }
 
     def _get_current_regime(self) -> Tuple[str, float]:
         """

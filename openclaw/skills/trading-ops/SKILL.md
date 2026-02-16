@@ -57,6 +57,12 @@ When asked about "all containers" or "everything", list directories under
   Events: RUN_START, STAGE_COMPLETE (with metrics like articles_fetched, claims_extracted), RUN_COMPLETE
 - `/data/persist/phase_f/crypto/scheduler_state.json` — Last Phase F run date
 
+### Reasoning Chain (Phase F)
+- `/data/persist/phase_f/crypto/reasoning/reasoning_chains.jsonl` — Full reasoning chain per run
+  Each line: articles (with source URLs), claims, hypotheses, challenges, verdict
+- Use to trace: "why did the market correspondent reach this verdict?"
+- Read the last line for the most recent chain
+
 ### Regime Autonomy (Phase G)
 > Note: Phase G is gated behind `PHASE_G_ENABLED` (default OFF). These files only exist when Phase G has been activated. If the files don't exist, report "Phase G is not enabled for this scope."
 - `/data/persist/phase_g/{scope}/regime/run_state.json` — Current regime state

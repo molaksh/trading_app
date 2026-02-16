@@ -33,6 +33,65 @@
 
 ## �🔔 Latest Updates (Newest First)
 
+### 2026-02-15 — Phase F: Persist Full Reasoning Chain (Articles, Claims, Hypotheses)
+
+**Status**: ✅ COMPLETE
+**Severity**: Enhancement — Auditability of Phase F epistemic pipeline
+
+#### Problem
+
+Phase F (market correspondent) builds a full reasoning chain each run — articles with URLs, extracted claims, hypotheses, critic challenges — but only the final verdict was persisted. The entire chain was discarded after each run, making it impossible to:
+- Verify which articles the system actually read
+- Trace how claims were derived from articles
+- See what hypotheses were formed or how the critic challenged them
+- Audit whether the system is hallucinating or reasoning correctly
+
+#### Fix: Persist reasoning chain per run
+
+Added a single new JSONL file: `persist/phase_f/crypto/reasoning/reasoning_chains.jsonl`
+
+Each line is one complete run containing:
+- **articles**: title, source, source_url, published_at (content omitted to save space)
+- **claims**: full Claim model dump (claim_text, source, source_url, confidence, sentiment, etc.)
+- **hypotheses**: hypothesis_text, confidence, uncertainty, supporting/contradicting claim indices (references into claims array), reasoning_steps
+- **challenges**: hypothesis_text, confidence, uncertainty, challenged_hypothesis_index (which hypothesis was challenged), reasoning_steps
+- **verdict_type**: duplicated from verdict for quick filtering
+- **stats**: num_articles, num_claims, num_hypotheses, num_challenges, unique_sources
+
+~10-80KB per run, one run per day.
+
+#### Files Changed
+
+| File | Change |
+|------|--------|
+| `phase_f/persistence.py` | Added `reasoning_dir`, `reasoning_chain_path`, `append_reasoning_chain()` method (non-fatal, try/except) |
+| `phase_f/phase_f_job.py` | Added `_build_reasoning_chain()` method; track `challenge_groups` in critic loop; persist chain after verdict (Stage 5) |
+| `openclaw/SOUL.md` | Added Reasoning Chain section under File Reference; added terminology mapping |
+| `openclaw/skills/trading-ops/SKILL.md` | Mirrored SOUL.md reasoning chain documentation |
+
+#### What Did NOT Change
+
+- No changes to pipeline logic (fetching, extraction, hypothesis building, critic, reviewer)
+- No changes to verdict persistence (verdicts.jsonl stays as-is)
+- No changes to pipeline.jsonl or audit_trail.jsonl logging
+- No new dependencies
+
+#### Verification
+
+```bash
+# Run Phase F manually
+python3 -c "from phase_f.phase_f_job import run_phase_f_job; run_phase_f_job('crypto')"
+
+# Check reasoning chain exists
+python3 -c "import json; lines=open('persist/phase_f/crypto/reasoning/reasoning_chains.jsonl').readlines(); d=json.loads(lines[-1]); print(f'articles={len(d[\"articles\"])}, claims={len(d[\"claims\"])}, hypotheses={len(d[\"hypotheses\"])}, challenges={len(d[\"challenges\"])}')"
+```
+
+#### Ops Agent Usage
+
+Ask the ops agent: "show me the articles the market correspondent read" or "why did the researcher reach this verdict?" — it will read from `reasoning_chains.jsonl`. Note: ops agent container needs rebuild (`run_ops_agent.sh`) since SOUL.md/SKILL.md are COPY'd in Dockerfile.
+
+---
+
 ### 2026-02-15 — FIX: Ops Agent Data Access Gaps (SOUL.md / SKILL.md)
 
 **Status**: ✅ COMPLETE

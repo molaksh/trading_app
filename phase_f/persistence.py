@@ -30,14 +30,16 @@ class Phase_F_Persistence:
         self.episodic_dir = self.root / "episodic"
         self.semantic_dir = self.root / "semantic" / "summaries"
         self.verdicts_dir = self.root / "verdicts"
+        self.reasoning_dir = self.root / "reasoning"
 
-        for directory in [self.episodic_dir, self.semantic_dir, self.verdicts_dir]:
+        for directory in [self.episodic_dir, self.semantic_dir, self.verdicts_dir, self.reasoning_dir]:
             directory.mkdir(parents=True, exist_ok=True)
             logger.debug(f"Ensured directory exists: {directory}")
 
         # File paths
         self.episodic_path = self.episodic_dir / "events.jsonl"
         self.verdicts_path = self.verdicts_dir / "verdicts.jsonl"
+        self.reasoning_chain_path = self.reasoning_dir / "reasoning_chains.jsonl"
 
         logger.info(
             f"Phase F Persistence initialized: root={self.root}"
@@ -187,6 +189,22 @@ class Phase_F_Persistence:
         except IOError as e:
             logger.error(f"Failed to append verdict: {e}", exc_info=True)
             raise
+
+    def append_reasoning_chain(self, chain_record: dict) -> None:
+        """
+        Append reasoning chain record to JSONL (non-fatal).
+
+        Args:
+            chain_record: Full reasoning chain dict for one run
+        """
+        try:
+            with open(self.reasoning_chain_path, "a") as f:
+                f.write(json.dumps(chain_record, default=str) + "\n")
+
+            logger.debug(f"Appended reasoning chain: {chain_record.get('run_id', 'unknown')}")
+
+        except Exception as e:
+            logger.warning(f"Failed to persist reasoning chain: {e}", exc_info=True)
 
     def read_verdicts(self, lookback_days: int = 30) -> List[Dict[str, Any]]:
         """
