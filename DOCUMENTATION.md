@@ -159,6 +159,21 @@ Full autonomous regime management for crypto with hard fail-safe protections. Pa
 | Kill switch | `PHASE_H_CRYPTO_KILL_SWITCH=true` | `PHASE_H_CRYPTO_KILL_SWITCH=true` |
 | Override | — | `PHASE_H_CRYPTO_LIVE_AUTONOMY=true` to enable auto-apply |
 
+#### Phase H Replaces Legacy Regime for Strategy Selection
+
+When Phase H is active, its composite macro regime (`RISK_ON`/`NEUTRAL`/`RISK_OFF`/`PANIC`) is the **sole authority** for strategy eligibility. The legacy `CryptoRegimeEngine` still runs for logging and regime history but no longer gates which strategies are eligible.
+
+This eliminates double-restriction where legacy regime and Phase H both independently constrain the pipeline. Phase H controls:
+- **Strategy selection** — via macro regime → strategy eligibility map
+- **Exposure sizing** — via exposure cap (confidence-weighted)
+- **Entry halting** — via fail-safe `halt_new_entries`
+
+The legacy regime engine provides:
+- **Logging/observability** — regime history, transition tracking
+- **Recovery detection** — PANIC→NEUTRAL transition prices for recovery re-entry strategy
+
+Also: `MAX_SYMBOLS_SCANNED_PER_CYCLE` bumped from 10 to 15 in paper config to scan all active universe symbols each tick.
+
 ---
 
 ### 2026-02-15 — Phase F: Persist Full Reasoning Chain (Articles, Claims, Hypotheses)
