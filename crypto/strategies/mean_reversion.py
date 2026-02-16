@@ -48,9 +48,9 @@ class MeanReversionStrategy(Strategy):
         self.description = "Mean reversion strategy (NEUTRAL regime only)"
     
     def supported_regimes(self) -> Set[str]:
-        """STRICT GATING: Only NEUTRAL regime."""
-        return {"neutral"}
-    
+        """Supported in NEUTRAL and RISK_OFF regimes."""
+        return {"neutral", "risk_off"}
+
     def generate_signal(
         self,
         feature_context: Dict[str, Any],
@@ -58,42 +58,44 @@ class MeanReversionStrategy(Strategy):
         budget: float,
         regime_state: str,
     ) -> Signal:
-        """Generate mean reversion signal with strict regime gating."""
-        # CRITICAL GATING: If not NEUTRAL, REJECT
-        if regime_state != "neutral":
+        """Generate mean reversion signal with regime gating."""
+        if regime_state not in self.supported_regimes():
             return Signal(
                 intent="FLAT",
                 suggested_size=0,
                 confidence=0,
-                reason=f"REGIME GATING: MeanReversion requires NEUTRAL, got {regime_state}"
+                reason=f"REGIME GATING: MeanReversion requires neutral/risk_off, got {regime_state}"
             )
         
         # Extract mean reversion metrics
-        distance_from_ma = feature_context.get('distance_from_ma', 0)
-        ma_value = feature_context.get('ma_20', 0)
-        current_price = feature_context.get('current_price', 0)
-        
+        close = feature_context.get('close', 0)
+        sma_20 = feature_context.get('sma_20', 0)
+        distance_pct = feature_context.get('distance_from_sma20_pct', 0)
         atr = feature_context.get('atr', 0)
-        threshold = atr * self.config['atr_multiplier']
-        
-        # Price too far above MA -> SHORT
-        if distance_from_ma > threshold and current_price > ma_value:
+        atr_pct = feature_context.get('atr_pct', 0)
+        threshold_pct = atr_pct * self.config['atr_multiplier']
+
+        if threshold_pct <= 0 or sma_20 <= 0:
+            return Signal("FLAT", 0, 0, "Insufficient data for mean reversion")
+
+        # Price too far above MA -> SHORT (mean revert down)
+        if distance_pct > threshold_pct:
             size = budget * (self.config['max_position_size_pct'] / 100)
             return Signal(
                 intent="SHORT",
                 suggested_size=size,
                 confidence=0.7,
-                reason=f"Price {distance_from_ma:.2f} above MA, distance>{threshold:.2f}"
+                reason=f"Price {distance_pct:.2f}% above SMA20, threshold={threshold_pct:.2f}%"
             )
-        
-        # Price too far below MA -> LONG
-        if distance_from_ma < -threshold and current_price < ma_value:
+
+        # Price too far below MA -> LONG (mean revert up)
+        if distance_pct < -threshold_pct:
             size = budget * (self.config['max_position_size_pct'] / 100)
             return Signal(
                 intent="LONG",
                 suggested_size=size,
                 confidence=0.7,
-                reason=f"Price {distance_from_ma:.2f} below MA, distance<-{threshold:.2f}"
+                reason=f"Price {distance_pct:.2f}% below SMA20, threshold=-{threshold_pct:.2f}%"
             )
         
         return Signal("FLAT", 0, 0, "Price within normal range")

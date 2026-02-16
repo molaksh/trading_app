@@ -45,7 +45,22 @@ def run_crypto_pipeline(
     """
     scope = runtime.scope
     crypto_config = load_crypto_config(scope)
-    allowlist = crypto_config.get("UNIVERSE_ALLOWLIST") or crypto_config.get("CRYPTO_UNIVERSE")
+
+    # Phase G: Use active universe from governance if available
+    from universe.governance.config import PHASE_G_ENABLED as _phase_g_universe_on
+    if _phase_g_universe_on:
+        from universe.governance.persistence import UniverseGovernancePersistence
+        _gov_persistence = UniverseGovernancePersistence(str(scope))
+        _active = _gov_persistence.load_active_universe()
+        if _active:
+            allowlist = _active
+            logger.info("PHASE_G_UNIVERSE_LOADED | symbols=%s count=%d", _active, len(_active))
+        else:
+            allowlist = crypto_config.get("UNIVERSE_ALLOWLIST") or crypto_config.get("CRYPTO_UNIVERSE")
+            logger.info("PHASE_G_UNIVERSE_FALLBACK | using YAML config")
+    else:
+        allowlist = crypto_config.get("UNIVERSE_ALLOWLIST") or crypto_config.get("CRYPTO_UNIVERSE")
+
     symbols = validate_crypto_universe_symbols(allowlist or ["BTC", "ETH", "SOL"])
 
     if run_id is None:
