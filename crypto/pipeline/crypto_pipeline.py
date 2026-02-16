@@ -323,12 +323,30 @@ def run_crypto_pipeline(
         allocation_cap_pct=float(crypto_config.get("DEFAULT_STRATEGY_ALLOCATION", 0.5)),
     )
 
-    eligible = selector.get_eligible_strategies(regime_signal.regime)
+    # Phase H: When active, Phase H macro regime is the authority for strategy selection.
+    # Legacy regime engine still runs for logging/history but doesn't gate strategies.
+    phase_h_regime_str = getattr(runtime, "phase_h_macro_regime", None)
+    if phase_h_regime_str is not None:
+        _regime_map = {
+            "RISK_ON": MarketRegime.RISK_ON,
+            "NEUTRAL": MarketRegime.NEUTRAL,
+            "RISK_OFF": MarketRegime.RISK_OFF,
+            "PANIC": MarketRegime.PANIC,
+        }
+        effective_regime = _regime_map.get(phase_h_regime_str, regime_signal.regime)
+        logger.info(
+            "PHASE_H_REGIME_AUTHORITY | phase_h=%s legacy=%s effective=%s",
+            phase_h_regime_str, regime_signal.regime.value, effective_regime.value,
+        )
+    else:
+        effective_regime = regime_signal.regime
+
+    eligible = selector.get_eligible_strategies(effective_regime)
 
     # Phase D: Track regime block (hook for observability)
     try:
         eligible_names = [e.value for e in eligible]
-        get_observability().on_strategies_selected(eligible_names, regime_signal.regime.value)
+        get_observability().on_strategies_selected(eligible_names, effective_regime.value)
     except Exception as e:
         logger.warning(f"PHASE_D_OBSERVABILITY_HOOK_FAILED | error={e}")
 
@@ -338,7 +356,7 @@ def run_crypto_pipeline(
         run_id=run_id,
         symbols=symbols,
         extra={
-            "regime": regime_signal.regime.value,
+            "regime": effective_regime.value,
             "eligible": [e.value for e in eligible],
         },
     )
@@ -355,7 +373,7 @@ def run_crypto_pipeline(
         available_capital = available_capital * phase_h_cap
         logger.info("PHASE_H_EXPOSURE_CAP | cap=%.3f | adjusted_capital=%.2f", phase_h_cap, available_capital)
 
-    selected = selector.select_strategies(regime_signal.regime, available_capital)
+    selected = selector.select_strategies(effective_regime, available_capital)
 
     log_pipeline_stage(
         stage="STRATEGIES_SELECTED",
@@ -363,7 +381,7 @@ def run_crypto_pipeline(
         run_id=run_id,
         symbols=symbols,
         extra={
-            "regime": regime_signal.regime.value,
+            "regime": effective_regime.value,
             "selected": [s.strategy_type.value for s in selected],
         },
     )
@@ -396,7 +414,7 @@ def run_crypto_pipeline(
                 feature_context=feature_context,
                 portfolio_state={},
                 budget=allocation.capital_allocation,
-                regime_state=regime_signal.regime.value,
+                regime_state=effective_regime.value,
             )
 
             signals.append(
@@ -417,7 +435,7 @@ def run_crypto_pipeline(
         run_id=run_id,
         symbols=scanned_symbols,
         extra={
-            "regime": regime_signal.regime.value,
+            "regime": effective_regime.value,
             "signal_count": len(signals),
             "scan_order": scanned_symbols,
         },
