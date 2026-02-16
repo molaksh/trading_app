@@ -17,7 +17,8 @@ COPY phase_f_main.py .
 RUN mkdir -p persist/phase_f/crypto/logs \
     persist/phase_f/crypto/verdicts \
     persist/phase_f/crypto/episodic \
-    persist/phase_f/crypto/semantic/summaries
+    persist/phase_f/crypto/semantic/summaries \
+    persist/phase_f/crypto/reasoning
 
 # Run as non-root
 RUN useradd -m appuser && chown -R appuser:appuser /app
