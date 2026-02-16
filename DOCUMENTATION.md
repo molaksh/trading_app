@@ -27,12 +27,74 @@
 | **Phase G: Regime Autonomy** | **✅ COMPLETE** | — | Periodic regime validation, 5-condition drift detection, non-binding proposals |
 | **Phase E v3: OpenClaw Ops Agent** | **✅ COMPLETE** | — | OpenClaw gateway in Docker, reads persist/ + logs/ read-only, Telegram channel, daily digest cron |
 | **Phase H: Crypto Regime Autonomy** | **✅ COMPLETE** | — | 2-layer regime engine (composite macro + per-asset), exposure ladder, 4-layer fail-safe, 30-min autonomy cycle |
+| **Phase I-A: Strategy Observatory (Build 1)** | **✅ COMPLETE** | — | Per-strategy signal tracking, `strategy_name` on Trade, anomaly detection (ZERO_SIGNAL, ALL_FLAT), hourly scheduler |
 
-**Overall Progress**: Constitutional governance + epistemic intelligence stack (Phases C, D, E v1/v2/v3, F Phase 1-5, G, H) fully implemented, tested, and integrated. **215/215 Phase F tests passing** (169 + 46). Phase G gated behind `PHASE_G_ENABLED` feature flag (default off). Phase H gated behind `PHASE_H_CRYPTO_ENABLED` (paper: autonomous, live: proposal-only). Production-ready with feature flags for safe rollout. Phase E v3 (OpenClaw) replaces stale bespoke ops agent with LLM-native Telegram assistant.
+**Overall Progress**: Constitutional governance + epistemic intelligence stack (Phases C, D, E v1/v2/v3, F Phase 1-5, G, H, I-A Build 1) fully implemented, tested, and integrated. **215/215 Phase F tests passing** (169 + 46). Phase G gated behind `PHASE_G_ENABLED` feature flag (default off). Phase H gated behind `PHASE_H_CRYPTO_ENABLED` (paper: autonomous, live: proposal-only). Phase I gated behind `PHASE_I_STRATEGY_ENABLED` (default off). Production-ready with feature flags for safe rollout. Phase E v3 (OpenClaw) replaces stale bespoke ops agent with LLM-native Telegram assistant.
 
 ---
 
 ## �🔔 Latest Updates (Newest First)
+
+### 2026-02-16 — Phase I-A Build 1: Strategy Observatory Foundation
+
+**Status**: ✅ COMPLETE (Feature-flagged)
+**Feature Flags**: `PHASE_I_STRATEGY_ENABLED` (default false), `PHASE_I_STRATEGY_KILL_SWITCH` (default false)
+
+Per-strategy signal tracking and anomaly detection. Foundation for future strategy research, governance, and promotion phases.
+
+#### What Changed
+
+**1. Trade Attribution** (`broker/trade_ledger.py`, `broker/trading_executor.py`):
+- Added `strategy_name: Optional[str]` field to `Trade` dataclass
+- Strategy name flows: signal DataFrame → executor `features` → `order_metadata` → `pending_entries` → `create_trade_from_fills()`
+- Backward compatible: existing trades load fine with `strategy_name=None`
+
+**2. Signal Recording** (`crypto/pipeline/crypto_pipeline.py`):
+- After every `strategy.generate_signal()` call, records signal to JSONL (including FLAT)
+- Captured fields: strategy_name, symbol, intent, confidence, reason, regime, key features
+- Buffered writes (flush every 20 records or at end of cycle) to minimize I/O impact
+- Gated behind `PHASE_I_STRATEGY_ENABLED` flag
+
+**3. Anomaly Detection** (`phase_i_strategy/observatory/anomaly_detector.py`):
+- `ZERO_SIGNAL`: Strategy produces 0 non-FLAT signals for >4 hours
+- `ALL_FLAT`: Strategy returns FLAT for >48 consecutive cycles
+- Runs hourly via scheduler, logs WARNING for each detected anomaly
+
+#### Module Structure
+```
+phase_i_strategy/
+    __init__.py              — Exports + feature flags
+    config.py                — Constants, thresholds, env vars
+    persistence.py           — JSONL read/write (follows Phase H pattern)
+    scheduler.py             — Observatory cycle runner
+    observatory/
+        __init__.py
+        signal_tracker.py    — Buffered signal recording
+        anomaly_detector.py  — ZERO_SIGNAL + ALL_FLAT detection
+```
+
+#### Persistence
+```
+persist/phase_i/{scope}/observatory/
+    signals.jsonl                — Every signal (append-only)
+    anomalies.jsonl              — Detected anomalies (append-only)
+    run_state.json               — Last run timestamp, counters
+```
+
+#### Integration Points
+| File | Change |
+|------|--------|
+| `broker/trade_ledger.py` | `strategy_name` field on `Trade` + `create_trade_from_fills()` |
+| `broker/trading_executor.py` | Extract strategy from features, thread through metadata/pending/finalize |
+| `crypto/pipeline/crypto_pipeline.py` | Signal tracker init + record after generate_signal() + flush at end |
+| `crypto_main.py` | Startup run + hourly scheduler task registration |
+| `config/crypto/*.yaml` | `PHASE_I_STRATEGY_ENABLED = true` |
+| `run_*_kraken_crypto.sh` | Docker env vars for Phase I flags |
+
+#### What's Next (Build 2)
+- `StrategyPerformanceScorer`: Rolling metrics per strategy (win rate, PnL, Sharpe)
+- Expanded anomaly detection: DEGRADATION (win rate <35%), PARAMETER_STALE
+- Observatory data exposed to ops agent for reporting
 
 ### 2026-02-16 — Phase H: Full Crypto Regime Autonomy
 

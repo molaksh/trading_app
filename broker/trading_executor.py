@@ -234,12 +234,12 @@ class TradingExecutor:
         self.filled_orders: Dict[str, float] = {}  # symbol -> fill_price
         
         # Track pending entries (filled buys waiting for exit)
-        # Maps symbol -> (order_id, fill_timestamp, fill_price, quantity, confidence, risk_amount)
-        self.pending_entries: Dict[str, Tuple[str, str, float, float, float, float]] = {}
+        # Maps symbol -> (order_id, fill_timestamp, fill_price, quantity, confidence, risk_amount, strategy_name)
+        self.pending_entries: Dict[str, Tuple[str, str, float, float, float, float, Optional[str]]] = {}
         
         # Track order metadata for trade ledger
-        # Maps order_id -> (confidence, risk_amount)
-        self.order_metadata: Dict[str, Tuple[float, float]] = {}
+        # Maps order_id -> (confidence, risk_amount, strategy_name)
+        self.order_metadata: Dict[str, Tuple[float, float, Optional[str]]] = {}
         
         from config.scope import get_scope
         scope = get_scope()
@@ -476,8 +476,9 @@ class TradingExecutor:
             # Track order
             self.pending_orders[order_result.order_id] = symbol
             
-            # Track metadata for trade ledger
-            self.order_metadata[order_result.order_id] = (confidence, decision.risk_amount)
+            # Track metadata for trade ledger (including strategy for Phase I attribution)
+            strategy_name = features.get("strategy") if isinstance(features, dict) else None
+            self.order_metadata[order_result.order_id] = (confidence, decision.risk_amount, strategy_name)
             
             # Step 5: Log to monitoring if enabled
             if self.monitor:
@@ -550,9 +551,12 @@ class TradingExecutor:
                     # We'll finalize the Trade when exit fill is confirmed
                     fill_timestamp_iso = fill_time.isoformat()
                     
-                    # Get confidence and risk_amount from order metadata
-                    confidence, risk_amount = self.order_metadata.get(order_id, (3.0, 0.0))
-                    
+                    # Get confidence, risk_amount, and strategy_name from order metadata
+                    meta = self.order_metadata.get(order_id, (3.0, 0.0, None))
+                    confidence = meta[0]
+                    risk_amount = meta[1]
+                    strategy_name = meta[2] if len(meta) > 2 else None
+
                     self.pending_entries[symbol] = (
                         order_id,
                         fill_timestamp_iso,
@@ -560,6 +564,7 @@ class TradingExecutor:
                         order_result.filled_qty,
                         confidence,
                         risk_amount,
+                        strategy_name,
                     )
                     logger.debug(f"Tracked pending entry for trade ledger: {symbol}")
                     
@@ -1117,8 +1122,15 @@ class TradingExecutor:
                 )
                 return
             
-            entry_order_id, entry_timestamp, entry_price, entry_quantity, confidence, risk_amount = self.pending_entries[symbol]
-            
+            entry_data = self.pending_entries[symbol]
+            entry_order_id = entry_data[0]
+            entry_timestamp = entry_data[1]
+            entry_price = entry_data[2]
+            entry_quantity = entry_data[3]
+            confidence = entry_data[4]
+            risk_amount = entry_data[5]
+            strategy_name = entry_data[6] if len(entry_data) > 6 else None
+
             # Create completed trade
             trade = create_trade_from_fills(
                 symbol=symbol,
@@ -1135,6 +1147,7 @@ class TradingExecutor:
                 confidence=confidence,
                 risk_amount=risk_amount,
                 fees=0.0,  # Alpaca paper trading has no fees
+                strategy_name=strategy_name,
             )
             
             # Add to ledger

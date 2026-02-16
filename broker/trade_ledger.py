@@ -72,6 +72,9 @@ class Trade:
     confidence: Optional[float] = None
     risk_amount: Optional[float] = None
     position_size: Optional[float] = None  # Entry value
+
+    # Strategy attribution (Phase I)
+    strategy_name: Optional[str] = None
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary."""
@@ -423,7 +426,8 @@ def create_trade_from_fills(
     exit_reason: str,
     confidence: Optional[float] = None,
     risk_amount: Optional[float] = None,
-    fees: float = 0.0
+    fees: float = 0.0,
+    strategy_name: Optional[str] = None,
 ) -> Trade:
     """
     Factory function to create Trade from entry and exit fills.
@@ -484,7 +488,8 @@ def create_trade_from_fills(
         net_pnl_pct=metrics["net_pnl_pct"],
         confidence=confidence,
         risk_amount=risk_amount,
-        position_size=position_size
+        position_size=position_size,
+        strategy_name=strategy_name,
     )
 
 

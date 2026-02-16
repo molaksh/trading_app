@@ -401,6 +401,18 @@ def run_crypto_pipeline(
         },
     )
 
+    # Phase I: Initialize signal tracker if enabled
+    _phase_i_tracker = None
+    try:
+        from phase_i_strategy.config import PHASE_I_STRATEGY_ENABLED, PHASE_I_STRATEGY_KILL_SWITCH
+        if PHASE_I_STRATEGY_ENABLED and not PHASE_I_STRATEGY_KILL_SWITCH:
+            from phase_i_strategy.persistence import PhaseIPersistence
+            from phase_i_strategy.observatory.signal_tracker import StrategySignalTracker
+            _phase_i_persistence = PhaseIPersistence(str(scope))
+            _phase_i_tracker = StrategySignalTracker(_phase_i_persistence)
+    except Exception as e:
+        logger.warning("PHASE_I_TRACKER_INIT_FAILED | error=%s", e)
+
     # Stage 5: STRATEGY SIGNALS
     signals: List[Dict] = []
     for allocation in selected:
@@ -431,6 +443,21 @@ def run_crypto_pipeline(
                 budget=allocation.capital_allocation,
                 regime_state=effective_regime.value,
             )
+
+            # Phase I: Record every signal (including FLAT) for observatory
+            if _phase_i_tracker is not None:
+                try:
+                    _phase_i_tracker.record_signal(
+                        strategy_name=strategy_name,
+                        symbol=symbol,
+                        intent=signal.intent,
+                        confidence=signal.confidence,
+                        reason=signal.reason,
+                        regime=effective_regime.value,
+                        features=feature_context,
+                    )
+                except Exception as e:
+                    logger.warning("PHASE_I_SIGNAL_RECORD_FAILED | error=%s", e)
 
             signals.append(
                 {
@@ -472,6 +499,13 @@ def run_crypto_pipeline(
                 "reason": sig["reason"],
             }
         )
+
+    # Phase I: Flush any remaining buffered signals
+    if _phase_i_tracker is not None:
+        try:
+            _phase_i_tracker.flush()
+        except Exception as e:
+            logger.warning("PHASE_I_SIGNAL_FLUSH_FAILED | error=%s", e)
 
     return pd.DataFrame(rows)
 

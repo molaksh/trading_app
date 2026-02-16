@@ -508,6 +508,13 @@ def run_daemon():
     if _phase_h_on and not _phase_h_kill:
         _run_phase_h_cycle(runtime, trigger="startup")
 
+    # Phase I: Strategy observatory startup
+    from phase_i_strategy.config import PHASE_I_STRATEGY_ENABLED as _phase_i_on
+    from phase_i_strategy.config import PHASE_I_STRATEGY_KILL_SWITCH as _phase_i_kill
+    if _phase_i_on and not _phase_i_kill:
+        from phase_i_strategy.scheduler import run_observatory_cycle
+        run_observatory_cycle(runtime, trigger="startup")
+
     # Register tasks
     # Each task closure captures runtime and updates it after execution
     def make_trading_tick():
@@ -540,6 +547,11 @@ def run_daemon():
 
     def make_phase_h_cycle():
         _run_phase_h_cycle(runtime, trigger="scheduled")
+
+    def make_phase_i_observatory():
+        if _phase_i_on and not _phase_i_kill:
+            from phase_i_strategy.scheduler import run_observatory_cycle
+            run_observatory_cycle(runtime, trigger="scheduled")
 
     scheduler.register_task(CryptoSchedulerTask(
         name="trading_tick",
@@ -612,6 +624,16 @@ def run_daemon():
             name="phase_h_regime_autonomy",
             func=make_phase_h_cycle,
             interval_minutes=30,
+            # No state restriction: can run anytime
+        ))
+
+    # Phase I: Strategy observatory (hourly)
+    if _phase_i_on and not _phase_i_kill:
+        from phase_i_strategy.config import OBSERVATORY_INTERVAL_MINUTES
+        scheduler.register_task(CryptoSchedulerTask(
+            name="phase_i_strategy_observatory",
+            func=make_phase_i_observatory,
+            interval_minutes=OBSERVATORY_INTERVAL_MINUTES,
             # No state restriction: can run anytime
         ))
 

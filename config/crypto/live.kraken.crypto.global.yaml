@@ -249,3 +249,8 @@ UNIVERSE_CANDIDATE_POOL = ["BTC", "ETH", "SOL", "LINK", "AVAX", "ADA", "XRP", "D
 # ============================================================================
 PHASE_H_CRYPTO_ENABLED = true
 PHASE_H_CRYPTO_LIVE_AUTONOMY = false
+
+# ============================================================================
+# STRATEGY INTELLIGENCE (Phase I)
+# ============================================================================
+PHASE_I_STRATEGY_ENABLED = true
