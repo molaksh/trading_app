@@ -39,12 +39,8 @@ When asked about "all containers" or "everything", list directories under
 ## File Reference
 
 ### Positions & Trades
-- **Swing scopes** — Check ALL paths; some scopes only write to one:
-  1. `/data/logs/{scope}/ledger/open_positions.json` — Primary positions (broker-reconciled)
-  2. `/data/logs/{scope}/state/open_positions.json` — Runtime state snapshot
-  3. `/data/persist/{scope}/ledger/open_positions.json` — Persisted positions
-- If a file is empty (`{}`), check the next path before reporting "no positions"
-- **Crypto scopes** do NOT persist an `open_positions.json` file. Crypto positions are managed in real-time by the exchange. Use `trades.jsonl` for recent trade activity, or `daily_summary.jsonl` for position counts.
+- **Swing scopes** (alpaca): Read `/data/logs/{scope}/ledger/open_positions.json` — this is THE positions file. Each key is a symbol with entry_price, entry_quantity, entry_timestamp. Ignore `state/open_positions.json` (always empty).
+- **Crypto scopes** (kraken): No position file exists. Crypto positions are managed in real-time by the exchange. Use `trades.jsonl` for recent trade activity, or `daily_summary.jsonl` for position counts.
 - `/data/persist/{scope}/ledger/trades.json` — Closed trades with P&L
 - `/data/logs/{scope}/ledger/trades.jsonl` — Trade fills (JSONL)
 - `/data/logs/{scope}/logs/execution_log.jsonl` — Trade execution details (swing scopes only)

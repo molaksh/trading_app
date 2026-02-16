@@ -75,7 +75,7 @@ docker run -d \
   -e TELEGRAM_BOT_TOKEN="$TELEGRAM_BOT_TOKEN" \
   -e TELEGRAM_ALLOWED_CHAT_IDS="$TELEGRAM_ALLOWED_CHAT_IDS" \
   -e OPENAI_API_KEY="${OPENAI_API_KEY}" \
-  -e OPENCLAW_MODEL="${OPENCLAW_MODEL:-openai/gpt-4o-mini}" \
+  -e OPENCLAW_MODEL="${OPENCLAW_MODEL:-openai/gpt-4o}" \
   -e TZ=UTC \
   ops-agent
 
