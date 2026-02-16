@@ -81,6 +81,10 @@ docker run -d \
   -e PHASE_D_V0_ENABLED="${PHASE_D_V0_ENABLED:-false}" \
   -e PHASE_D_V1_ENABLED="${PHASE_D_V1_ENABLED:-false}" \
   -e PHASE_D_KILL_SWITCH="${PHASE_D_KILL_SWITCH:-false}" \
+  -e PHASE_G_ENABLED="${PHASE_G_ENABLED:-true}" \
+  -e PHASE_G_DRY_RUN="${PHASE_G_DRY_RUN:-false}" \
+  -e PHASE_H_CRYPTO_ENABLED="${PHASE_H_CRYPTO_ENABLED:-true}" \
+  -e PHASE_H_CRYPTO_KILL_SWITCH="${PHASE_H_CRYPTO_KILL_SWITCH:-false}" \
   -e PYTHONUNBUFFERED=1 \
   paper-kraken-crypto-global \
   python crypto_main.py

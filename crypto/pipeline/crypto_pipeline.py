@@ -105,18 +105,45 @@ def run_crypto_pipeline(
         bars_5m[symbol] = exec_bars
         bars_4h[symbol] = regime_bars
 
-    # Block trading on partial/inconsistent market data (live mode)
-    missing_exec = [s for s in symbols if bars_5m.get(s) is None or bars_5m[s].empty]
-    missing_regime = [s for s in symbols if bars_4h.get(s) is None or bars_4h[s].empty]
-    if missing_exec or missing_regime:
-        reason = f"missing_exec={missing_exec} missing_regime={missing_regime}"
+    # Separate anchor symbol from rest for market data validation
+    anchor_symbol = "BTC" if "BTC" in symbols else symbols[0]
+
+    # Check anchor symbol first (regime depends on it)
+    if bars_4h.get(anchor_symbol) is None or bars_4h[anchor_symbol].empty:
+        reason = f"Anchor symbol {anchor_symbol} regime candles missing"
         if scope.env.lower() == "live":
             permission.set_block("MARKET_DATA_BLOCKED", reason)
         logger.warning(f"MARKET_DATA_BLOCKED | {reason}")
         return pd.DataFrame()
-    else:
+
+    # Filter to symbols with healthy data (both timeframes present)
+    healthy_symbols = [
+        s for s in symbols
+        if (bars_5m.get(s) is not None and not bars_5m[s].empty)
+        and (bars_4h.get(s) is not None and not bars_4h[s].empty)
+    ]
+    failed_symbols = [s for s in symbols if s not in healthy_symbols]
+
+    if failed_symbols:
+        logger.warning(
+            f"MARKET_DATA_PARTIAL | failed={failed_symbols} healthy={healthy_symbols} "
+            f"({len(healthy_symbols)}/{len(symbols)} symbols available)"
+        )
+
+    # Block if too many symbols failed (>50% of universe)
+    if len(healthy_symbols) < len(symbols) / 2:
+        reason = f"Too many symbols failed: {len(failed_symbols)}/{len(symbols)} missing ({failed_symbols})"
         if scope.env.lower() == "live":
-            permission.clear_block("MARKET_DATA_BLOCKED", "market data complete")
+            permission.set_block("MARKET_DATA_BLOCKED", reason)
+        logger.warning(f"MARKET_DATA_BLOCKED | {reason}")
+        return pd.DataFrame()
+
+    # Clear any previous block — we have enough data to trade
+    if scope.env.lower() == "live":
+        permission.clear_block("MARKET_DATA_BLOCKED", "market data sufficient")
+
+    # Continue pipeline with healthy symbols only
+    symbols = healthy_symbols
 
     log_pipeline_stage(
         stage="DATA_LOADED",
@@ -128,6 +155,9 @@ def run_crypto_pipeline(
             "regime_interval": regime_interval,
             "execution_counts": {s: (len(bars_5m[s]) if bars_5m[s] is not None else 0) for s in symbols},
             "regime_counts": {s: (len(bars_4h[s]) if bars_4h[s] is not None else 0) for s in symbols},
+            "failed_symbols": failed_symbols,
+            "healthy_count": len(symbols),
+            "original_count": len(failed_symbols) + len(symbols),
         },
     )
 
@@ -139,14 +169,8 @@ def run_crypto_pipeline(
         ctx = build_execution_features(symbol, bars_5m[symbol])
         execution_features[symbol] = asdict(ctx)
 
-    # Regime features use anchor symbol (BTC preferred)
+    # Regime features use anchor symbol (BTC preferred, already validated above)
     anchor_symbol = "BTC" if "BTC" in symbols else symbols[0]
-    if bars_4h.get(anchor_symbol) is None or bars_4h[anchor_symbol].empty:
-        reason = f"Regime candles missing for anchor symbol {anchor_symbol}"
-        if scope.env.lower() == "live":
-            permission.set_block("MARKET_DATA_BLOCKED", reason)
-        logger.warning(f"MARKET_DATA_BLOCKED | {reason}")
-        return pd.DataFrame()
     regime_ctx = build_regime_features(anchor_symbol, bars_4h[anchor_symbol], correlation_symbols=bars_4h)
 
     log_pipeline_stage(
@@ -320,6 +344,17 @@ def run_crypto_pipeline(
     )
 
     available_capital = runtime.risk_manager.portfolio.available_capital
+
+    # Phase H: Apply autonomous exposure cap if available
+    phase_h_cap = getattr(runtime, "phase_h_exposure_cap", None)
+    phase_h_halt = getattr(runtime, "phase_h_halt_new_entries", False)
+    if phase_h_halt:
+        logger.warning("PHASE_H_HALT_NEW_ENTRIES | skipping signal generation")
+        return pd.DataFrame()
+    if phase_h_cap is not None:
+        available_capital = available_capital * phase_h_cap
+        logger.info("PHASE_H_EXPOSURE_CAP | cap=%.3f | adjusted_capital=%.2f", phase_h_cap, available_capital)
+
     selected = selector.select_strategies(regime_signal.regime, available_capital)
 
     log_pipeline_stage(

@@ -1,6 +1,6 @@
 # Repository Documentation (Single Source of Truth)
 
-*Last updated: 2026-02-15*
+*Last updated: 2026-02-16*
 
 ---
 
@@ -26,12 +26,140 @@
 | **Phase G: Universe Governance** | **✅ COMPLETE** | — | Deterministic 5-dimension scoring, autonomous add/remove, replaces AI advisor |
 | **Phase G: Regime Autonomy** | **✅ COMPLETE** | — | Periodic regime validation, 5-condition drift detection, non-binding proposals |
 | **Phase E v3: OpenClaw Ops Agent** | **✅ COMPLETE** | — | OpenClaw gateway in Docker, reads persist/ + logs/ read-only, Telegram channel, daily digest cron |
+| **Phase H: Crypto Regime Autonomy** | **✅ COMPLETE** | — | 2-layer regime engine (composite macro + per-asset), exposure ladder, 4-layer fail-safe, 30-min autonomy cycle |
 
-**Overall Progress**: Constitutional governance + epistemic intelligence stack (Phases C, D, E v1/v2/v3, F Phase 1-5, G) fully implemented, tested, and integrated. **215/215 Phase F tests passing** (169 + 46). Phase G gated behind `PHASE_G_ENABLED` feature flag (default off). Production-ready with feature flags for safe rollout. Phase E v3 (OpenClaw) replaces stale bespoke ops agent with LLM-native Telegram assistant.
+**Overall Progress**: Constitutional governance + epistemic intelligence stack (Phases C, D, E v1/v2/v3, F Phase 1-5, G, H) fully implemented, tested, and integrated. **215/215 Phase F tests passing** (169 + 46). Phase G gated behind `PHASE_G_ENABLED` feature flag (default off). Phase H gated behind `PHASE_H_CRYPTO_ENABLED` (paper: autonomous, live: proposal-only). Production-ready with feature flags for safe rollout. Phase E v3 (OpenClaw) replaces stale bespoke ops agent with LLM-native Telegram assistant.
 
 ---
 
 ## �🔔 Latest Updates (Newest First)
+
+### 2026-02-16 — Phase H: Full Crypto Regime Autonomy
+
+**Status**: ✅ COMPLETE (Feature-flagged)
+**Feature Flags**: `PHASE_H_CRYPTO_ENABLED` (default false), `PHASE_H_CRYPTO_LIVE_AUTONOMY` (default false), `PHASE_H_CRYPTO_KILL_SWITCH` (default false)
+
+Full autonomous regime management for crypto with hard fail-safe protections. Paper mode auto-applies regime flips; live mode generates proposals only unless explicitly enabled.
+
+#### Architecture: 2-Layer Regime Engine
+
+**Layer 1 — Composite Macro Engine** (`composite_macro_engine.py`):
+5 weighted components → RISK_ON / NEUTRAL / RISK_OFF / PANIC
+
+| Component | Weight | Source |
+|-----------|--------|--------|
+| BTC regime | 0.40 | BTC 4h bars (trend + volatility) |
+| ETH regime | 0.20 | ETH 4h bars (trend + volatility) |
+| Total market trend | 0.15 | Universe-wide trend consensus |
+| Alt vs BTC strength | 0.15 | Alt-coin relative strength |
+| Volatility expansion | 0.10 | Market-wide vol measurement |
+
+**Layer 2 — Per-Asset Regime Engine** (`asset_regime_engine.py`):
+4 weighted components per symbol → VERY_STRONG / STRONG / NEUTRAL / WEAK
+
+| Component | Weight |
+|-----------|--------|
+| Trend | 0.35 |
+| Volatility contraction | 0.25 |
+| Relative strength | 0.20 |
+| Momentum | 0.20 |
+
+#### Exposure Ladder (Risk Thermostat)
+
+`effective_cap = base_cap * clamp(confidence, 0.35, 0.95)`
+
+| Macro Regime | Base Cap | Example (conf=0.80) |
+|-------------|----------|---------------------|
+| RISK_ON | 1.00 | 0.80 |
+| NEUTRAL | 0.75 | 0.60 |
+| RISK_OFF | 0.40 | 0.32 |
+| PANIC | 0.10 | 0.08 |
+
+#### 30-Minute Autonomy Cycle
+
+1. Kill switch check
+2. Load 4h bars (BTC, ETH, universe)
+3. Compute composite macro score
+4. Compute per-asset scores
+5. Compute drift score (4-component, flip candidate if >= 0.75)
+6. Evaluate fail-safes (4 layers)
+7. Evaluate guardrails
+8. Adjust confidence
+9. Flip regime if eligible (paper: auto-apply; live: proposal only)
+10. Compute exposure cap
+11. Persist state + JSONL log
+
+#### 4-Layer Fail-Safe Hierarchy
+
+| Layer | Trigger | Action |
+|-------|---------|--------|
+| A: Circuit Breaker | Daily PnL <= -2%, DD <= -3%, 3 stops in 6h | Halt entries, adaptive cooldown (6-24h) |
+| B: Shock Mode | DD <= -25% or vol >= 2.5x baseline | Halt entries, lock flips, exposure override 10% |
+| C: Data Integrity | Missing data, Phase F insufficient_data | Confidence decay, lock flips, exposure safety factor |
+| D: Auto-Revert | PnL < -1% within 6-12h after flip | Revert to last stable regime, 24h lock |
+
+#### Flip Budget
+
+- Max 3 regime flips per rolling 7-day window
+- 24-hour lockout when budget exhausted
+- Auto-reverts consume flip budget
+
+#### Module Files (`phase_h_crypto_regime/`)
+
+| File | Lines | Purpose |
+|------|-------|---------|
+| `config.py` | 105 | Feature flags + all constants |
+| `persistence.py` | 109 | Append-only JSONL + run_state.json |
+| `composite_macro_engine.py` | 254 | Layer 1: 5-component weighted macro score |
+| `asset_regime_engine.py` | 203 | Layer 2: Per-asset regime scoring |
+| `exposure_ladder.py` | 57 | Risk thermostat: regime + confidence -> exposure cap |
+| `drift_scoring.py` | 159 | 4-component drift score for flip eligibility |
+| `flip_budget.py` | 103 | Max 3 flips / 7 days enforcement |
+| `fail_safe_engine.py` | 335 | 4-layer fail-safe hierarchy |
+| `guardrails.py` | 102 | Combined eligibility checks |
+| `autonomy_engine.py` | 530 | Core 30-min cycle orchestrator |
+| `scheduler.py` | 51 | Thin integration wrapper |
+| `__init__.py` | 23 | Public API exports |
+
+#### Integration Points
+
+| File | Change |
+|------|--------|
+| `crypto_main.py` | Startup run + 30-min scheduler task + `_run_phase_h_cycle()` |
+| `crypto/pipeline/crypto_pipeline.py` | Phase H exposure cap + halt check before signal generation |
+| `config/crypto/paper.kraken.crypto.global.yaml` | `PHASE_H_CRYPTO_ENABLED = true` |
+| `config/crypto/live.kraken.crypto.global.yaml` | `PHASE_H_CRYPTO_ENABLED = true`, `PHASE_H_CRYPTO_LIVE_AUTONOMY = false` |
+| `run_paper_kraken_crypto.sh` | Phase H env vars (enabled, kill switch) |
+| `run_live_kraken_crypto.sh` | Phase H env vars (enabled, live autonomy disabled, kill switch) |
+
+#### Persistence
+
+`persist/phase_h/{scope}/crypto/`:
+- `regime_autonomy.jsonl` — Main cycle log (append-only)
+- `run_state.json` — Mutable state (current regime, flip history, fail-safe state)
+- `asset_scores.jsonl` — Per-asset scoring history (append-only)
+- `fail_safe_events.jsonl` — Fail-safe trigger log (append-only)
+
+#### Runtime Attributes (set on `runtime` for pipeline consumption)
+
+| Attribute | Type | Default | Usage |
+|-----------|------|---------|-------|
+| `phase_h_exposure_cap` | float | 1.0 | Multiplied against available capital in pipeline |
+| `phase_h_macro_regime` | str | "NEUTRAL" | Current macro regime label |
+| `phase_h_halt_new_entries` | bool | False | Blocks signal generation when True |
+| `phase_h_asset_scores` | dict | {} | Per-symbol score + regime for downstream use |
+
+#### Paper vs Live Behavior
+
+| Behavior | Paper | Live |
+|----------|-------|------|
+| Regime flips | Auto-applied | Proposal only (logged, not applied) |
+| Exposure cap | Applied to pipeline | Applied to pipeline |
+| Fail-safes | Full enforcement | Full enforcement |
+| Kill switch | `PHASE_H_CRYPTO_KILL_SWITCH=true` | `PHASE_H_CRYPTO_KILL_SWITCH=true` |
+| Override | — | `PHASE_H_CRYPTO_LIVE_AUTONOMY=true` to enable auto-apply |
+
+---
 
 ### 2026-02-15 — Phase F: Persist Full Reasoning Chain (Articles, Claims, Hypotheses)
 

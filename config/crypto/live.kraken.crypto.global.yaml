@@ -70,7 +70,7 @@ ENABLE_LIVE_ORDERS = false
 
 # Symbol allowlist: only allow trading these pairs
 # Prevents accidental trades on unintended pairs
-SYMBOL_ALLOWLIST = ["BTC", "ETH", "SOL", "LINK", "AVAX", "ADA", "XRP", "DOT", "DOGE", "LTC", "BCH"]
+SYMBOL_ALLOWLIST = ["BTC", "ETH", "SOL", "LINK", "AVAX", "ADA", "XRP", "DOT", "DOGE", "LTC", "BCH", "POL", "UNI", "ATOM", "NEAR", "SUI", "APT", "AAVE", "FIL", "ARB", "OP", "PEPE"]
 
 # Maximum notional value per order (USD)
 # Prevents accidental large orders
@@ -240,6 +240,12 @@ STRATEGY_MAX_RISK_PER_TRADE = 0.02
 # ============================================================================
 # UNIVERSE GOVERNANCE (Phase G)
 # ============================================================================
-PHASE_G_ENABLED = false
+PHASE_G_ENABLED = true
 PHASE_G_DRY_RUN = true
-UNIVERSE_CANDIDATE_POOL = ["BTC", "ETH", "SOL", "LINK", "AVAX", "ADA", "XRP", "DOT", "DOGE", "LTC", "BCH", "MATIC", "UNI", "ATOM", "NEAR"]
+UNIVERSE_CANDIDATE_POOL = ["BTC", "ETH", "SOL", "LINK", "AVAX", "ADA", "XRP", "DOT", "DOGE", "LTC", "BCH", "POL", "UNI", "ATOM", "NEAR", "SUI", "APT", "AAVE", "FIL", "ARB", "OP", "PEPE"]
+
+# ============================================================================
+# REGIME AUTONOMY (Phase H)
+# ============================================================================
+PHASE_H_CRYPTO_ENABLED = true
+PHASE_H_CRYPTO_LIVE_AUTONOMY = false

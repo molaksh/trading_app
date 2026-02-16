@@ -29,10 +29,13 @@ def load_crypto_price_data(symbol: str, lookback_days: int) -> Optional[pd.DataF
         )
 
     universe_symbols = crypto_config.get("CRYPTO_UNIVERSE", ["BTC", "ETH", "SOL"])
-    canonical = validate_crypto_universe_symbols(universe_symbols)
-    if symbol not in canonical:
+    candidate_pool = crypto_config.get("UNIVERSE_CANDIDATE_POOL", [])
+    allowed_symbols = validate_crypto_universe_symbols(universe_symbols)
+    if candidate_pool:
+        allowed_symbols = sorted(set(allowed_symbols) | set(candidate_pool))
+    if symbol not in allowed_symbols:
         raise ValueError(
-            f"CRYPTO_SCOPE_SYMBOL_NOT_ALLOWED: symbol={symbol} allowed={canonical}"
+            f"CRYPTO_SCOPE_SYMBOL_NOT_ALLOWED: symbol={symbol} allowed={allowed_symbols}"
         )
 
     enable_cache = bool(crypto_config.get("ENABLE_OHLC_CACHE", True))
@@ -87,10 +90,13 @@ def load_crypto_price_data_interval(
         )
 
     universe_symbols = crypto_config.get("CRYPTO_UNIVERSE", ["BTC", "ETH", "SOL"])
-    canonical = validate_crypto_universe_symbols(universe_symbols)
-    if symbol not in canonical:
+    candidate_pool = crypto_config.get("UNIVERSE_CANDIDATE_POOL", [])
+    allowed_symbols = validate_crypto_universe_symbols(universe_symbols)
+    if candidate_pool:
+        allowed_symbols = sorted(set(allowed_symbols) | set(candidate_pool))
+    if symbol not in allowed_symbols:
         raise ValueError(
-            f"CRYPTO_SCOPE_SYMBOL_NOT_ALLOWED: symbol={symbol} allowed={canonical}"
+            f"CRYPTO_SCOPE_SYMBOL_NOT_ALLOWED: symbol={symbol} allowed={allowed_symbols}"
         )
 
     enable_cache = bool(crypto_config.get("ENABLE_OHLC_CACHE", True))

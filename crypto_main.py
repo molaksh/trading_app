@@ -502,6 +502,12 @@ def run_daemon():
     else:
         get_ai_runner().trigger_ranking_from_market_data(trigger="startup")
 
+    # Phase H: Autonomous regime management startup
+    from phase_h_crypto_regime.config import PHASE_H_CRYPTO_ENABLED as _phase_h_on
+    from phase_h_crypto_regime.config import PHASE_H_CRYPTO_KILL_SWITCH as _phase_h_kill
+    if _phase_h_on and not _phase_h_kill:
+        _run_phase_h_cycle(runtime, trigger="startup")
+
     # Register tasks
     # Each task closure captures runtime and updates it after execution
     def make_trading_tick():
@@ -531,6 +537,9 @@ def run_daemon():
 
     def make_regime_validation():
         _run_regime_validation(runtime, trigger="scheduled")
+
+    def make_phase_h_cycle():
+        _run_phase_h_cycle(runtime, trigger="scheduled")
 
     scheduler.register_task(CryptoSchedulerTask(
         name="trading_tick",
@@ -595,6 +604,15 @@ def run_daemon():
             func=make_regime_validation,
             interval_minutes=120,
             # No state restriction: regime can drift anytime
+        ))
+
+    # Phase H: Autonomous regime management (every 30 minutes)
+    if _phase_h_on and not _phase_h_kill:
+        scheduler.register_task(CryptoSchedulerTask(
+            name="phase_h_regime_autonomy",
+            func=make_phase_h_cycle,
+            interval_minutes=30,
+            # No state restriction: can run anytime
         ))
 
     # Run daemon loop
@@ -673,6 +691,18 @@ def _run_regime_validation(runtime, trigger: str):
     logger.info(
         "REGIME_VALIDATION_COMPLETE | trigger=%s | outcome=%s | duration_ms=%.1f",
         trigger, result.outcome, result.duration_ms,
+    )
+
+
+def _run_phase_h_cycle(runtime, trigger: str):
+    """Run Phase H autonomous regime management cycle."""
+    from phase_h_crypto_regime.scheduler import run_phase_h_cycle
+
+    result = run_phase_h_cycle(runtime, trigger=trigger)
+
+    logger.info(
+        "PHASE_H_CYCLE_COMPLETE | trigger=%s | action=%s | duration_ms=%.1f",
+        trigger, result.action_taken, result.duration_ms,
     )
 
 

@@ -41,6 +41,17 @@ class CryptoUniverse:
         'AVAX': 'AVAXUSD',
         'LTC': 'XLTCZUSD',
         'BCH': 'BCHUSD',
+        'POL': 'POLUSD',
+        'UNI': 'UNIUSD',
+        'ATOM': 'ATOMUSD',
+        'NEAR': 'NEARUSD',
+        'SUI': 'SUIUSD',
+        'APT': 'APTUSD',
+        'AAVE': 'AAVEUSD',
+        'FIL': 'FILUSD',
+        'ARB': 'ARBUSD',
+        'OP': 'OPUSD',
+        'PEPE': 'PEPEUSD',
     }
     
     def __init__(self, symbols: Optional[List[str]] = None, 
