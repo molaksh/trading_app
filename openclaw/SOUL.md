@@ -26,11 +26,16 @@ When asked about "all containers", list directories under `/data/logs/` and `/da
 ## File Reference
 
 ### Positions & Trades
-- `/data/logs/{scope}/state/open_positions.json` — Current holdings
-- `/data/logs/{scope}/ledger/open_positions.json` — Alternative positions path
-- `/data/persist/{scope}/ledger/open_positions.json` — Persisted positions (swing)
+- **Swing scopes** — Check ALL paths; some scopes only write to one:
+  1. `/data/logs/{scope}/ledger/open_positions.json` — Primary positions (broker-reconciled)
+  2. `/data/logs/{scope}/state/open_positions.json` — Runtime state snapshot
+  3. `/data/persist/{scope}/ledger/open_positions.json` — Persisted positions
+- If a file is empty (`{}`), check the next path before reporting "no positions"
+- **Crypto scopes** do NOT persist an `open_positions.json` file. Crypto positions are managed in real-time by the exchange. Use `trades.jsonl` for recent trade activity, or `daily_summary.jsonl` for position counts.
 - `/data/persist/{scope}/ledger/trades.json` — Closed trades with P&L
 - `/data/logs/{scope}/ledger/trades.jsonl` — Trade fills (JSONL)
+- `/data/logs/{scope}/logs/execution_log.jsonl` — Trade execution details (swing scopes only)
+- `/data/logs/{scope}/logs/ai_advisor_calls.jsonl` — AI ranking calls (crypto scopes only)
 
 ### Daily Performance
 - `/data/logs/{scope}/logs/daily_summary.jsonl` — Daily summaries (JSONL)
@@ -42,6 +47,7 @@ The "market correspondent" / "researcher" is the Phase F pipeline.
 - `/data/persist/phase_f/crypto/scheduler_state.json` — Last Phase F run date
 
 ### Regime Autonomy (Phase G)
+> Note: Phase G is gated behind `PHASE_G_ENABLED` (default OFF). These files only exist when Phase G has been activated. If the files don't exist, report "Phase G is not enabled for this scope."
 - `/data/persist/phase_g/{scope}/regime/run_state.json` — Current regime state
 - `/data/persist/phase_g/{scope}/regime/validation_runs.jsonl` — Regime validation results
 - `/data/persist/phase_g/{scope}/regime/proposals.jsonl` — Regime change proposals
@@ -53,18 +59,25 @@ The "market correspondent" / "researcher" is the Phase F pipeline.
 - `/data/persist/{scope}/universe/scoring_history.jsonl` — Per-symbol scores
 
 ### Governance Proposals (Phase C)
-- `/data/persist/governance/crypto/proposals/` — Directory of proposal UUIDs
-  Each UUID dir contains: `proposal.json`, `synthesis.json`, `audit.json`, `critique.json`, `approval.json` or `rejection.json`
+- Proposals exist in TWO locations — search BOTH:
+  - `Glob pattern="/data/persist/governance/crypto/proposals/**/*.json"`
+  - `Glob pattern="/data/logs/governance/crypto/proposals/**/*.json"`
+- Each proposal UUID directory contains: `proposal.json`, `synthesis.json`, `audit.json`, `critique.json`, `approval.json` or `rejection.json`
 - `/data/persist/governance/crypto/logs/governance_events.jsonl` — Governance audit trail
+- `/data/logs/governance/crypto/logs/governance_events.jsonl` — Governance audit trail (additional)
 
 ### Pipeline & Audit Logs (Phase G)
+> Note: Phase G is gated behind `PHASE_G_ENABLED` (default OFF). These files only exist when Phase G has been activated. If the files don't exist, report "Phase G is not enabled for this scope."
 - `/data/persist/phase_g/{scope}/logs/pipeline.jsonl` — Governance cycle events
 - `/data/persist/phase_g/{scope}/logs/audit_trail.jsonl` — Audit trail
 - `/data/persist/phase_g/{scope}/logs/scoring_detail.jsonl` — Per-symbol score breakdown
 
 ### System Health
-- `/data/logs/{scope}/state/scheduler_state.json` — Job last-run times
-- `/data/logs/{scope}/logs/errors.jsonl` — Error events
+- `/data/logs/{scope}/state/scheduler_state.json` — Job last-run times (swing scopes)
+- `/data/logs/{scope}/state/crypto_scheduler_state.json` — Job last-run times (crypto scopes)
+- `/data/logs/{scope}/logs/errors.jsonl` — Error events (may not exist for all scopes)
+- `/data/logs/{scope}/logs/daily_summary.jsonl` — Daily summaries (fallback for error info when errors.jsonl is absent)
+- If `errors.jsonl` does not exist for a scope, report "No structured error log for this scope" — do NOT say "not accessible"
 
 ## System Architecture (How Things Work)
 
@@ -117,6 +130,13 @@ Users may use informal names. Map them to data:
 ## How to Read JSONL Files
 
 JSONL = one JSON object per line. For recent data, read the last 5-10 lines.
+
+## How to List Directory Contents
+
+You do NOT have Bash/ls access. To discover files in a directory, use the Glob tool:
+- To list all files: `Glob pattern="/data/persist/governance/crypto/proposals/**/*.json"`
+- To list scope directories: `Glob pattern="/data/logs/*/"`
+- To find specific files: `Glob pattern="/data/logs/*/logs/errors.jsonl"`
 
 ## STRICT Anti-Hallucination Rules
 

@@ -33,6 +33,97 @@
 
 ## �🔔 Latest Updates (Newest First)
 
+### 2026-02-15 — FIX: Ops Agent Data Access Gaps (SOUL.md / SKILL.md)
+
+**Status**: ✅ COMPLETE
+**Severity**: MEDIUM — Ops agent returned wrong/missing data for 3 of 4 containers
+
+#### Problems Found
+
+Full audit of every file path in SOUL.md/SKILL.md against actual files on disk revealed 10 gaps:
+
+| # | Issue | Impact |
+|---|-------|--------|
+| 1 | Crypto scopes have no `open_positions.json` (positions are in-memory only) | Agent always reported "no positions" for crypto |
+| 2 | Crypto scheduler uses `crypto_scheduler_state.json`, not `scheduler_state.json` | Agent couldn't find scheduler state for crypto |
+| 3 | Governance proposals split across `logs/` and `persist/` (different UUIDs) | Agent only found half the proposals |
+| 4 | Agent tried to `Read` directory paths instead of using `Glob` | "directory reading was illegal" errors |
+| 5 | `errors.jsonl` only exists for `live_alpaca_swing_us` | Agent reported "not accessible" for 3 scopes |
+| 6 | Phase G files don't exist (`PHASE_G_ENABLED` default OFF) | Agent reported missing files as errors |
+| 7 | Swing `state/open_positions.json` is empty; real data is in `ledger/open_positions.json` | Agent reported "no positions" for swing scopes with holdings |
+| 8 | `execution_log.jsonl` undocumented | Agent couldn't report execution details |
+| 9 | `ai_advisor_calls.jsonl` undocumented | Agent couldn't report AI ranking data |
+| 10 | Governance events exist in both `logs/` and `persist/` | Agent missed events |
+
+#### Root Causes
+
+- **Not a permissions issue** — volume mounts and tool access are correct
+- **SOUL.md/SKILL.md file references didn't match actual file layout on disk**
+- Crypto and swing scopes use different filenames, different persistence patterns
+- Governance writes to both `logs/` (runtime) and `persist/` (durable)
+
+#### Fixes Applied
+
+All changes in `openclaw/SOUL.md` and `openclaw/skills/trading-ops/SKILL.md` (mirrored):
+
+1. **Positions**: Separated swing vs crypto guidance. Swing: check all 3 paths in order, skip empty `{}`. Crypto: no position file exists; use `trades.jsonl` or `daily_summary.jsonl`.
+2. **Scheduler state**: Added `crypto_scheduler_state.json` alongside `scheduler_state.json`.
+3. **Governance proposals**: Search BOTH `persist/` and `logs/` paths with Glob.
+4. **Directory listing**: New "How to List Directory Contents" section teaching Glob patterns (agent has no Bash/ls).
+5. **errors.jsonl**: Added "(may not exist for all scopes)" + `daily_summary.jsonl` fallback + instruction to say "No structured error log" instead of "not accessible".
+6. **Phase G**: Added blockquote notes: "Phase G is gated behind `PHASE_G_ENABLED` (default OFF). Report 'Phase G is not enabled' if files don't exist."
+7. **New file references**: Added `execution_log.jsonl` (swing) and `ai_advisor_calls.jsonl` (crypto).
+8. **Governance events**: Added `logs/governance/` path alongside `persist/governance/`.
+
+#### Files Changed
+
+| File | Change |
+|------|--------|
+| `openclaw/SOUL.md` | All 8 fixes above |
+| `openclaw/skills/trading-ops/SKILL.md` | Mirrored all 8 fixes |
+
+No code changes. Ops agent container rebuilt and restarted to pick up changes (SOUL.md/SKILL.md are COPY'd in Dockerfile.openclaw).
+
+---
+
+### 2026-02-15 — FIX: Graceful Degradation for Crypto Pipeline Market Data
+
+**Status**: ✅ COMPLETE
+**Severity**: HIGH — Availability (single-symbol timeout blocked entire universe)
+
+#### Root Cause
+
+In `crypto/pipeline/crypto_pipeline.py`, if ANY single symbol failed to fetch market data from Kraken (e.g., 10s API timeout), the **entire pipeline** returned an empty DataFrame — no trading for ANY symbol. A transient timeout on one altcoin (e.g., AVAX) blocked trading for BTC, ETH, SOL, and all other healthy symbols.
+
+#### Fix Summary
+
+Replaced the all-or-nothing market data check with tiered validation:
+
+1. **Anchor symbol check**: If BTC (or first symbol) 4h regime candles are missing, full pipeline block (regime engine depends on BTC).
+2. **Healthy symbol filtering**: Symbols missing either 5m or 4h data are excluded from the current cycle; remaining healthy symbols proceed normally.
+3. **Majority threshold**: If >50% of the universe fails, full pipeline block (insufficient market coverage).
+4. **Partial degradation logging**: New `MARKET_DATA_PARTIAL` log entry with `failed=` and `healthy=` lists for operational visibility.
+5. **Removed duplicate anchor check**: The anchor validation in Stage 2 (FEATURES) was redundant with the new Stage 1 check.
+
+#### Failure Severity Matrix
+
+| Failure | Severity | Action |
+|---------|----------|--------|
+| BTC (anchor) data missing | CRITICAL | Block entire pipeline |
+| >50% of universe missing | CRITICAL | Block entire pipeline |
+| 1-2 non-anchor symbols missing | NON-CRITICAL | Exclude failed symbols, continue with healthy subset |
+
+#### New Log Events
+
+- `MARKET_DATA_PARTIAL` — emitted when some symbols fail but pipeline continues
+- `DATA_LOADED` extra fields: `failed_symbols`, `healthy_count`, `original_count`
+
+#### Files Changed
+
+- `crypto/pipeline/crypto_pipeline.py` (replaced all-or-nothing check with graceful degradation)
+
+---
+
 ### 2026-02-15 — Phase E v3: OpenClaw Ops Agent
 
 **Status**: ✅ COMPLETE
@@ -71,7 +162,9 @@ Docker Container (ops-agent, node:22-slim)
 |------|--------|-------------|
 | `Dockerfile.openclaw` | NEW | Node 22-slim + OpenClaw image, copies config + skill |
 | `openclaw/openclaw.json` | NEW | Gateway config: Telegram channel, model, locked-down tools, cron |
+| `openclaw/SOUL.md` | NEW | System prompt: data locations, architecture, anti-hallucination rules, Glob guidance |
 | `openclaw/skills/trading-ops/SKILL.md` | NEW | Core skill: data locations, file reference, JSONL parsing, response guidelines |
+| `openclaw/AGENTS.md` | NEW | Agent identity override: prevents heartbeat/memory interference |
 | `run_ops_agent.sh` | MODIFIED | Builds from `Dockerfile.openclaw`, mounts both volumes `:ro`, passes OpenAI key |
 | `.dockerignore` | MODIFIED | Added `Dockerfile.openclaw` to exclusions, ensured `openclaw/` not ignored |
 
@@ -1969,7 +2062,9 @@ This introduces explicit runtime NO-TRADE states that veto trading by policy (no
 
 1. **MARKET_DATA_BLOCKED**
    - OHLC stale or unavailable
-   - Partial/inconsistent market data
+   - Anchor symbol (BTC) regime candles missing
+   - >50% of universe symbols failed to fetch data
+   - Note: 1-2 non-anchor symbol failures trigger `MARKET_DATA_PARTIAL` (graceful degradation) instead of a full block
 
 2. **RECONCILIATION_BLOCKED**
    - Broker open positions mismatch ledger
@@ -2028,7 +2123,7 @@ LAST_BLOCK_CHANGE: <timestamp>
 - `runtime/trade_permission.py` (new)
 - `broker/trading_executor.py` (trade gate + risk block)
 - `data/crypto_price_loader.py` (market data block + clear)
-- `crypto/pipeline/crypto_pipeline.py` (block on partial data)
+- `crypto/pipeline/crypto_pipeline.py` (graceful degradation: anchor check, >50% threshold, partial trading)
 - `execution/runtime.py` (reconciliation block)
 
 ---
@@ -2078,7 +2173,9 @@ Failure behavior: prints ERROR banner and exits non-zero **before** container st
 **D. OHLC freshness**:
 - Live startup fetches 5m + 4h OHLC
 - Zero staleness tolerance
-- If fresh OHLC unavailable ⇒ `MARKET_DATA_BLOCKED` and exit
+- If anchor symbol (BTC) OHLC unavailable ⇒ `MARKET_DATA_BLOCKED` and exit
+- If >50% of universe OHLC unavailable ⇒ `MARKET_DATA_BLOCKED` and exit
+- If 1-2 non-anchor symbols fail ⇒ graceful degradation (trade healthy subset)
 
 **E. External reconciliation**:
 - Kraken open positions must match local ledger
