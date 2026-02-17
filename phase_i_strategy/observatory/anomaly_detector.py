@@ -4,35 +4,46 @@ Strategy Anomaly Detector (Phase I-A).
 Checks for:
 - ZERO_SIGNAL: Strategy produces 0 non-FLAT signals for >4 hours
 - ALL_FLAT: Strategy returns FLAT for >48 consecutive cycles
+- DEGRADATION: Rolling win rate drops below threshold (requires trade history)
 """
 
 import logging
 from collections import defaultdict
 from datetime import datetime, timezone, timedelta
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from phase_i_strategy.config import (
     ZERO_SIGNAL_THRESHOLD_HOURS,
     ALL_FLAT_CYCLE_THRESHOLD,
+    DEGRADATION_WIN_RATE_THRESHOLD,
 )
 from phase_i_strategy.persistence import PhaseIPersistence
 
 logger = logging.getLogger(__name__)
 
+# Minimum trades required before DEGRADATION can fire
+_MIN_TRADES_FOR_DEGRADATION = 5
+
 
 class StrategyAnomalyDetector:
     """
-    Detects strategy anomalies from recorded signal history.
+    Detects strategy anomalies from recorded signal history and performance scores.
 
-    Reads signals.jsonl and checks for known failure patterns.
+    Reads signals.jsonl and optional performance scores to check for failure patterns.
     """
 
     def __init__(self, persistence: PhaseIPersistence):
         self.persistence = persistence
 
-    def detect_anomalies(self) -> List[Dict[str, Any]]:
+    def detect_anomalies(
+        self, performance_scores: Optional[Dict[str, Dict[str, Any]]] = None,
+    ) -> List[Dict[str, Any]]:
         """
-        Scan recent signals for anomalies.
+        Scan recent signals and performance data for anomalies.
+
+        Args:
+            performance_scores: Optional dict from PerformanceScorer.score_all_strategies().
+                If provided, enables DEGRADATION detection.
 
         Returns:
             List of anomaly records.
@@ -45,6 +56,45 @@ class StrategyAnomalyDetector:
         anomalies = []
         anomalies.extend(self._check_zero_signal(signals))
         anomalies.extend(self._check_all_flat(signals))
+
+        if performance_scores:
+            anomalies.extend(self._check_degradation(performance_scores))
+
+        return anomalies
+
+    def _check_degradation(
+        self, performance_scores: Dict[str, Dict[str, Any]]
+    ) -> List[Dict[str, Any]]:
+        """
+        Check for strategies with win rate below threshold.
+
+        Only fires when a strategy has enough trades to be statistically meaningful.
+        """
+        now = datetime.now(timezone.utc)
+        anomalies = []
+
+        for strategy_name, scores in performance_scores.items():
+            trade_count = scores.get("trade_count", 0)
+            win_rate = scores.get("win_rate", 0.0)
+
+            if trade_count < _MIN_TRADES_FOR_DEGRADATION:
+                continue
+
+            if win_rate < DEGRADATION_WIN_RATE_THRESHOLD:
+                anomalies.append({
+                    "timestamp": now.isoformat(),
+                    "anomaly_type": "DEGRADATION",
+                    "strategy_name": strategy_name,
+                    "detail": (
+                        f"Win rate {win_rate:.1%} below threshold "
+                        f"{DEGRADATION_WIN_RATE_THRESHOLD:.0%} "
+                        f"({trade_count} trades in rolling window)"
+                    ),
+                    "win_rate": round(win_rate, 3),
+                    "trade_count": trade_count,
+                    "health_score": scores.get("health_score", 0),
+                })
+
         return anomalies
 
     def _check_zero_signal(self, signals: List[Dict[str, Any]]) -> List[Dict[str, Any]]:

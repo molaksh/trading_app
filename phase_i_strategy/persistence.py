@@ -118,6 +118,38 @@ class PhaseIPersistence:
         except IOError as e:
             logger.error("Failed to save run state: %s", e, exc_info=True)
 
+    def load_trades_from_ledger(self) -> List[Dict[str, Any]]:
+        """
+        Load completed trades from the main trade ledger.
+
+        Tries scope-aware path first (persist/{scope}/ledger/trades.jsonl),
+        falls back gracefully if PERSISTENCE_ROOT is not set.
+        """
+        trades_path = None
+        try:
+            from config.scope_paths import get_scope_path
+            from config.scope import get_scope
+            scope = get_scope()
+            ledger_dir = get_scope_path(scope, "ledger")
+            trades_path = ledger_dir / "trades.jsonl"
+        except Exception:
+            # Fallback: try common path pattern
+            trades_path = Path(f"persist/{self.scope}/ledger/trades.jsonl")
+
+        if trades_path is None or not trades_path.exists():
+            return []
+        try:
+            records = []
+            with open(trades_path, "r") as f:
+                for line in f:
+                    line = line.strip()
+                    if line:
+                        records.append(json.loads(line))
+            return records
+        except Exception as e:
+            logger.error("Failed to load trades from ledger: %s", e, exc_info=True)
+            return []
+
     @staticmethod
     def _default_run_state() -> Dict[str, Any]:
         """Return default run state for fresh starts."""

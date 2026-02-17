@@ -28,12 +28,61 @@
 | **Phase E v3: OpenClaw Ops Agent** | **✅ COMPLETE** | — | OpenClaw gateway in Docker, reads persist/ + logs/ read-only, Telegram channel, daily digest cron |
 | **Phase H: Crypto Regime Autonomy** | **✅ COMPLETE** | — | 2-layer regime engine (composite macro + per-asset), exposure ladder, 4-layer fail-safe, 30-min autonomy cycle |
 | **Phase I-A: Strategy Observatory (Build 1)** | **✅ COMPLETE** | — | Per-strategy signal tracking, `strategy_name` on Trade, anomaly detection (ZERO_SIGNAL, ALL_FLAT), hourly scheduler |
+| **Phase I-A: Strategy Observatory (Build 2)** | **✅ COMPLETE** | — | PerformanceScorer (health 0-100), DEGRADATION anomaly, ops agent integration |
 
-**Overall Progress**: Constitutional governance + epistemic intelligence stack (Phases C, D, E v1/v2/v3, F Phase 1-5, G, H, I-A Build 1) fully implemented, tested, and integrated. **215/215 Phase F tests passing** (169 + 46). Phase G gated behind `PHASE_G_ENABLED` feature flag (default off). Phase H gated behind `PHASE_H_CRYPTO_ENABLED` (paper: autonomous, live: proposal-only). Phase I gated behind `PHASE_I_STRATEGY_ENABLED` (default off). Production-ready with feature flags for safe rollout. Phase E v3 (OpenClaw) replaces stale bespoke ops agent with LLM-native Telegram assistant.
+**Overall Progress**: Constitutional governance + epistemic intelligence stack (Phases C, D, E v1/v2/v3, F Phase 1-5, G, H, I-A Builds 1-2) fully implemented, tested, and integrated. **215/215 Phase F tests passing** (169 + 46). Phase G gated behind `PHASE_G_ENABLED` feature flag (default off). Phase H gated behind `PHASE_H_CRYPTO_ENABLED` (paper: autonomous, live: proposal-only). Phase I gated behind `PHASE_I_STRATEGY_ENABLED` (default off). Production-ready with feature flags for safe rollout. Phase E v3 (OpenClaw) replaces stale bespoke ops agent with LLM-native Telegram assistant.
 
 ---
 
 ## �🔔 Latest Updates (Newest First)
+
+### 2026-02-16 — Phase I-A Build 2: Strategy Analytics (Observatory Complete)
+
+**Status**: ✅ COMPLETE (Feature-flagged)
+
+Per-strategy performance scoring and expanded anomaly detection. Phase I-A (Observatory) is now feature-complete.
+
+#### What Changed
+
+**1. StrategyPerformanceScorer** (`phase_i_strategy/observatory/performance_scorer.py`):
+- Reads signal history + trade ledger, computes per-strategy rolling metrics (7-day window)
+- Metrics: win rate, avg net PnL %, signal-to-trade ratio, flat ratio, trade count
+- Composite health score (0-100) across 4 dimensions:
+  - Win rate: 30 points (0% → 0, 50%+ → 30)
+  - Avg PnL: 25 points (0% → 0, 2%+ → 25)
+  - Activity: 25 points (penalizes high flat ratio)
+  - Trade volume: 20 points (ramps to 5+ trades)
+- Persisted to `performance_snapshots.jsonl` every observatory cycle
+
+**2. DEGRADATION Anomaly** (`phase_i_strategy/observatory/anomaly_detector.py`):
+- Fires when rolling win rate drops below 35% (configurable via `DEGRADATION_WIN_RATE_THRESHOLD`)
+- Minimum 5 trades required before detection can fire (prevents false positives)
+- Includes win_rate, trade_count, and health_score in anomaly record
+
+**3. Observatory Scheduler Update** (`phase_i_strategy/scheduler.py`):
+- Now runs PerformanceScorer before anomaly detection
+- Passes performance scores to detector for DEGRADATION check
+- Persists performance snapshots every cycle
+- Logs per-strategy health summary: `STRATEGY_HEALTH | strategy=X health=Y`
+- Stores latest health scores in run_state.json
+
+**4. Ops Agent Integration** (`openclaw/SOUL.md`):
+- Added Phase I data locations to File Reference section
+- Added Phase I system architecture description
+- Added "strategy health" / "observatory" / "anomalies" to terminology map
+
+#### Updated Module Structure
+```
+phase_i_strategy/observatory/
+    signal_tracker.py        — Buffered signal recording (Build 1)
+    anomaly_detector.py      — ZERO_SIGNAL + ALL_FLAT + DEGRADATION detection
+    performance_scorer.py    — Rolling metrics + health score (0-100)  ← NEW
+```
+
+#### What's Next (Build 3)
+- `CryptoStrategyBacktester`: Replay historical candles through strategy code
+- `ParameterGridSearch`: Test parameter variations (e.g., ATR multiplier grid)
+- `ResearchOrchestrator`: Prioritize by anomaly, backtest, validate
 
 ### 2026-02-16 — Phase I-A Build 1: Strategy Observatory Foundation
 

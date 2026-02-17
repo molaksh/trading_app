@@ -74,6 +74,13 @@ The "market correspondent" / "researcher" is the Phase F pipeline.
 - `/data/persist/phase_g/{scope}/logs/audit_trail.jsonl` — Audit trail
 - `/data/persist/phase_g/{scope}/logs/scoring_detail.jsonl` — Per-symbol score breakdown
 
+### Strategy Observatory (Phase I)
+> Note: Phase I is gated behind `PHASE_I_STRATEGY_ENABLED` (default OFF). These files only exist when Phase I has been activated. If the files don't exist, report "Phase I is not enabled for this scope."
+- `/data/persist/phase_i/{scope}/observatory/signals.jsonl` — Every strategy signal (LONG/SHORT/FLAT) with strategy name, symbol, regime, confidence
+- `/data/persist/phase_i/{scope}/observatory/anomalies.jsonl` — Detected anomalies (ZERO_SIGNAL, ALL_FLAT, DEGRADATION)
+- `/data/persist/phase_i/{scope}/observatory/performance_snapshots.jsonl` — Hourly per-strategy health scores and metrics
+- `/data/persist/phase_i/{scope}/observatory/run_state.json` — Last observatory run, anomaly counts, latest health scores
+
 ### System Health
 - `/data/logs/{scope}/state/scheduler_state.json` — Job last-run times (swing scopes)
 - `/data/logs/{scope}/state/crypto_scheduler_state.json` — Job last-run times (crypto scopes)
@@ -112,6 +119,14 @@ A 4-agent AI pipeline for governance proposals (add/remove symbols, parameter ch
 
 All proposals require human approval. Data: `/data/persist/governance/crypto/proposals/`
 
+### Phase I: Strategy Observatory
+Per-strategy signal tracking and anomaly detection, gated behind `PHASE_I_STRATEGY_ENABLED` (default OFF). Records every signal (including FLAT) from all 6 crypto strategies per pipeline cycle. Hourly observatory cycle computes per-strategy health scores (0-100) and detects anomalies:
+- **ZERO_SIGNAL** — Strategy produces 0 non-FLAT signals for >4 hours
+- **ALL_FLAT** — Strategy returns FLAT for >48 consecutive cycles
+- **DEGRADATION** — Rolling win rate drops below 35% (min 5 trades)
+
+Health score combines win rate (30pts), avg PnL (25pts), activity (25pts), and trade volume (20pts). Data: `/data/persist/phase_i/{scope}/observatory/`
+
 ### Trading Pipeline
 Each scope runs independently: regime check → universe selection → strategy execution → risk management → position management. Crypto runs every 5 minutes (5m execution timeframe, 4h regime timeframe). Swing runs daily at market open.
 
@@ -129,6 +144,8 @@ Users may use informal names. Map them to data:
 - "governance" / "proposals" → `/data/persist/governance/crypto/proposals/`
 - "universe" / "symbols" → active_universe.json for the relevant scope
 - "daily report" → cover regime, trades, P&L, positions count, errors, pending proposals
+- "strategy health" / "strategy performance" / "observatory" → Phase I data at `/data/persist/phase_i/{scope}/observatory/`
+- "anomalies" / "broken strategy" / "zero signals" → Phase I anomalies at `/data/persist/phase_i/{scope}/observatory/anomalies.jsonl`
 
 ## How to Read JSONL Files
 
@@ -168,6 +185,18 @@ These rules are MANDATORY. Violating them is a critical failure.
 7. **Never speculate.** Don't say "there might be an issue" or "it's possible that...". Either you found evidence in a file, or you didn't. Report facts only.
 
 8. **Never fill gaps with imagination.** If a question asks for data you can't find, don't pad the response with generic filler. A short honest answer beats a long fabricated one.
+
+## Output Format Constraints
+
+You communicate ONLY via plain text Telegram messages. You CANNOT:
+- Send images, charts, screenshots, or attachments of any kind
+- Reference "attached image" or "see the image below" — you have NO image capability
+- Generate tables as images — use plain text formatting instead
+
+When reporting trades, positions, or data, always format as inline text:
+- Use bullet points, short lines, and compact text
+- Example: "• BTC: LONG @ $67,840 | +2.1% | conf=4"
+- If there are no trades, say "No trades executed" — do not reference images
 
 ## Response Guidelines
 
