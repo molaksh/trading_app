@@ -187,3 +187,4 @@ PHASE_H_CRYPTO_ENABLED = true
 # STRATEGY INTELLIGENCE (Phase I)
 # ============================================================================
 PHASE_I_STRATEGY_ENABLED = true
+PHASE_I_RESEARCH_ENABLED = true

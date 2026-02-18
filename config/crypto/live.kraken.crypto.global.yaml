@@ -254,3 +254,4 @@ PHASE_H_CRYPTO_LIVE_AUTONOMY = false
 # STRATEGY INTELLIGENCE (Phase I)
 # ============================================================================
 PHASE_I_STRATEGY_ENABLED = true
+PHASE_I_RESEARCH_ENABLED = false  # Enable after paper validation

@@ -1,8 +1,9 @@
 """
-Phase I Scheduler: Observatory cycle runner.
+Phase I Scheduler: Observatory + Research cycle runners.
 
-Called by crypto_main.py scheduler to run the observatory analysis cycle.
-Runs performance scoring + anomaly detection, persists results.
+Called by crypto_main.py scheduler:
+- Observatory (hourly, any state): performance scoring + anomaly detection
+- Research (daily, downtime only): backtesting + parameter grid search + walk-forward
 """
 
 import logging
@@ -12,7 +13,9 @@ from datetime import datetime, timezone
 from phase_i_strategy.config import (
     PHASE_I_STRATEGY_ENABLED,
     PHASE_I_STRATEGY_KILL_SWITCH,
+    PHASE_I_RESEARCH_ENABLED,
     MAX_OBSERVATORY_CYCLE_SECONDS,
+    MAX_RESEARCH_CYCLE_SECONDS,
 )
 from phase_i_strategy.persistence import PhaseIPersistence
 from phase_i_strategy.observatory.performance_scorer import StrategyPerformanceScorer
@@ -113,6 +116,58 @@ def run_observatory_cycle(runtime, trigger: str = "scheduled") -> None:
         elapsed = time.monotonic() - start
         logger.error(
             "PHASE_I_OBSERVATORY_CYCLE_FAILED | trigger=%s error=%s elapsed=%.1fs",
+            trigger, e, elapsed,
+            exc_info=True,
+        )
+
+
+def run_research_cycle(runtime, trigger: str = "scheduled") -> None:
+    """
+    Run a single research cycle (backtesting + grid search + walk-forward).
+
+    Should only run during downtime to avoid competing for resources.
+    Gated behind PHASE_I_RESEARCH_ENABLED in addition to the main flag.
+
+    Args:
+        runtime: The application runtime object.
+        trigger: What triggered this cycle ('startup', 'scheduled').
+    """
+    if not PHASE_I_STRATEGY_ENABLED or PHASE_I_STRATEGY_KILL_SWITCH:
+        return
+    if not PHASE_I_RESEARCH_ENABLED:
+        return
+
+    scope = str(runtime.scope)
+    start = time.monotonic()
+    logger.info("PHASE_I_RESEARCH_CYCLE_START | trigger=%s scope=%s", trigger, scope)
+
+    try:
+        persistence = PhaseIPersistence(scope)
+
+        from phase_i_strategy.research.research_orchestrator import ResearchOrchestrator
+        orchestrator = ResearchOrchestrator(runtime, persistence)
+        result = orchestrator.run_research_cycle(trigger=trigger)
+
+        elapsed = time.monotonic() - start
+        logger.info(
+            "PHASE_I_RESEARCH_CYCLE_DONE | trigger=%s status=%s "
+            "findings=%s elapsed=%.1fs",
+            trigger,
+            result.get("status", "unknown"),
+            result.get("findings", 0),
+            elapsed,
+        )
+
+        if elapsed > MAX_RESEARCH_CYCLE_SECONDS:
+            logger.warning(
+                "PHASE_I_RESEARCH_SLOW | elapsed=%.1fs > limit=%ds",
+                elapsed, MAX_RESEARCH_CYCLE_SECONDS,
+            )
+
+    except Exception as e:
+        elapsed = time.monotonic() - start
+        logger.error(
+            "PHASE_I_RESEARCH_CYCLE_FAILED | trigger=%s error=%s elapsed=%.1fs",
             trigger, e, elapsed,
             exc_info=True,
         )

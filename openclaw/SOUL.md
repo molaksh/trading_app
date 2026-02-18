@@ -81,6 +81,10 @@ The "market correspondent" / "researcher" is the Phase F pipeline.
 - `/data/persist/phase_i/{scope}/observatory/performance_snapshots.jsonl` — Hourly per-strategy health scores and metrics
 - `/data/persist/phase_i/{scope}/observatory/run_state.json` — Last observatory run, anomaly counts, latest health scores
 
+### Strategy Research (Phase I-B)
+> Note: Research is additionally gated behind `PHASE_I_RESEARCH_ENABLED` (default OFF). Only runs during downtime.
+- `/data/persist/phase_i/{scope}/research/research_findings.jsonl` — Validated parameter improvement findings (strategy, current vs proposed params, Sharpe improvement, walk-forward pass ratio)
+
 ### System Health
 - `/data/logs/{scope}/state/scheduler_state.json` — Job last-run times (swing scopes)
 - `/data/logs/{scope}/state/crypto_scheduler_state.json` — Job last-run times (crypto scopes)
@@ -119,13 +123,21 @@ A 4-agent AI pipeline for governance proposals (add/remove symbols, parameter ch
 
 All proposals require human approval. Data: `/data/persist/governance/crypto/proposals/`
 
-### Phase I: Strategy Observatory
+### Phase I-A: Strategy Observatory
 Per-strategy signal tracking and anomaly detection, gated behind `PHASE_I_STRATEGY_ENABLED` (default OFF). Records every signal (including FLAT) from all 6 crypto strategies per pipeline cycle. Hourly observatory cycle computes per-strategy health scores (0-100) and detects anomalies:
 - **ZERO_SIGNAL** — Strategy produces 0 non-FLAT signals for >4 hours
 - **ALL_FLAT** — Strategy returns FLAT for >48 consecutive cycles
 - **DEGRADATION** — Rolling win rate drops below 35% (min 5 trades)
 
 Health score combines win rate (30pts), avg PnL (25pts), activity (25pts), and trade volume (20pts). Data: `/data/persist/phase_i/{scope}/observatory/`
+
+### Phase I-B: Strategy Research Engine
+Automated parameter research during downtime, additionally gated behind `PHASE_I_RESEARCH_ENABLED` (default OFF). Prioritizes strategies flagged by observatory anomalies, then:
+1. **Grid Search** — Tests parameter combinations (ATR multiplier, MA period, etc.) via backtesting on historical 5m candles
+2. **Walk-Forward Validation** — Rolling 30-day train / 7-day test splits; must show positive Sharpe in 60%+ of OOS folds
+3. **Finding** — If validated params show OOS Sharpe improvement > 0.1 over current, recorded as a research finding
+
+Runs daily during downtime. Data: `/data/persist/phase_i/{scope}/research/`
 
 ### Trading Pipeline
 Each scope runs independently: regime check → universe selection → strategy execution → risk management → position management. Crypto runs every 5 minutes (5m execution timeframe, 4h regime timeframe). Swing runs daily at market open.
@@ -146,6 +158,7 @@ Users may use informal names. Map them to data:
 - "daily report" → cover regime, trades, P&L, positions count, errors, pending proposals
 - "strategy health" / "strategy performance" / "observatory" → Phase I data at `/data/persist/phase_i/{scope}/observatory/`
 - "anomalies" / "broken strategy" / "zero signals" → Phase I anomalies at `/data/persist/phase_i/{scope}/observatory/anomalies.jsonl`
+- "research" / "parameter research" / "backtest findings" → Phase I-B research at `/data/persist/phase_i/{scope}/research/research_findings.jsonl`
 
 ## How to Read JSONL Files
 

@@ -1,11 +1,14 @@
 """
-Phase I Persistence: Append-only JSONL and state files for strategy observatory.
+Phase I Persistence: Append-only JSONL and state files for strategy observatory + research.
 
-Files:
+Files (observatory):
 - signals.jsonl             -- Every signal recorded (append-only)
 - performance_snapshots.jsonl -- Hourly performance scores (append-only)
 - anomalies.jsonl           -- Detected anomalies (append-only)
 - run_state.json            -- Mutable state (last run timestamp, counters)
+
+Files (research):
+- research_findings.jsonl   -- Validated research findings (append-only)
 """
 
 import json
@@ -28,6 +31,11 @@ class PhaseIPersistence:
         self.performance_path = self.root / "performance_snapshots.jsonl"
         self.anomalies_path = self.root / "anomalies.jsonl"
         self.run_state_path = self.root / "run_state.json"
+
+        # Research engine paths
+        self.research_root = Path(f"persist/phase_i/{scope}/research")
+        self.research_root.mkdir(parents=True, exist_ok=True)
+        self.research_findings_path = self.research_root / "research_findings.jsonl"
 
         logger.info("PhaseIPersistence initialized: root=%s", self.root)
 
@@ -60,6 +68,31 @@ class PhaseIPersistence:
             logger.debug("Appended anomaly: %s", record.get("anomaly_type"))
         except IOError as e:
             logger.error("Failed to append anomaly: %s", e, exc_info=True)
+
+    def append_research_finding(self, record: Dict[str, Any]) -> None:
+        """Append a research finding (append-only)."""
+        try:
+            with open(self.research_findings_path, "a") as f:
+                f.write(json.dumps(record, default=str) + "\n")
+            logger.debug("Appended research finding: strategy=%s", record.get("strategy_name"))
+        except IOError as e:
+            logger.error("Failed to append research finding: %s", e, exc_info=True)
+
+    def load_recent_findings(self, max_lines: int = 100) -> List[Dict[str, Any]]:
+        """Load recent research findings."""
+        if not self.research_findings_path.exists():
+            return []
+        try:
+            records = []
+            with open(self.research_findings_path, "r") as f:
+                for line in f:
+                    line = line.strip()
+                    if line:
+                        records.append(json.loads(line))
+            return records[-max_lines:]
+        except Exception as e:
+            logger.error("Failed to load research findings: %s", e, exc_info=True)
+            return []
 
     def load_recent_signals(self, max_lines: int = 5000) -> List[Dict[str, Any]]:
         """Load recent signal records (tail of file)."""

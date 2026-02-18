@@ -248,6 +248,7 @@ docker run -d \
   -e PHASE_H_CRYPTO_KILL_SWITCH="${PHASE_H_CRYPTO_KILL_SWITCH:-false}" \
   -e PHASE_I_STRATEGY_ENABLED="${PHASE_I_STRATEGY_ENABLED:-true}" \
   -e PHASE_I_STRATEGY_KILL_SWITCH="${PHASE_I_STRATEGY_KILL_SWITCH:-false}" \
+  -e PHASE_I_RESEARCH_ENABLED="${PHASE_I_RESEARCH_ENABLED:-false}" \
   -e PYTHONUNBUFFERED=1 \
   live-kraken-crypto-global \
   python crypto_main.py

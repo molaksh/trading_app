@@ -29,12 +29,83 @@
 | **Phase H: Crypto Regime Autonomy** | **✅ COMPLETE** | — | 2-layer regime engine (composite macro + per-asset), exposure ladder, 4-layer fail-safe, 30-min autonomy cycle |
 | **Phase I-A: Strategy Observatory (Build 1)** | **✅ COMPLETE** | — | Per-strategy signal tracking, `strategy_name` on Trade, anomaly detection (ZERO_SIGNAL, ALL_FLAT), hourly scheduler |
 | **Phase I-A: Strategy Observatory (Build 2)** | **✅ COMPLETE** | — | PerformanceScorer (health 0-100), DEGRADATION anomaly, ops agent integration |
+| **Phase I-B: Research Engine (Build 3)** | **✅ COMPLETE** | — | Backtester, parameter grid search, walk-forward validation, research orchestrator, daily downtime scheduler |
 
-**Overall Progress**: Constitutional governance + epistemic intelligence stack (Phases C, D, E v1/v2/v3, F Phase 1-5, G, H, I-A Builds 1-2) fully implemented, tested, and integrated. **215/215 Phase F tests passing** (169 + 46). Phase G gated behind `PHASE_G_ENABLED` feature flag (default off). Phase H gated behind `PHASE_H_CRYPTO_ENABLED` (paper: autonomous, live: proposal-only). Phase I gated behind `PHASE_I_STRATEGY_ENABLED` (default off). Production-ready with feature flags for safe rollout. Phase E v3 (OpenClaw) replaces stale bespoke ops agent with LLM-native Telegram assistant.
+**Overall Progress**: Constitutional governance + epistemic intelligence stack (Phases C, D, E v1/v2/v3, F Phase 1-5, G, H, I-A Builds 1-2, I-B Build 3) fully implemented, tested, and integrated. **215/215 Phase F tests passing** (169 + 46). Phase G gated behind `PHASE_G_ENABLED` feature flag (default off). Phase H gated behind `PHASE_H_CRYPTO_ENABLED` (paper: autonomous, live: proposal-only). Phase I gated behind `PHASE_I_STRATEGY_ENABLED` (default off); research engine gated behind `PHASE_I_RESEARCH_ENABLED` (paper: on, live: off). Production-ready with feature flags for safe rollout. Phase E v3 (OpenClaw) replaces stale bespoke ops agent with LLM-native Telegram assistant.
 
 ---
 
 ## �🔔 Latest Updates (Newest First)
+
+### 2026-02-16 — Phase I-B Build 3: Research Engine
+
+**Status**: ✅ COMPLETE (Feature-flagged)
+
+Strategy research engine: backtests parameter variations during downtime, validates via walk-forward, records findings for future governance.
+
+#### What Changed
+
+**1. CryptoStrategyBacktester** (`phase_i_strategy/research/crypto_backtester.py`):
+- Replays historical 5m candles through existing strategy `generate_signal()` code
+- Reuses `build_execution_features()` for feature computation (backtest/live fidelity)
+- Tracks simulated entries/exits with configurable max hold (60 bars = 5h)
+- Returns `BacktestResult`: total trades, win rate, avg PnL, Sharpe ratio, max drawdown
+- `clone_strategy_with_params()`: Creates fresh strategy instance with overridden config keys
+
+**2. ParameterGridSearch** (`phase_i_strategy/research/parameter_grid.py`):
+- Grid search over all parameter combinations from `PARAMETER_SEARCH_SPACES`
+- Default search spaces for mean_reversion (20 combos), trend_follower (12), vol_swing (27)
+- Returns top N results ranked by Sharpe ratio
+- Baseline comparison: runs current params alongside
+- Timeout protection from `MAX_RESEARCH_CYCLE_SECONDS`
+
+**3. WalkForwardValidator** (`phase_i_strategy/research/walk_forward.py`):
+- Rolling train/test split: 30-day train, 7-day test, 7-day step
+- Minimum 2 folds required
+- Pass criteria: positive OOS Sharpe in >= 60% of test folds
+- Returns per-fold breakdown (train/test trades, Sharpe, win rate)
+
+**4. ResearchOrchestrator** (`phase_i_strategy/research/research_orchestrator.py`):
+- Prioritizes strategies: ZERO_SIGNAL anomalies first, then DEGRADATION, then routine
+- For each strategy: grid search → take top 3 → walk-forward validate each
+- Records findings when OOS Sharpe improvement > 0.1 over current params
+- Persists findings to `research_findings.jsonl`
+
+**5. Scheduler Integration**:
+- Daily research task registered in `crypto_main.py` (downtime only)
+- Gated behind `PHASE_I_RESEARCH_ENABLED` (paper: true, live: false)
+- 90-minute timeout protection
+
+#### Files Created
+```
+phase_i_strategy/research/
+    __init__.py
+    crypto_backtester.py
+    parameter_grid.py
+    walk_forward.py
+    research_orchestrator.py
+```
+
+#### Files Modified
+```
+phase_i_strategy/config.py              — Research constants + search spaces
+phase_i_strategy/persistence.py         — Research findings persistence
+phase_i_strategy/scheduler.py           — run_research_cycle()
+phase_i_strategy/__init__.py            — Export PHASE_I_RESEARCH_ENABLED
+crypto_main.py                          — Register research scheduler task
+config/crypto/paper.kraken.crypto.global.yaml  — PHASE_I_RESEARCH_ENABLED = true
+config/crypto/live.kraken.crypto.global.yaml   — PHASE_I_RESEARCH_ENABLED = false
+run_paper_kraken_crypto.sh              — Docker env var
+run_live_kraken_crypto.sh               — Docker env var
+```
+
+#### Persistence
+```
+persist/phase_i/{scope}/research/
+    research_findings.jsonl     — Validated parameter improvement findings
+```
+
+---
 
 ### 2026-02-16 — Phase I-A Build 2: Strategy Analytics (Observatory Complete)
 

@@ -553,6 +553,11 @@ def run_daemon():
             from phase_i_strategy.scheduler import run_observatory_cycle
             run_observatory_cycle(runtime, trigger="scheduled")
 
+    def make_phase_i_research():
+        if _phase_i_on and not _phase_i_kill:
+            from phase_i_strategy.scheduler import run_research_cycle
+            run_research_cycle(runtime, trigger="scheduled")
+
     scheduler.register_task(CryptoSchedulerTask(
         name="trading_tick",
         func=make_trading_tick,
@@ -636,6 +641,17 @@ def run_daemon():
             interval_minutes=OBSERVATORY_INTERVAL_MINUTES,
             # No state restriction: can run anytime
         ))
+
+    # Phase I: Strategy research (daily, downtime only)
+    if _phase_i_on and not _phase_i_kill:
+        from phase_i_strategy.config import PHASE_I_RESEARCH_ENABLED as _phase_i_research_on
+        if _phase_i_research_on:
+            scheduler.register_task(CryptoSchedulerTask(
+                name="phase_i_strategy_research",
+                func=make_phase_i_research,
+                daily=True,
+                allowed_state=TradingState.DOWNTIME,
+            ))
 
     # Run daemon loop
     logger.info("Starting daemon loop (Ctrl+C to stop)...")
