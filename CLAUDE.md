@@ -1,34 +1,53 @@
 # Trading App — project pointer
 
-The distilled architecture, phase layout, persistence map, feature flags, and
-operational surface for this repo live in the Second Brain wiki:
+This repo has **two parallel knowledge surfaces** that must both stay current.
 
+### Surface 1 — `DOCUMENTATION.md` (in this repo)
+*For external readers: collaborators, contractors, future hires.* Comprehensive
+chronological journal at `/Users/mohan/Sandbox/trading_app/DOCUMENTATION.md`.
+Long-form, factual, dated entries under "🔔 Latest Updates (Newest First)" plus
+an "Implementation Status" table. ~4000 lines and growing.
+
+### Surface 2 — Second Brain wiki (out of repo)
+*For the user's personal analysis across future Claude sessions.* Distilled,
+conceptual, one concept per file:
 ```
-/Users/mohan/Library/CloudStorage/OneDrive-Personal/Documents/knowledge/Second Brain/wiki/trading-app.md
+/Users/mohan/Library/CloudStorage/OneDrive-Personal/Documents/knowledge/Second Brain/wiki/
 ```
+Main pages: `trading-app.md` (overview) plus topical sub-pages (`trading-app-phase-*.md`,
+`trading-app-swing.md`, `trading-app-ml.md`, etc. as they get created).
 
-**Read that page first** before answering questions about:
+### Read-before-research
 
-- Repo architecture, runtime, or the pipeline stages
-- Phase F (market correspondent), G (universe + regime), H (crypto regime
-  authority), or I (strategy observatory / research / governance)
-- Persistence layout under `persist/`
-- CryptoScheduler tasks and cadence
-- Feature flags (`PHASE_*_ENABLED`, `CASH_ONLY_TRADING`, etc.)
-- OpenClaw / ops_agent / Telegram surface
+**Read both surfaces first** before answering questions about repo architecture,
+phases (A/B/C/D/E/F/G/H/I), pipeline stages, persistence layout, runtime, feature
+flags, safety gates, or operational surface. The wiki is the distilled map;
+DOCUMENTATION.md has the full history.
 
-If the wiki page is missing context the user is asking about, do your normal
-research (read code, run `git log`, etc.) and then **update the wiki page**
-before stopping the turn. Append a row to `wiki/processing-log.md`. See
-`~/.claude/CLAUDE.md` for the general read-before-research / update-when-learn
-contract.
+### Update-when-you-learn (the dual-write rule)
+
+When you learn or change something durable about this app in a conversation,
+update **BOTH** surfaces in the same turn before stopping:
+
+1. **DOCUMENTATION.md** — append a new dated entry at the top of "🔔 Latest
+   Updates" in the existing format. Update "Last updated:" at the file head.
+   Add to "Implementation Status" table if it's a new component.
+2. **Second Brain wiki** — update or create the relevant distilled page;
+   append exactly one row to `wiki/processing-log.md`.
+3. End your response with a 📚 block listing what you wrote to where (per the
+   global `~/.claude/CLAUDE.md` directive).
+
+Skip the surfaces only for genuinely ephemeral turns (typo fix, one-off lookup,
+repeated command).
 
 ## Auto-sync on commit
 
-Commits to `main` in this repo trigger a background `claude -p` invocation
-(`.git/hooks/post-commit`) that reconciles the diff against `wiki/trading-app.md`
-and `wiki/processing-log.md`. So if you only have project-internal questions
-about a recent commit, the wiki is usually already current.
+Commits to `main` trigger a background `claude -p` invocation
+(`.git/hooks/post-commit`) that reconciles the diff against BOTH surfaces:
+prepends a dated entry to `DOCUMENTATION.md` (for external readers) AND
+updates the Second Brain wiki + appends to `processing-log.md` (for user).
+You'll see `[Second Brain + DOCUMENTATION.md] sync queued → /tmp/...` right
+after the commit. Both surfaces should be current within ~60 seconds.
 
 ## Repo-specific reminders
 
