@@ -54,6 +54,7 @@ rebuild_image "live-alpaca-swing-us"
 # Run container
 echo "Starting container: live-alpaca-swing-us..."
 docker run -d \
+  --restart unless-stopped \
   --name live-alpaca-swing-us \
   -v "$PERSISTENCE_ROOT_HOST:/app/persist" \
   -e ENV="$ENV_VALUE" \

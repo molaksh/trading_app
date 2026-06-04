@@ -52,6 +52,7 @@ rebuild_image "paper-alpaca-swing-us"
 # Run container
 echo "Starting container: paper-alpaca-swing-us..."
 docker run -d \
+  --restart unless-stopped \
   --name paper-alpaca-swing-us \
   -v "$PERSISTENCE_ROOT_HOST:/app/persist" \
   -e ENV="$ENV_VALUE" \

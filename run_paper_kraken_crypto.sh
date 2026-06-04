@@ -62,6 +62,7 @@ rebuild_image "paper-kraken-crypto-global"
 # Run container (DAEMON MODE: continues running)
 echo "Starting container: paper-kraken-crypto-global (daemon)..."
 docker run -d \
+  --restart unless-stopped \
   --name paper-kraken-crypto-global \
   -v "$PERSISTENCE_ROOT_HOST:/app/persist" \
   -e ENV="$ENV_VALUE" \

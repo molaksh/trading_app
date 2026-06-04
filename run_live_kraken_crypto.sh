@@ -215,6 +215,7 @@ echo "Starting container: live-kraken-crypto-global (daemon)..."
 echo ""
 
 docker run -d \
+  --restart unless-stopped \
   --name live-kraken-crypto-global \
   -v "$PERSISTENCE_ROOT_HOST:/app/persist" \
   -e ENV="$ENV_VALUE" \
